@@ -1,0 +1,196 @@
+import json, random, hashlib, uuid
+from typing import List
+from datetime import datetime
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
+
+
+class Transaction:
+    def __init__(self, amount: float, sender: str, receiver: str, id=None):
+        self.id=id or str(uuid.uuid4())
+        self.amount: float=amount
+        self.sender: str=sender   # Public Key
+        self.receiver: str=receiver   # Public Key
+
+
+    def to_dict(self):
+        dict={
+            "id":self.id,
+            "amount":self.amount,
+            "sender":self.sender,
+            "receiver":self.receiver
+        }
+        return dict
+    
+    def __eq__(self, other):
+        return(
+            self.id==other.id and
+            self.amount==other.amount and
+            self.sender==other.sender and
+            self.receiver==other.receiver
+        )
+    
+    def __str__(self):
+        return json.dumps(self.to_dict())
+    
+def txs_to_json_digestable_form(transactions: List[Transaction]):
+    l=[]
+    for i in range(len(transactions)):
+        l.append(transactions[i].to_dict())
+    return l
+
+class Block:
+    def __init__(self, prevHash:str, transactions:List[Transaction]):
+        self.prevHash=prevHash
+        self.transactions=transactions
+
+        self.ts=int(datetime.now().timestamp() * 1000)
+        self.nonce=random.randint(0,999_999_999) #The _ are purely to make it easier on the eye
+
+        self.solution: int=None
+
+    def __str__(self):
+        return json.dumps({
+            "PrevHash":self.prevHash,
+            "Transactions":txs_to_json_digestable_form(self.transactions),
+            "ts":self.ts,
+            "nonce":self.nonce
+        })
+    
+    @property ## Now you can access hash like this myblock.hash
+    def hash(self):
+        block_str=str(self)
+        return hashlib.sha256(block_str.encode()).hexdigest()
+    
+    def transaction_exists_in_block(self, transaction: Transaction):
+        for i in range(len(self.transactions)):
+            if self.transactions[i]==transaction:
+                return True
+        return False
+
+class Chain:
+    instance =None #Class Variable
+
+    def __init__(self):
+        if not Chain.instance:
+            Chain.instance=self
+            self.chain=[Block(None, [Transaction(50,"Genesis","Satoshi")])]
+            """
+            Chain1 will be set as the chain instance, then all following chains will just
+            be a pointer to chain1 itself.
+            The first calling initializes the chain, from then on all  
+            """
+
+    @property
+    def lastBlock(self):
+        return self.chain[-1]
+
+    def mine(self, nonce: int):
+        sol=1
+        print("Mining...")
+        
+        while True:
+            guess=f"{nonce + sol}".encode()
+            attempt=hashlib.md5(guess).hexdigest()
+
+            if attempt.startswith("0000"):
+                print(f"Found solution!!! Solution = {sol}, Hash = {attempt}")
+                break
+            
+            sol+=1
+        return sol
+
+    def addBlock(self, transactions: List[Transaction], senderPublicKey: str, signature: bytes):
+        # Load public key, converts from string in PEM format to Bytes
+        public_key=serialization.load_pem_public_key(senderPublicKey.encode())
+
+        is_valid=False
+        try:
+            public_key.verify(
+                signature,
+                str(txs_to_json_digestable_form(transactions)).encode(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            is_valid=True
+        except Exception as e:
+            print(e)
+            pass
+
+        if is_valid:
+            newBlock=Block(self.lastBlock.hash,transactions)
+            solution=self.mine(newBlock.nonce)
+            newBlock.solution=solution
+            self.chain.append(newBlock)
+            return newBlock
+        else :
+            return None
+
+    def transaction_exists_in_chain(self, transaction: Transaction):
+        for block in reversed(self.chain):
+            if block.transaction_exists_in_block(transaction):
+                return True
+        
+        return False
+                
+
+    def isValidBlock(self, block: Block):
+        if self.lastBlock.hash!=block.prevHash:
+            return False
+        return True
+
+class Wallet:
+    def __init__(self):
+        self.private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+        
+        self.private_key_pem = self.private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()
+        ).decode()
+
+        self.public_key = self.private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode()
+    
+    def sendMoney(self, amount: float, payeePublicKey:str):
+        transaction=Transaction(amount, self.public_key, payeePublicKey)
+        transactions=[transaction]
+        transactions_data=str(txs_to_json_digestable_form(transactions)).encode()
+
+        signature=self.private_key.sign(
+            transactions_data,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
+        Chain.instance.addBlock(transactions, self.public_key, signature)
+        return transaction
+
+Chain()
+
+# rahan=Wallet()
+# jefin=Wallet()
+# elias=Wallet()
+
+# tx1=rahan.sendMoney(50, jefin.public_key)
+# tx2=jefin.sendMoney(30, elias.public_key)
+# tx3=elias.sendMoney(60, rahan.public_key)
+
+# print(tx1)
+# print("\n\n")
+# print(tranx)
+
+# print(tx1==tranx)

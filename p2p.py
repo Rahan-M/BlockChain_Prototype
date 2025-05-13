@@ -10,18 +10,37 @@ class Peer:
         self.port = port
         self.name = name
 
-        self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers
-        self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers
+        self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
+        self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
 
-        self.inbound_peers: Set[tuple]=set()
         self.outbound_peers: Set[tuple]=set()
+        # The peers to which we currently maintain a outbound connection
 
         self.seen_message_ids: Set[str]= set()
+        # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
         self.known_peers : Dict[Tuple[str, int], Tuple[str, str]]={} # (host, port):(name, public key)
+        """
+            We store all the peers we know here, we compare this with outbound peers in dicover_peers
+            to find to which nodes we have not yet made a connection
+        """
+        
 
         self.got_pong: Dict[websockets.WebSocketServerProtocol, bool]={}
+        """
+            We set the value of each websocket in this dictionary false before sending ping
+            If we get a pong from a particular websocekt we assign it True.
+            We remove all websockets that don't send a pong in time. 
+        """
+
         self.have_sent_peer_info: Dict[websockets.WebSocketServerProtocol, bool]={}
+        """
+            When we form an outbound connection, on receiving the first pong after our first ping
+            we send them our peer_info, but we don't want to keep making the elaborate handshake
+            so after the first time of getting pong we don't send them our peer info
+            I'll explain the handshake in README.md
+        """
+
         self.mem_pool: Set[Transaction]=set()
 
         self.name_to_public_key_dict: Dict[str, str]={}
@@ -30,10 +49,20 @@ class Peer:
         self.chain: Chain=None
 
 
-        self.mem_pool_condition=asyncio.Condition() #any block under this condition must acquire lock before moving on so we don't need to use both at the same time
+        self.mem_pool_condition=asyncio.Condition() 
+        """
+            Any block under this condition must acquire lock before moving on so we don't need to use both at the same time
+            A condition is a synchronous primitive with an inbuilt lock
+            This means that while a block of code starting with
+            async with self.mem_pool_condition is executed only if
+            there is no other such block currently being executed
+        """
         self.mine_task=None
 
     async def send_peer_info(self, websocket):
+        """
+            Function made to send the peer (self) info
+        """
         pkt={
             "type":"peer_info",
             "id":str(uuid.uuid4()),
@@ -49,6 +78,10 @@ class Peer:
         await websocket.send(json.dumps(pkt))
 
     async def send_known_peers(self, websocket):
+        """
+            Function for sending known_peers
+            (information regarding all the peers we know)
+        """
         peers=[{"host":h, "port":p, "name":n, "public_key":s}
                for (h, p), (n,s) in self.known_peers.items()]
         peers.append({"host":self.host, "port":self.port, "name":self.name, "public_key":self.wallet.public_key})
@@ -61,6 +94,11 @@ class Peer:
         await websocket.send(json.dumps(pkt))
 
     def remove_websocket_info(self, websocket):
+        """
+            Function for removing a dysfunctional websocket from all
+            the places we are currently storing its information in
+        """
+
         endpoint=(websocket.remote_address[0], websocket.remote_address[1])
         self.client_connections.discard(websocket)
         self.server_connections.discard(websocket)
@@ -69,7 +107,15 @@ class Peer:
         self.got_pong.pop(websocket, None)
         self.have_sent_peer_info.pop(websocket, None)
 
-    def block_dict_to_block(self, block_dict):     
+    def block_dict_to_block(self, block_dict):    
+        """
+            This function creates a block out of the information
+            stored inside block_dict
+            We sent a receive blocks as a dictionary
+            block["trasnsactions"] is a list of dictionaries that
+            represent transactions
+        """
+
         new_block_id=block_dict["id"]
         new_block_prevHash=block_dict["prevHash"]
         new_block_ts=block_dict["ts"]
@@ -85,8 +131,20 @@ class Peer:
         return newBlock
 
     async def handle_messages(self, websocket, msg):
+        """
+            This is a function to handle messages as the name suggests
+        """
+        """
+            It faciliates the handshake between client and server. 
+            It also accepts transactions, blocks and chains in the format
+            in which we send them. Then this function recreates these and
+            performs the necessary operations
+        """
+        # Read the handshake protocol within readme to understand the flow of messages
+
         t=msg.get("type")
         id=msg.get("id")
+        # Every message has a type and an id
 
         if not t or not id:
             return
@@ -191,6 +249,7 @@ class Peer:
                 block=self.block_dict_to_block(block_dict)
                 block_list.append(block)
 
+            #If chain doesn't already exist we assign this as the chain
             if not self.chain:
                 self.chain=Chain(block_list)
 
@@ -203,6 +262,11 @@ class Peer:
                         self.mem_pool.discard(transaction)
 
     async def handle_connections(self, websocket):
+        """
+            We handle our server connections from here.
+            Primary job is to simply read messages and send it to 
+            handle_messages function
+        """
         peer_addr=(websocket.remote_address[0], websocket.remote_address[1])
         self.server_connections.add(websocket)
 
@@ -222,6 +286,11 @@ class Peer:
             await websocket.wait_closed()
 
     async def keep_pinging(self):
+        """
+            This is a function that will keep running in the bakcground
+            It is for determining which peers are active and which are dead
+        """
+
         ping={
             "type":"ping",
             "id":str(uuid.uuid4())
@@ -250,6 +319,8 @@ class Peer:
             await asyncio.sleep(45)
 
     async def broadcast_message(self, pkt):
+        # For broadcasting messages to all the connections we have
+
         targets=self.server_connections | self.client_connections
         for ws in targets:
             try:
@@ -261,6 +332,8 @@ class Peer:
                 await ws.close()
                 await ws.wait_closed()
 
+    """
+    A function I use to study networking lies below
     async def send_chat_message(self, msg):
         pkt={
             "type":"message",
@@ -270,9 +343,13 @@ class Peer:
         }
         self.seen_message_ids.add(pkt["id"])
         print(f"[{self.name}]: {msg}")
-        await self.broadcast_message(pkt)
+        await self.broadcast_message(pkt)    
+    """
 
     async def create_and_broadcast_tx(self, receiver_public_key, amt):
+        """
+            Function to create and broadcast transactions
+        """
         transaction=Transaction(amt, self.wallet.public_key, receiver_public_key)
         transaction_str=str(transaction)
 
@@ -294,6 +371,10 @@ class Peer:
         await self.broadcast_message(pkt)
 
     async def user_input_handler(self):
+        """
+            A function to constantly take input from the user 
+            about whom to send and how much
+        """
         while True:
             rec= await asyncio._get_running_loop().run_in_executor(
                 None, input, "\n Enter Receiver's Name (or /exit to quit): "
@@ -321,6 +402,12 @@ class Peer:
             await self.create_and_broadcast_tx(receiver_public_key, amt)
             
     async def connect_to_peer(self, host, port):
+        """
+            Function to form an outbound connection to the given host:port
+            and handle messages that come form this connection
+            Also initiates the handshake
+        """
+
         endpoint=(host, port)
         if endpoint in self.outbound_peers or endpoint==(self.host, self.port):
             return
@@ -357,6 +444,10 @@ class Peer:
             await websocket.wait_closed()
 
     async def discover_peers(self):
+        """
+            Routinely checks if we have a connection formed to all of our
+            known peers, info that we get during the handshake process
+        """
         while True:
             for endpoint, (name, p_key) in list(self.known_peers.items()):
                 if endpoint==(self.host, self.port):
@@ -367,6 +458,10 @@ class Peer:
             await asyncio.sleep(20)
 
     async def mine_blocks(self):
+        """
+            We mine blocks whenever there are greater than or equal to three
+            transactions in mem pool
+        """
         while True:
             async with self.mem_pool_condition:
                 await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
@@ -408,19 +503,25 @@ class Peer:
                             print("\n\n Invalid Block \n\n")
                             
     async def find_longest_chain(self):
+        """
+            We routinely check every 30 seconds, every other chain and we replace
+            ours with theirs if theirs is >= ours
+        """
         while True:
             pkt={
                 "type":"chain_request",
                 "id":str(uuid.uuid4())
             }
             await self.broadcast_message(pkt)
-            await asyncio.sleep(20)
+            await asyncio.sleep(30)
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
+        # We start the server
         await websockets.serve(self.handle_connections, self.host, self.port)
         # We await the setting up of the server and the handle connections funciton,
         # This returns a websocket server object eventually
 
+        # If bootstrap node is given we connect to it and take its chain
         if bootstrap_host and bootstrap_port:
             asyncio.create_task(self.connect_to_peer(bootstrap_host, bootstrap_port))
         else:
@@ -438,6 +539,7 @@ class Peer:
         self.mine_task.cancel()
         consensus_task.cancel()
         i=0
+        # We print all the blocks
         for block in Chain.instance.chain:
             print(f"block{i}: {block}")
             i+=1

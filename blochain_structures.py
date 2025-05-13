@@ -84,10 +84,10 @@ class Chain:
         if not Chain.instance:
             Chain.instance=self
             """
-            Chain1 will be set as the chain instance, then all following chains will just
-            be a pointer to chain1 itself.
-            The first calling initializes the chain, from then on all  
+                If blocklist is given we simply make that the chain otherwise
+                we create a new chain
             """
+
             if not blockList:
                 self.chain=[Block(None, [Transaction(50,"Genesis","Satoshi")])]
                 print("Initializing Chain...")

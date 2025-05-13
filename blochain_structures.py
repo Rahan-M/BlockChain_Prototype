@@ -31,6 +31,9 @@ class Transaction:
             self.receiver==other.receiver
         )
     
+    def __hash__(self):
+        return hash(self.id)
+
     def __str__(self):
         return json.dumps(self.to_dict())
     
@@ -41,26 +44,31 @@ def txs_to_json_digestable_form(transactions: List[Transaction]):
     return l
 
 class Block:
-    def __init__(self, prevHash:str, transactions:List[Transaction]):
+    def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, nonce=None, id=None):
         self.prevHash=prevHash
         self.transactions=transactions
 
-        self.ts=int(datetime.now().timestamp() * 1000)
-        self.nonce=random.randint(0,999_999_999) #The _ are purely to make it easier on the eye
+        self.ts=ts or int(datetime.now().timestamp() * 1000)
+        self.nonce=nonce or random.randint(0,999_999_999) #The _ are purely to make it easier on the eye
 
         self.solution: int=None
+        self.id=id or str(uuid.uuid4())
 
-    def __str__(self):
-        return json.dumps({
-            "PrevHash":self.prevHash,
-            "Transactions":txs_to_json_digestable_form(self.transactions),
+    def to_dict(self):
+        return {
+            "id":self.id,
+            "prevHash":self.prevHash,
+            "transactions":txs_to_json_digestable_form(self.transactions),
             "ts":self.ts,
             "nonce":self.nonce
-        })
+        }
+
+    def __str__(self):
+        return json.dumps(self.to_dict())
     
     @property ## Now you can access hash like this myblock.hash
     def hash(self):
-        block_str=str(self)
+        block_str=json.dumps(self.to_dict())
         return hashlib.sha256(block_str.encode()).hexdigest()
     
     def transaction_exists_in_block(self, transaction: Transaction):
@@ -72,15 +80,21 @@ class Block:
 class Chain:
     instance =None #Class Variable
 
-    def __init__(self):
+    def __init__(self, blockList: List[Block]=None):
         if not Chain.instance:
             Chain.instance=self
-            self.chain=[Block(None, [Transaction(50,"Genesis","Satoshi")])]
             """
             Chain1 will be set as the chain instance, then all following chains will just
             be a pointer to chain1 itself.
             The first calling initializes the chain, from then on all  
             """
+            if not blockList:
+                self.chain=[Block(None, [Transaction(50,"Genesis","Satoshi")])]
+                print("Initializing Chain...")
+                sol=self.mine(self.chain[0].nonce)
+                self.chain[0].solution=sol
+            else:
+                self.chain=blockList.copy()
 
     @property
     def lastBlock(self):
@@ -94,12 +108,26 @@ class Chain:
             guess=f"{nonce + sol}".encode()
             attempt=hashlib.md5(guess).hexdigest()
 
-            if attempt.startswith("0000"):
+            if attempt.startswith("0000000"):
                 print(f"Found solution!!! Solution = {sol}, Hash = {attempt}")
                 break
             
             sol+=1
         return sol
+    
+    def to_block_dict_list_with_sol(self):
+        block_dict_list=[]
+        for block in self.chain:
+            block_dict_list.append(block.to_dict())
+            block_dict_list[-1]["sol"]=block.solution
+        
+        return block_dict_list
+    
+    def rewrite(self, blockList :List[Block]):
+        if len(self.chain)>=len(blockList):
+            return
+        
+        Chain.instance.chain=blockList.copy()
 
     def addBlock(self, transactions: List[Transaction], senderPublicKey: str, signature: bytes):
         # Load public key, converts from string in PEM format to Bytes
@@ -137,10 +165,23 @@ class Chain:
         
         return False
                 
-
     def isValidBlock(self, block: Block):
         if self.lastBlock.hash!=block.prevHash:
+            print("Hash Problem")
+            print(f"{self.lastBlock.hash} \n\n {block.prevHash}")
             return False
+        for transaction in block.transactions:
+            if Chain.instance.transaction_exists_in_chain(transaction):
+                print("Duplicate transaction(s)")
+                return False
+        #Verify Pow:
+        solution=f"{block.solution+block.nonce}".encode()
+        ans=hashlib.md5(solution).hexdigest()
+
+        if not ans.startswith("0000000"):
+            print("Problem with pow")
+            return False
+
         return True
 
 class Wallet:
@@ -179,7 +220,7 @@ class Wallet:
         Chain.instance.addBlock(transactions, self.public_key, signature)
         return transaction
 
-Chain()
+# Chain()
 
 # rahan=Wallet()
 # jefin=Wallet()

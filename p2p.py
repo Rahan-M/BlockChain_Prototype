@@ -29,7 +29,9 @@ class Peer:
         self.wallet=Wallet()
         self.chain: Chain=None
 
-        self.mem_pool_condition=asyncio.Condition()
+
+        self.mem_pool_condition=asyncio.Condition() #any block under this condition must acquire lock before moving on so we don't need to use both at the same time
+        self.mine_task=None
 
     async def send_peer_info(self, websocket):
         pkt={
@@ -39,7 +41,7 @@ class Peer:
                 "host":self.host,
                 "port":self.port,
                 "name":self.name,
-                "public_key":self.wallet.public_key()
+                "public_key":self.wallet.public_key
                 }
         }
 
@@ -66,6 +68,21 @@ class Peer:
         self.known_peers.pop(endpoint, None)
         self.got_pong.pop(websocket, None)
         self.have_sent_peer_info.pop(websocket, None)
+
+    def block_dict_to_block(self, block_dict):     
+        new_block_id=block_dict["id"]
+        new_block_prevHash=block_dict["prevHash"]
+        new_block_ts=block_dict["ts"]
+        new_block_nonce=block_dict["nonce"]
+
+        transactions=[]
+        for transaction_dict in block_dict["transactions"]:
+            transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"])
+            transactions.append(transaction)
+        
+        newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_nonce, new_block_id)   
+        newBlock.solution=block_dict["sol"]
+        return newBlock
 
     async def handle_messages(self, websocket, msg):
         t=msg.get("type")
@@ -113,20 +130,77 @@ class Peer:
                     print(f"Discovered peer {peer["name"]} at {peer["host"]}:{peer["port"]}")
                     self.known_peers[(peer["host"], peer["port"])]=(peer["name"], peer["public_key"])
                     self.name_to_public_key_dict[peer["name"].lower()]=peer["public_key"]
+            pkt={
+                "type":"chain_request",
+                "id":str(uuid.uuid4())
+            }
+            await websocket.send(json.dumps(pkt))
 
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
             transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'])
-            if Chain.instance.transaction_exists_in_chain(Transaction):
+            if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return
             
             print(f"\n{msg["type"]}: {msg["transaction"]}")
+            print("\n\n")
+
             async with self.mem_pool_condition:
                 self.mem_pool.add(transaction)
                 self.mem_pool_condition.notify_all()
             await self.broadcast_message(msg)
+
+        elif t=="new_block":
+            new_block_dict=msg["block"]
+            newBlock=self.block_dict_to_block(new_block_dict)
+            if Chain.instance.isValidBlock(newBlock):
+                Chain.instance.chain.append(newBlock)
+                print("\n\n Block Appended \n\n")
+                if self.mine_task and not self.mine_task.done():
+                    self.mine_task.cancel()
+                    print("New Block received Cancelled Mining...")
+                
+                try:
+                    await self.mine_task
+                except asyncio.CancelledError:
+                    pass  # expected
+
+                async with self.mem_pool_condition:
+                    for transaction in list(self.mem_pool):
+                        if newBlock.transaction_exists_in_block(transaction):
+                            self.mem_pool.discard(transaction)
+
+                self.mine_task=asyncio.create_task(self.mine_blocks())
+                await self.broadcast_message(msg)
+
+        elif t=="chain_request":
+            pkt={
+                "type":"chain",
+                "id":str(uuid.uuid4()),
+                "chain":Chain.instance.to_block_dict_list_with_sol()
+            }
+            await websocket.send(json.dumps(pkt))
+
+        elif t=="chain":
+            block_dict_list=msg["chain"]
+            block_list: List[Block]=[]
+
+            for block_dict in block_dict_list:
+                block=self.block_dict_to_block(block_dict)
+                block_list.append(block)
+
+            if not self.chain:
+                self.chain=Chain(block_list)
+
+            if(len(Chain.instance.chain)<=len(block_list)):
+                Chain.instance.rewrite(block_list)
+
+            async with self.mem_pool_condition:
+                for transaction in list(self.mem_pool):
+                    if Chain.instance.transaction_exists_in_chain(transaction):
+                        self.mem_pool.discard(transaction)
 
     async def handle_connections(self, websocket):
         peer_addr=(websocket.remote_address[0], websocket.remote_address[1])
@@ -183,12 +257,7 @@ class Peer:
 
             except Exception as e:
                 print(f"Error broadcasting: {e}")
-                host, port= ws.remote_address[0], ws.remote_address[1]
-                self.server_connections.discard(ws)
-                self.client_connections.discard(ws)
-                self.outbound_peers.discard((host, port))
-                self.known_peers.pop((host, port), None)
-                self.got_pong.pop(ws, None)
+                self.remove_websocket_info(ws)
                 await ws.close()
                 await ws.wait_closed()
 
@@ -212,20 +281,31 @@ class Peer:
             "id":str(uuid.uuid4()),
             "transaction":transaction_str
         }
+        
+        if Chain.instance.transaction_exists_in_chain(transaction):
+            return
+        
+        async with self.mem_pool_condition:
+                self.mem_pool.add(transaction)
+                self.mem_pool_condition.notify_all()
 
-        websockets.send(json.dumps(pkt))
+        print("Transaction Created", transaction)
+        print("\n\n")
+        await self.broadcast_message(pkt)
 
     async def user_input_handler(self):
         while True:
             rec= await asyncio._get_running_loop().run_in_executor(
                 None, input, "\n Enter Receiver's Name (or /exit to quit): "
             )
-            amt= await asyncio._get_running_loop().run_in_executor(
-                None, input, "\n Enter Amount to send: : "
-            )
+
             if rec.lower()=="/exit":
                 print("Exiting...")
                 break
+
+            amt= await asyncio._get_running_loop().run_in_executor(
+                None, input, "\n Enter Amount to send: "
+            )
             
             receiver_public_key=self.name_to_public_key_dict.get(rec.lower().strip())
             if(receiver_public_key==None):
@@ -261,7 +341,6 @@ class Peer:
             }
             self.seen_message_ids.add(ping["id"])
             await websocket.send(json.dumps(ping))
-            print("Sent Ping")
 
             async for raw in websocket:
                 msg=json.loads(raw)
@@ -278,19 +357,20 @@ class Peer:
             await websocket.wait_closed()
 
     async def discover_peers(self):
-        for endpoint, name in list(self.known_peers.items()):
-            if endpoint==(self.host, self.port):
-                    continue
-            if endpoint not in self.outbound_peers:
-                print(f"Dialing known peer {name} at {endpoint}")
-                await asyncio.create_task(self.connect_to_peer(endpoint[0], endpoint[1]))
+        while True:
+            for endpoint, (name, p_key) in list(self.known_peers.items()):
+                if endpoint==(self.host, self.port):
+                        continue
+                if endpoint not in self.outbound_peers:
+                    print(f"Dialing known peer {name} at {endpoint}")
+                    await asyncio.create_task(self.connect_to_peer(endpoint[0], endpoint[1]))
+            await asyncio.sleep(20)
 
     async def mine_blocks(self):
         while True:
             async with self.mem_pool_condition:
-                await Chain.instance.mem_pool_condition.wait_for(lambda: len(Chain.instance.mem_pool) >= 3)
+                await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
                 # We check the about condition in lambda every time we get notified after a new transaction has been added
-
                 if(len(self.mem_pool)>=3):
                     transaction_list=[]
                     for transaction in list(self.mem_pool):
@@ -299,12 +379,42 @@ class Peer:
                             continue
                         else:
                             transaction_list.append(transaction)
+
                     if(len(transaction_list)>=3):
                         newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                        sol=await asyncio.get_event_loop().run_in_executor(Chain.instance.mine(newBlock.nonce))
+                        print("Prev Hash set to",Chain.instance.lastBlock.hash)
+                        sol = await asyncio.to_thread(Chain.instance.mine, newBlock.nonce)
                         newBlock.solution=sol
-                        #Broadcast block
 
+                        if Chain.instance.isValidBlock(newBlock):
+                            Chain.instance.chain.append(newBlock)
+
+                            for transaction in list(self.mem_pool):
+                                if newBlock.transaction_exists_in_block(transaction):
+                                    self.mem_pool.discard(transaction)
+
+                            print("\n\n Block Appended \n\n")
+                            pkt={
+                                "type":"new_block",
+                                "id":str(uuid.uuid4()),
+                                "block":newBlock.to_dict()
+                            }
+                            pkt["block"]["sol"]=newBlock.solution
+                            await self.broadcast_message(pkt)
+                        else:
+                            for transaction in list(self.mem_pool):
+                                if Chain.instance.transaction_exists_in_chain(transaction):
+                                    self.mem_pool.discard(transaction)
+                            print("\n\n Invalid Block \n\n")
+                            
+    async def find_longest_chain(self):
+        while True:
+            pkt={
+                "type":"chain_request",
+                "id":str(uuid.uuid4())
+            }
+            await self.broadcast_message(pkt)
+            await asyncio.sleep(20)
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         await websockets.serve(self.handle_connections, self.host, self.port)
@@ -313,17 +423,30 @@ class Peer:
 
         if bootstrap_host and bootstrap_port:
             asyncio.create_task(self.connect_to_peer(bootstrap_host, bootstrap_port))
-            asyncio.create_task(self.ask_for_chain(bootstrap_host, bootstrap_port))
         else:
             self.chain=Chain()
 
-        ping_task=asyncio.create_task(self.keep_pinging())
         inp_task=asyncio.create_task(self.user_input_handler())
         disc_task=asyncio.create_task(self.discover_peers())
-        mine_task=asyncio.create_task(self.mine_blocks())
+        ping_task=asyncio.create_task(self.keep_pinging())
+        self.mine_task=asyncio.create_task(self.mine_blocks())
+        consensus_task=asyncio.create_task(self.find_longest_chain())
         await inp_task
+
         disc_task.cancel()
         ping_task.cancel()
+        self.mine_task.cancel()
+        consensus_task.cancel()
+        i=0
+        for block in Chain.instance.chain:
+            print(f"block{i}: {block}")
+            i+=1
+        
+        i=0
+        for transaction in list(self.mem_pool):
+            print(f"transaction{i}: {transaction}")
+            i+=1
+        return
 
 def main():
     parser=argparse.ArgumentParser(description="Handshaker")

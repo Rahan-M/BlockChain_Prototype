@@ -52,6 +52,8 @@ class Block:
         self.nonce=nonce or 0 #The _ are purely to make it easier on the eye
 
         self.id=id or str(uuid.uuid4())
+        
+        self.miner: str=None
 
     def to_dict(self):
         return {

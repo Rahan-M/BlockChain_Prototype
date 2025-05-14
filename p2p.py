@@ -352,20 +352,6 @@ class Peer:
                 await ws.close()
                 await ws.wait_closed()
 
-    """
-    A function I use to study networking lies below
-    async def send_chat_message(self, msg):
-        pkt={
-            "type":"message",
-            "id":str(uuid.uuid4()),
-            "sender":self.name,
-            "message":msg
-        }
-        self.seen_message_ids.add(pkt["id"])
-        print(f"[{self.name}]: {msg}")
-        await self.broadcast_message(pkt)    
-    """
-
     async def create_and_broadcast_tx(self, receiver_public_key, amt):
         """
             Function to create and broadcast transactions
@@ -497,36 +483,33 @@ class Peer:
             async with self.mem_pool_condition:
                 await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
                 # We check the about condition in lambda every time we get notified after a new transaction has been added
-                if(len(self.mem_pool)>=3):
-                    transaction_list=[]
-                    for transaction in list(self.mem_pool):
-                        if Chain.instance.transaction_exists_in_chain(transaction):
-                            self.mem_pool.discard(transaction)
-                            continue
-                        else:
-                            transaction_list.append(transaction)
+                transaction_list=[]
+                for transaction in list(self.mem_pool):
+                    if Chain.instance.transaction_exists_in_chain(transaction):
+                        self.mem_pool.discard(transaction)
+                        continue
+                    else:
+                        transaction_list.append(transaction)
 
-                    if(len(transaction_list)>=3):
-                        newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                        await asyncio.to_thread(Chain.instance.mine, newBlock)
+                if(len(transaction_list)>=3):
+                    newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
+                    await asyncio.to_thread(Chain.instance.mine, newBlock)
+                    newBlock.miner=self.wallet.public_key
+                    
+                    if Chain.instance.isValidBlock(newBlock):
+                        print("\n\n Block Appended \n\n")
+                        pkt={
+                            "type":"new_block",
+                            "id":str(uuid.uuid4()),
+                            "block":newBlock.to_dict()
+                        }
+                        await self.broadcast_message(pkt)
+                    else:
+                        print("\n\n Invalid Block \n\n")
 
-                        if Chain.instance.isValidBlock(newBlock):
-                            for transaction in list(self.mem_pool):
-                                if newBlock.transaction_exists_in_block(transaction):
-                                    self.mem_pool.discard(transaction)
-
-                            print("\n\n Block Appended \n\n")
-                            pkt={
-                                "type":"new_block",
-                                "id":str(uuid.uuid4()),
-                                "block":newBlock.to_dict()
-                            }
-                            await self.broadcast_message(pkt)
-                        else:
-                            for transaction in list(self.mem_pool):
-                                if Chain.instance.transaction_exists_in_chain(transaction):
-                                    self.mem_pool.discard(transaction)
-                            print("\n\n Invalid Block \n\n")
+                for transaction in list(self.mem_pool):
+                    if newBlock.transaction_exists_in_block(transaction):
+                        self.mem_pool.discard(transaction)
                             
     async def find_longest_chain(self):
         """

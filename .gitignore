@@ -1,1 +1,8 @@
+# Virtual environments
+venv/
+
+# Python cache and bytecode files
+__pycache__/
+
+# Temporary files
 haha.txt

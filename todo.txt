@@ -1,0 +1,5 @@
+[x] Make it such that the first node is the recipient of the genesis block
+[x] Change pow from noce+solution.md5 startswith x zeroes to block.hash starts with x zeroes by changing the nonce
+[] Add rewards for miners
+[] Create an account keeping system
+[] Limit maximum connections to 8, randomly break some and form new connections as well

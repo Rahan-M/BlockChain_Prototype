@@ -49,9 +49,8 @@ class Block:
         self.transactions=transactions
 
         self.ts=ts or int(datetime.now().timestamp() * 1000)
-        self.nonce=nonce or random.randint(0,999_999_999) #The _ are purely to make it easier on the eye
+        self.nonce=nonce or 0 #The _ are purely to make it easier on the eye
 
-        self.solution: int=None
         self.id=id or str(uuid.uuid4())
 
     def to_dict(self):
@@ -96,7 +95,7 @@ class Chain:
             if publicKey and not blockList:
                 self.chain=[Block(None, [Transaction(50,"Genesis",publicKey)])]
                 print("Initializing Chain...")
-                sol=self.mine(self.chain[0].nonce)
+                sol=self.mine(self.chain[0])
                 self.chain[0].solution=sol
             elif blockList and not publicKey:
                 self.chain=blockList.copy()
@@ -105,26 +104,19 @@ class Chain:
     def lastBlock(self):
         return self.chain[-1]
 
-    def mine(self, nonce: int):
-        sol=1
+    def mine(self, block:Block):
+        block.nonce=0
         print("Mining...")
         
-        while True:
-            guess=f"{nonce + sol}".encode()
-            attempt=hashlib.md5(guess).hexdigest()
+        while not block.hash.startswith("00000") :
+            block.nonce+=1
 
-            if attempt.startswith("0000000"):
-                print(f"Found solution!!! Solution = {sol}, Hash = {attempt}")
-                break
-            
-            sol+=1
-        return sol
-    
+        print(f"Solution Found!!! nonce = {block.nonce}")            
+
     def to_block_dict_list_with_sol(self):
         block_dict_list=[]
         for block in self.chain:
             block_dict_list.append(block.to_dict())
-            block_dict_list[-1]["sol"]=block.solution
         
         return block_dict_list
     
@@ -179,11 +171,9 @@ class Chain:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
                 return False
+            
         #Verify Pow:
-        solution=f"{block.solution+block.nonce}".encode()
-        ans=hashlib.md5(solution).hexdigest()
-
-        if not ans.startswith("0000000"):
+        if not block.hash.startswith("00000"):
             print("Problem with pow")
             return False
 

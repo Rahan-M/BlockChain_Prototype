@@ -130,7 +130,6 @@ class Peer:
             transactions.append(transaction)
         
         newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_nonce, new_block_id)   
-        newBlock.solution=block_dict["sol"]
         return newBlock
 
     async def handle_messages(self, websocket, msg):
@@ -245,11 +244,6 @@ class Peer:
                     self.mine_task.cancel()
                     print("New Block received Cancelled Mining...")
                 
-                try:
-                    await self.mine_task
-                except asyncio.CancelledError:
-                    pass  # expected
-
                 async with self.mem_pool_condition:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
@@ -514,9 +508,7 @@ class Peer:
 
                     if(len(transaction_list)>=3):
                         newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                        print("Prev Hash set to",Chain.instance.lastBlock.hash)
-                        sol = await asyncio.to_thread(Chain.instance.mine, newBlock.nonce)
-                        newBlock.solution=sol
+                        await asyncio.to_thread(Chain.instance.mine, newBlock)
 
                         if Chain.instance.isValidBlock(newBlock):
                             for transaction in list(self.mem_pool):
@@ -529,7 +521,6 @@ class Peer:
                                 "id":str(uuid.uuid4()),
                                 "block":newBlock.to_dict()
                             }
-                            pkt["block"]["sol"]=newBlock.solution
                             await self.broadcast_message(pkt)
                         else:
                             for transaction in list(self.mem_pool):

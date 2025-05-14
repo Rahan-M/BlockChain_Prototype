@@ -208,7 +208,7 @@ class Peer:
             #b64decode turns bytes into a string
             is_valid=True
             try:
-                public_key=serialization.load_pem_public_key(msg["sender_pem"].encode())
+                public_key=serialization.load_pem_public_key(tx['sender'].encode())
                 public_key.verify(
                     sign_bytes,
                     tx_str.encode(),
@@ -238,6 +238,7 @@ class Peer:
             new_block_dict=msg["block"]
             newBlock=self.block_dict_to_block(new_block_dict)
             if Chain.instance.isValidBlock(newBlock):
+                newBlock.miner=msg["miner"]
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 if self.mine_task and not self.mine_task.done():
@@ -272,7 +273,7 @@ class Peer:
             if not self.chain:
                 self.chain=Chain(blockList=block_list)
 
-            if(len(Chain.instance.chain)<len(block_list)):
+            elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
                 print("Chain Modified")
 
@@ -379,6 +380,7 @@ class Peer:
             "sender_pem":self.wallet.public_key # Already available as a pem string as defined in constructor
         }
         
+        self.seen_message_ids.add(pkt["id"])
         if Chain.instance.transaction_exists_in_chain(transaction):
             return
         
@@ -497,12 +499,15 @@ class Peer:
                     newBlock.miner=self.wallet.public_key
                     
                     if Chain.instance.isValidBlock(newBlock):
+                        Chain.instance.chain.append(newBlock)
                         print("\n\n Block Appended \n\n")
                         pkt={
                             "type":"new_block",
                             "id":str(uuid.uuid4()),
-                            "block":newBlock.to_dict()
+                            "block":newBlock.to_dict(),
+                            "miner":self.wallet.public_key
                         }
+                        self.seen_message_ids.add(pkt["id"])
                         await self.broadcast_message(pkt)
                     else:
                         print("\n\n Invalid Block \n\n")
@@ -539,8 +544,8 @@ class Peer:
         inp_task=asyncio.create_task(self.user_input_handler())
         disc_task=asyncio.create_task(self.discover_peers())
         ping_task=asyncio.create_task(self.keep_pinging())
-        self.mine_task=asyncio.create_task(self.mine_blocks())
         consensus_task=asyncio.create_task(self.find_longest_chain())
+        self.mine_task=asyncio.create_task(self.mine_blocks())
         await inp_task
 
         disc_task.cancel()
@@ -550,14 +555,16 @@ class Peer:
         i=0
         # We print all the blocks
         for block in Chain.instance.chain:
-            print(f"block{i}: {block}\n\n")
+            print(f"block{i}: {block}\nMiner = {block.miner}\n")
             i+=1
         
         i=0
         for transaction in list(self.mem_pool):
             print(f"transaction{i}: {transaction}\n\n")
             i+=1
-        return
+        print("Account Balance = ", Chain.instance.calc_balance(self.wallet.public_key))
+    
+        
 
 def main():
     parser=argparse.ArgumentParser(description="Handshaker")

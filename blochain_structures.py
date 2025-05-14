@@ -181,6 +181,18 @@ class Chain:
 
         return True
 
+    def calc_balance(self, publicKey):
+        bal=0
+        for block in Chain.instance.chain:
+            for transaction in block.transactions:
+                if transaction.sender==publicKey:   
+                    bal-=transaction.amount
+                elif transaction.receiver==publicKey:
+                    bal+=transaction.amount
+            if block.miner==publicKey:
+                bal+=6 #Miner reward
+        return bal
+
 class Wallet:
     def __init__(self):
         self.private_key = rsa.generate_private_key(

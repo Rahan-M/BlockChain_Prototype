@@ -548,7 +548,7 @@ class Peer:
                 "id":str(uuid.uuid4())
             }
             await self.broadcast_message(pkt)
-            await asyncio.sleep(6g0)
+            await asyncio.sleep(60)
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         # We start the server

@@ -1,8 +1,11 @@
 import asyncio, websockets, traceback
-import argparse, json, uuid
+import argparse, json, uuid, base64
 from typing import Set, Dict, List, Tuple, Any
-
 from blochain_structures import Transaction, Block, Wallet, Chain
+
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
 
 class Peer:
     def __init__(self, host, port, name):
@@ -165,7 +168,7 @@ class Peer:
         if t=="pong":
             # print("Received Pong")
             self.got_pong[websocket]=True
-            if not self.have_sent_peer_info[websocket]:
+            if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket]=True
             # print(f"[Sent peer]")
@@ -197,11 +200,33 @@ class Peer:
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
-            transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'])
+            transaction: Transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return
             
+            sign_bytes=base64.b64decode(msg["sign"])
+            #b64decode turns bytes into a string
+            is_valid=True
+            try:
+                public_key=serialization.load_pem_public_key(msg["sender_pem"].encode())
+                public_key.verify(
+                    sign_bytes,
+                    tx_str.encode(),
+                    padding.PSS(
+                        mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH
+                    ),
+                    hashes.SHA256()
+                )
+            except:
+                is_valid=False
+
+            if not is_valid:
+                print("Invalid Signature")
+                return
+            
+            print("\nValid Transaction")
             print(f"\n{msg["type"]}: {msg["transaction"]}")
             print("\n\n")
 
@@ -251,10 +276,11 @@ class Peer:
 
             #If chain doesn't already exist we assign this as the chain
             if not self.chain:
-                self.chain=Chain(block_list)
+                self.chain=Chain(blockList=block_list)
 
-            if(len(Chain.instance.chain)<=len(block_list)):
+            if(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
+                print("Chain Modified")
 
             async with self.mem_pool_condition:
                 for transaction in list(self.mem_pool):
@@ -352,11 +378,25 @@ class Peer:
         """
         transaction=Transaction(amt, self.wallet.public_key, receiver_public_key)
         transaction_str=str(transaction)
+        
+        signature=self.wallet.private_key.sign(
+            transaction_str.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
 
+        signature_b64=base64.b64encode(signature).decode()
+        # b64encode returns bytes, Decode converts bytes to string
+        
         pkt={
             "type":"new_tx",
             "id":str(uuid.uuid4()),
-            "transaction":transaction_str
+            "transaction":transaction_str,
+            "sign":signature_b64,
+            "sender_pem":self.wallet.public_key # Already available as a pem string as defined in constructor
         }
         
         if Chain.instance.transaction_exists_in_chain(transaction):
@@ -436,10 +476,7 @@ class Peer:
             print(f"Failed to connect to {host}:{port} ::: {e}")
             traceback.print_exc()
         finally:
-            self.outbound_peers.discard(endpoint)
-            self.client_connections.discard(websocket)
-            self.known_peers.pop(endpoint, None)
-            self.got_pong.pop(websocket, None)
+            self.remove_websocket_info(websocket)
             await websocket.close()
             await websocket.wait_closed()
 
@@ -482,8 +519,6 @@ class Peer:
                         newBlock.solution=sol
 
                         if Chain.instance.isValidBlock(newBlock):
-                            Chain.instance.chain.append(newBlock)
-
                             for transaction in list(self.mem_pool):
                                 if newBlock.transaction_exists_in_block(transaction):
                                     self.mem_pool.discard(transaction)
@@ -513,7 +548,7 @@ class Peer:
                 "id":str(uuid.uuid4())
             }
             await self.broadcast_message(pkt)
-            await asyncio.sleep(30)
+            await asyncio.sleep(6g0)
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         # We start the server
@@ -525,7 +560,7 @@ class Peer:
         if bootstrap_host and bootstrap_port:
             asyncio.create_task(self.connect_to_peer(bootstrap_host, bootstrap_port))
         else:
-            self.chain=Chain()
+            self.chain=Chain(publicKey=self.wallet.public_key)
 
         inp_task=asyncio.create_task(self.user_input_handler())
         disc_task=asyncio.create_task(self.discover_peers())
@@ -541,12 +576,12 @@ class Peer:
         i=0
         # We print all the blocks
         for block in Chain.instance.chain:
-            print(f"block{i}: {block}")
+            print(f"block{i}: {block}\n\n")
             i+=1
         
         i=0
         for transaction in list(self.mem_pool):
-            print(f"transaction{i}: {transaction}")
+            print(f"transaction{i}: {transaction}\n\n")
             i+=1
         return
 

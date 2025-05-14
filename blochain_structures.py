@@ -80,7 +80,12 @@ class Block:
 class Chain:
     instance =None #Class Variable
 
-    def __init__(self, blockList: List[Block]=None):
+    def __init__(self, publicKey:str=None, blockList: List[Block]=None):
+        """
+            If we are the first node, we mine the genesis block for ouself
+            otherwise we receive blockList from the bootstrap node and
+            we assign that to be the chain
+        """
         if not Chain.instance:
             Chain.instance=self
             """
@@ -88,12 +93,12 @@ class Chain:
                 we create a new chain
             """
 
-            if not blockList:
-                self.chain=[Block(None, [Transaction(50,"Genesis","Satoshi")])]
+            if publicKey and not blockList:
+                self.chain=[Block(None, [Transaction(50,"Genesis",publicKey)])]
                 print("Initializing Chain...")
                 sol=self.mine(self.chain[0].nonce)
                 self.chain[0].solution=sol
-            else:
+            elif blockList and not publicKey:
                 self.chain=blockList.copy()
 
     @property

@@ -113,7 +113,8 @@ class Chain:
         while not block.hash.startswith("00000") :
             block.nonce+=1
 
-        print(f"Solution Found!!! nonce = {block.nonce}")            
+        print(f"Solution Found!!! nonce = {block.nonce} hash = {block.hash}") 
+        return block.nonce
 
     def to_block_dict_list_with_sol(self):
         block_dict_list=[]
@@ -167,7 +168,7 @@ class Chain:
     def isValidBlock(self, block: Block):
         if self.lastBlock.hash!=block.prevHash:
             print("Hash Problem")
-            print(f"{self.lastBlock.hash} \n\n {block.prevHash}")
+            print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
         for transaction in block.transactions:
             if Chain.instance.transaction_exists_in_chain(transaction):
@@ -176,7 +177,8 @@ class Chain:
             
         #Verify Pow:
         if not block.hash.startswith("00000"):
-            print("Problem with pow")
+            print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
+
             return False
 
         return True

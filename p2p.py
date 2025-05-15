@@ -5,9 +5,6 @@ from blochain_structures import Transaction, Block, Wallet, Chain
 
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
-
-from concurrent.futures import ProcessPoolExecutor
-
 class Peer:
     def __init__(self, host, port, name):
         self.host = host

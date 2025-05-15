@@ -183,13 +183,20 @@ class Chain:
 
     def calc_balance(self, publicKey):
         bal=0
-        for block in Chain.instance.chain:
-            for transaction in block.transactions:
+        valid_chain_len=len(Chain.instance.chain)
+
+        if valid_chain_len>=5:
+            valid_chain_len-=1
+        elif valid_chain_len>=10:
+            valid_chain_len-=3
+
+        for i in range(valid_chain_len):
+            for transaction in (Chain.instance.chain[i]).transactions:
                 if transaction.sender==publicKey:   
                     bal-=transaction.amount
                 elif transaction.receiver==publicKey:
                     bal+=transaction.amount
-            if block.miner==publicKey:
+            if Chain.instance.chain[i].miner==publicKey:
                 bal+=6 #Miner reward
         return bal
 

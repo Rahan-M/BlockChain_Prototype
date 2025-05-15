@@ -5,7 +5,8 @@ from blochain_structures import Transaction, Block, Wallet, Chain
 
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.backends import default_backend
+
+from concurrent.futures import ProcessPoolExecutor
 
 class Peer:
     def __init__(self, host, port, name):
@@ -420,8 +421,12 @@ class Peer:
             except ValueError:
                 print("Amount must be a number")
                 continue
-
-            await self.create_and_broadcast_tx(receiver_public_key, amt)
+            
+            if amt<=Chain.instance.calc_balance(self.wallet.public_key):
+                
+                await self.create_and_broadcast_tx(receiver_public_key, amt)
+            else:
+                print("Insufficient Account Balance")
             
     async def connect_to_peer(self, host, port):
         """
@@ -563,8 +568,6 @@ class Peer:
             print(f"transaction{i}: {transaction}\n\n")
             i+=1
         print("Account Balance = ", Chain.instance.calc_balance(self.wallet.public_key))
-    
-        
 
 def main():
     parser=argparse.ArgumentParser(description="Handshaker")

@@ -1,7 +1,9 @@
 import asyncio, websockets, traceback
 import argparse, json, uuid, base64
 from typing import Set, Dict, List, Tuple, Any
+import threading
 from blochain_structures import Transaction, Block, Wallet, Chain
+from flask_app import create_flask_app, run_flask_app
 
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -543,6 +545,10 @@ class Peer:
         else:
             self.chain=Chain(publicKey=self.wallet.public_key)
 
+        # Create flask app
+        flask_app = create_flask_app(self)
+        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
+        flask_thread.start()
         inp_task=asyncio.create_task(self.user_input_handler())
         disc_task=asyncio.create_task(self.discover_peers())
         ping_task=asyncio.create_task(self.keep_pinging())

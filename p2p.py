@@ -2,11 +2,28 @@ import asyncio, websockets, traceback
 import argparse, json, uuid, base64
 from typing import Set, Dict, List, Tuple, Any
 import threading
+import socket
 from blochain_structures import Transaction, Block, Wallet, Chain
 from flask_app import create_flask_app, run_flask_app
-
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
+
+MAX_CONNECTIONS = 8
+
+def get_random_element(s):
+    """
+        Return a random element from a set
+    """
+    import random
+    return random.choice(list(s)) if s else None
+
+def normalize_endpoint(ep):
+    """
+        Return host resolved into ipv4 address and port converted into int datatype - maintains consistency in the code
+    """
+    host, port = ep
+    return (socket.gethostbyname(host), int(port))
+
 class Peer:
     def __init__(self, host, port, name):
         self.host = host
@@ -96,20 +113,6 @@ class Peer:
         self.seen_message_ids.add(pkt["id"])
         await websocket.send(json.dumps(pkt))
 
-    def remove_websocket_info(self, websocket):
-        """
-            Function for removing a dysfunctional websocket from all
-            the places we are currently storing its information in
-        """
-
-        endpoint=(websocket.remote_address[0], websocket.remote_address[1])
-        self.client_connections.discard(websocket)
-        self.server_connections.discard(websocket)
-        self.outbound_peers.discard(endpoint)
-        self.known_peers.pop(endpoint, None)
-        self.got_pong.pop(websocket, None)
-        self.have_sent_peer_info.pop(websocket, None)
-
     def block_dict_to_block(self, block_dict):    
         """
             This function creates a block out of the information
@@ -172,23 +175,29 @@ class Peer:
                 self.have_sent_peer_info[websocket]=True
             # print(f"[Sent peer]")
 
-        elif t =='peer_info':
+        elif t =='peer_info' or t == "add_peer":
             # print("Received Peer Info")
             data=msg["data"]
-            if (data["host"], data["port"]) not in self.known_peers:
-                self.known_peers[(data["host"], data["port"])]=(data["name"], data["public_key"])
+            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            if normalized_endpoint not in self.known_peers:
+                self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
-                await self.send_known_peers(websocket)
-                # print("Sent Known Peers")
+                if t == 'peer_info':
+                    await self.send_known_peers(websocket)
+                    # print("Sent Known Peers")
+                else:
+                    await self.broadcast_message(msg)
+                    await self.send_known_peers(websocket)
 
         elif t=="known_peers":
             # print("Received Known Peers")
             peers=msg["peers"]
             for peer in peers:
-                if (peer["host"], peer["port"]) not in self.known_peers and (peer["host"], peer["port"])!=(self.host, self.port):
+                normalized_endpoint = normalize_endpoint((peer["host"], peer["port"]))
+                if normalized_endpoint not in self.known_peers and normalized_endpoint!=(self.host, self.port):
                     print(f"Discovered peer {peer["name"]} at {peer["host"]}:{peer["port"]}")
-                    self.known_peers[(peer["host"], peer["port"])]=(peer["name"], peer["public_key"])
+                    self.known_peers[normalized_endpoint]=(peer["name"], peer["public_key"])
                     self.name_to_public_key_dict[peer["name"].lower()]=peer["public_key"]
             pkt={
                 "type":"chain_request",
@@ -301,48 +310,15 @@ class Peer:
         try:
             async for raw in websocket:
                 msg=json.loads(raw)
-                await self.handle_messages(websocket,msg)
+                await self.handle_messages(websocket, msg)
 
         except websockets.exceptions.ConnectionClosed:
             print(f"Inbound Connection Closed: {peer_addr}")
 
         finally:
-            self.remove_websocket_info(websocket)
+            self.server_connections.discard(websocket)
             await websocket.close()
             await websocket.wait_closed()
-
-    async def keep_pinging(self):
-        """
-            This is a function that will keep running in the bakcground
-            It is for determining which peers are active and which are dead
-        """
-
-        ping={
-            "type":"ping",
-            "id":str(uuid.uuid4())
-        }
-        while True:
-            for websocket in list(self.client_connections):
-                try:
-                    self.got_pong[websocket]=False
-                    await websocket.send(json.dumps(ping))
-
-                except :
-                    print("Can't send ping...")
-                    self.remove_websocket_info(websocket)
-                    await websocket.close()
-                    await websocket.wait_closed()
-
-            await asyncio.sleep(15)
-            
-            for websocket in list(self.client_connections):
-                if self.got_pong[websocket]:
-                    continue
-                self.remove_websocket_info(websocket)
-                await websocket.close()
-                await websocket.wait_closed()
-
-            await asyncio.sleep(45)
 
     async def broadcast_message(self, pkt):
         # For broadcasting messages to all the connections we have
@@ -354,7 +330,14 @@ class Peer:
 
             except Exception as e:
                 print(f"Error broadcasting: {e}")
-                self.remove_websocket_info(ws)
+                if ws in self.server_connections:
+                    self.server_connections.discard(ws)
+                else:
+                    normalized_endpoint = normalize_endpoint((ws.remote_address[0], ws.remote_address[1]))
+                    self.client_connections.discard(ws)
+                    self.outbound_peers.discard(normalized_endpoint)
+                    self.got_pong.pop(ws, None)
+                    self.have_sent_peer_info.pop(ws, None)
                 await ws.close()
                 await ws.wait_closed()
 
@@ -452,6 +435,22 @@ class Peer:
 
             print(f"Outbound connection formed to {host}:{port}")
 
+            # If connecting first time to the network, broadcasts node information to the entire network
+            if Chain.instance == None:
+                pkt={
+                    "type":"add_peer",
+                    "id":str(uuid.uuid4()),
+                    "data":{
+                        "host":self.host,
+                        "port":self.port,
+                        "name":self.name,
+                        "public_key":self.wallet.public_key
+                    }
+                }
+
+                self.seen_message_ids.add(pkt["id"])
+                await websocket.send(json.dumps(pkt))
+                
             ping={
                 "type":"ping",
                 "id":str(uuid.uuid4()),
@@ -466,23 +465,65 @@ class Peer:
             print(f"Failed to connect to {host}:{port} ::: {e}")
             traceback.print_exc()
         finally:
-            self.remove_websocket_info(websocket)
+            self.client_connections.discard(websocket)
+            self.outbound_peers.discard(endpoint)
+            self.got_pong.pop(websocket, None)
+            self.have_sent_peer_info.pop(websocket, None)
             await websocket.close()
             await websocket.wait_closed()
 
     async def discover_peers(self):
         """
-            Routinely checks if we have a connection formed to all of our
-            known peers, info that we get during the handshake process
+            Maintains up to MAX_CONNECTIONS peers.
+            Connects only to fill the pool if under MAX_CONNECTIONS.
+        """
+
+        while True:
+            if len(self.outbound_peers) < MAX_CONNECTIONS:
+                potential_peers = {
+                    endpoint for endpoint in self.known_peers
+                    if endpoint not in self.outbound_peers and endpoint != (self.host, self.port)
+                }
+                while len(self.outbound_peers) < MAX_CONNECTIONS and potential_peers:
+                    new_peer = get_random_element(potential_peers)
+                    potential_peers.discard(new_peer)
+                    if new_peer:
+                        asyncio.create_task(self.connect_to_peer(*new_peer))
+                        await asyncio.sleep(1)
+            await asyncio.sleep(30)
+
+    async def gossip_peer_sampler(self):
+        """
+            Every 60s, drops one existing peer and connects to one new peer.
         """
         while True:
-            for endpoint, (name, p_key) in list(self.known_peers.items()):
-                if endpoint==(self.host, self.port):
-                        continue
-                if endpoint not in self.outbound_peers:
-                    print(f"Dialing known peer {name} at {endpoint}")
-                    await asyncio.create_task(self.connect_to_peer(endpoint[0], endpoint[1]))
-            await asyncio.sleep(20)
+            await asyncio.sleep(60)
+            if len(self.known_peers) <= len(self.outbound_peers) or len(self.outbound_peers) < MAX_CONNECTIONS:
+                continue  # Nothing to swap
+
+            # Disconnect one random client connection
+            to_drop = get_random_element(self.client_connections)
+            if to_drop:
+                print(f"Gossip Sampling: Disconnecting {to_drop.remote_address}")
+                self.client_connections.discard(to_drop)
+                normalized_endpoint = normalize_endpoint((to_drop.remote_address[0], to_drop.remote_address[1]))
+                self.outbound_peers.discard(normalized_endpoint)
+                self.got_pong.pop(to_drop, None)
+                self.have_sent_peer_info.pop(to_drop, None)
+                await to_drop.close()
+                await to_drop.wait_closed()
+
+            # Connect to a new peer (not already connected)
+            potential_peers = {
+                endpoint for endpoint in self.known_peers
+                if endpoint not in self.outbound_peers and endpoint != (self.host, self.port)
+            }
+
+            if potential_peers:
+                new_peer = get_random_element(potential_peers)
+                if new_peer:
+                    print(f"Gossip Sampling: Connecting to new peer {new_peer}")
+                    asyncio.create_task(self.connect_to_peer(*new_peer))
 
     async def mine_blocks(self):
         """
@@ -545,7 +586,8 @@ class Peer:
 
         # If bootstrap node is given we connect to it and take its chain
         if bootstrap_host and bootstrap_port:
-            asyncio.create_task(self.connect_to_peer(bootstrap_host, bootstrap_port))
+            normalized_bootstrap_host, normalized_bootstrap_port = normalize_endpoint((bootstrap_host, bootstrap_port))
+            asyncio.create_task(self.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port))
         else:
             self.chain=Chain(publicKey=self.wallet.public_key)
 
@@ -555,13 +597,13 @@ class Peer:
         flask_thread.start()
         inp_task=asyncio.create_task(self.user_input_handler())
         disc_task=asyncio.create_task(self.discover_peers())
-        ping_task=asyncio.create_task(self.keep_pinging())
+        sampler_task = asyncio.create_task(self.gossip_peer_sampler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         self.mine_task=asyncio.create_task(self.mine_blocks())
         await inp_task
 
         disc_task.cancel()
-        ping_task.cancel()
+        sampler_task.cancel()
         self.mine_task.cancel()
         consensus_task.cancel()
         i=0
@@ -593,7 +635,8 @@ def main():
         except ValueError:
             print("Invalid Bootstrap Format. Use host:port")
             return
-    peer=Peer(args.host, args.port, args.name)
+    normalized_host, normalized_port = normalize_endpoint((args.host, args.port))
+    peer=Peer(normalized_host, normalized_port, args.name)
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

@@ -206,6 +206,10 @@ class Peer:
             
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode turns bytes into a string
+            if(transaction.amount>Chain.instance.calc_balance(transaction.sender)):
+                print("\nAttempt to spend more than one has, Invalid transaction\n")
+                return
+
             is_valid=True
             try:
                 public_key=serialization.load_pem_public_key(tx['sender'].encode())
@@ -220,6 +224,7 @@ class Peer:
                 )
             except:
                 is_valid=False
+
 
             if not is_valid:
                 print("Invalid Signature")
@@ -257,7 +262,7 @@ class Peer:
             pkt={
                 "type":"chain",
                 "id":str(uuid.uuid4()),
-                "chain":Chain.instance.to_block_dict_list_with_sol()
+                "chain":Chain.instance.to_block_dict_list()
             }
             await websocket.send(json.dumps(pkt))
 
@@ -422,7 +427,6 @@ class Peer:
                 continue
             
             if amt<=Chain.instance.calc_balance(self.wallet.public_key):
-                
                 await self.create_and_broadcast_tx(receiver_public_key, amt)
             else:
                 print("Insufficient Account Balance")

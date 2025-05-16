@@ -116,7 +116,7 @@ class Chain:
         print(f"Solution Found!!! nonce = {block.nonce} hash = {block.hash}") 
         return block.nonce
 
-    def to_block_dict_list_with_sol(self):
+    def to_block_dict_list(self):
         block_dict_list=[]
         for block in self.chain:
             block_dict_list.append(block.to_dict())

@@ -8,10 +8,11 @@ from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 class Peer:
-    def __init__(self, host, port, name):
+    def __init__(self, host, port, name, miner:bool):
         self.host = host
         self.port = port
         self.name = name
+        self.miner=miner
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -206,7 +207,7 @@ class Peer:
             
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode turns bytes into a string
-            if(transaction.amount>Chain.instance.calc_balance(transaction.sender)):
+            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool))):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
@@ -232,7 +233,7 @@ class Peer:
             
             print("\nValid Transaction")
             print(f"\n{msg["type"]}: {msg["transaction"]}")
-            print("\n\n")
+            print("\n")
 
             async with self.mem_pool_condition:
                 self.mem_pool.add(transaction)
@@ -246,7 +247,7 @@ class Peer:
                 newBlock.miner=msg["miner"]
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
-                if self.mine_task and not self.mine_task.done():
+                if self.miner and self.mine_task and not self.mine_task.done():
                     self.mine_task.cancel()
                     print("New Block received Cancelled Mining...")
                 
@@ -254,8 +255,8 @@ class Peer:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
                             self.mem_pool.discard(transaction)
-
-                self.mine_task=asyncio.create_task(self.mine_blocks())
+                if self.miner:
+                    self.mine_task=asyncio.create_task(self.mine_blocks())
                 await self.broadcast_message(msg)
 
         elif t=="chain_request":
@@ -426,7 +427,7 @@ class Peer:
                 print("Amount must be a number")
                 continue
             
-            if amt<=Chain.instance.calc_balance(self.wallet.public_key):
+            if amt<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
                 await self.create_and_broadcast_tx(receiver_public_key, amt)
             else:
                 print("Insufficient Account Balance")
@@ -553,21 +554,28 @@ class Peer:
         flask_app = create_flask_app(self)
         flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
         flask_thread.start()
+
         inp_task=asyncio.create_task(self.user_input_handler())
-        disc_task=asyncio.create_task(self.discover_peers())
         ping_task=asyncio.create_task(self.keep_pinging())
         consensus_task=asyncio.create_task(self.find_longest_chain())
-        self.mine_task=asyncio.create_task(self.mine_blocks())
+        disc_task=asyncio.create_task(self.discover_peers())
+
+        if self.miner:
+            self.mine_task=asyncio.create_task(self.mine_blocks())
+
         await inp_task
 
         disc_task.cancel()
         ping_task.cancel()
-        self.mine_task.cancel()
         consensus_task.cancel()
+
+        if self.miner:
+            self.mine_task.cancel()
+            
         i=0
         # We print all the blocks
         for block in Chain.instance.chain:
-            print(f"block{i}: {block}\nMiner = {block.miner}\n")
+            print(f"block{i}: {block}\n")
             i+=1
         
         i=0
@@ -576,11 +584,25 @@ class Peer:
             i+=1
         print("Account Balance = ", Chain.instance.calc_balance(self.wallet.public_key))
 
+def strtobool(v):
+    if isinstance(v, bool):
+        return v
+
+    if v.lower() in ("true", "yes", "1", "t"):
+        return True
+
+    elif v.lower() in ("false", "no", "0", "f"):
+        return False
+
+    raise argparse.ArgumentTypeError("Boolean Value Expected")    
+
+
 def main():
     parser=argparse.ArgumentParser(description="Handshaker")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--name", default=None)
+    parser.add_argument("--miner",type=strtobool, default=True)
     parser.add_argument("--connect", default=None)
 
     args=parser.parse_args()
@@ -593,7 +615,7 @@ def main():
         except ValueError:
             print("Invalid Bootstrap Format. Use host:port")
             return
-    peer=Peer(args.host, args.port, args.name)
+    peer=Peer(args.host, args.port, args.name, args.miner)
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

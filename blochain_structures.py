@@ -99,6 +99,7 @@ class Chain:
                 print("Initializing Chain...")
                 sol=self.mine(self.chain[0])
                 self.chain[0].solution=sol
+                
             elif blockList and not publicKey:
                 self.chain=blockList.copy()
 
@@ -183,7 +184,7 @@ class Chain:
 
         return True
 
-    def calc_balance(self, publicKey):
+    def calc_balance(self, publicKey, pending_transactions:List[Transaction]=None):
         bal=0
         valid_chain_len=len(Chain.instance.chain)
 
@@ -200,6 +201,15 @@ class Chain:
                     bal+=transaction.amount
             if Chain.instance.chain[i].miner==publicKey:
                 bal+=6 #Miner reward
+        
+        # Since these transactions are not part of the chain we don't add
+        # the money they gained yet because it could be invalid, but we subtract
+        # the amount they have given to prevent double spending before the
+        # transactions are added to the chain
+        if pending_transactions:
+            for transaction in pending_transactions:
+                if transaction.sender==publicKey:
+                    bal-=transaction.amount
         return bal
 
 class Wallet:

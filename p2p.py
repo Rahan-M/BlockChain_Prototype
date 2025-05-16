@@ -7,6 +7,7 @@ from flask_app import create_flask_app, run_flask_app
 
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
+
 class Peer:
     def __init__(self, host, port, name, miner:bool):
         self.host = host
@@ -237,7 +238,7 @@ class Peer:
 
             async with self.mem_pool_condition:
                 self.mem_pool.add(transaction)
-                self.mem_pool_condition.notify_all()
+                # self.mem_pool_condition.notify_all()
             await self.broadcast_message(msg)
 
         elif t=="new_block":
@@ -268,6 +269,7 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         elif t=="chain":
+            print("Received a Chain")
             block_dict_list=msg["chain"]
             block_list: List[Block]=[]
 
@@ -281,8 +283,10 @@ class Peer:
 
             elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
-                print("Chain Modified")
-
+                print("\nCurrent chain replaced by longer chain")
+            
+            else:
+                print("\nCurrent Chain Longer than received chain")
             async with self.mem_pool_condition:
                 for transaction in list(self.mem_pool):
                     if Chain.instance.transaction_exists_in_chain(transaction):
@@ -392,10 +396,10 @@ class Peer:
         
         async with self.mem_pool_condition:
                 self.mem_pool.add(transaction)
-                self.mem_pool_condition.notify_all()
+                # self.mem_pool_condition.notify_all()
 
         print("Transaction Created", transaction)
-        print("\n\n")
+        print("\n")
         await self.broadcast_message(pkt)
 
     async def user_input_handler(self):
@@ -404,34 +408,57 @@ class Peer:
             about whom to send and how much
         """
         while True:
-            rec= await asyncio._get_running_loop().run_in_executor(
-                None, input, "\n Enter Receiver's Name (or /exit to quit): "
-            )
+            print("Block Chain Menu\n***************")
+            print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5)Quit")
 
-            if rec.lower()=="/exit":
-                print("Exiting...")
+            ch= await asyncio._get_running_loop().run_in_executor(
+                None, input, "Enter Your Choice: "
+            )
+            try:
+                ch=int(ch)
+            except:
+                print("\nPlease enter a valid number!!!\n")
+            if ch==1:
+                rec= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\n Enter Receiver's Name: "
+                )
+
+                amt= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\n Enter Amount to send: "
+                )
+                
+                receiver_public_key=self.name_to_public_key_dict.get(rec.lower().strip())
+                if(receiver_public_key==None):
+                    print("No such person available in directory...")
+                    continue
+                
+                try:
+                    amt=float(amt)
+                except ValueError:
+                    print("Amount must be a number")
+                    continue
+                
+                if amt<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                    await self.create_and_broadcast_tx(receiver_public_key, amt)
+                else:
+                    print("Insufficient Account Balance")
+            elif ch==2:
+                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)))
+            elif ch==3:
+                i=0
+                # We print all the blocks
+                for block in Chain.instance.chain:
+                    print(f"block{i}: {block}\n")
+                    i+=1            
+            elif ch==4:
+                i=0
+                for transaction in list(self.mem_pool):
+                    print(f"transaction{i}: {transaction}\n\n")
+                    i+=1
+            elif ch==5:
+                print("Quitting...")
                 break
 
-            amt= await asyncio._get_running_loop().run_in_executor(
-                None, input, "\n Enter Amount to send: "
-            )
-            
-            receiver_public_key=self.name_to_public_key_dict.get(rec.lower().strip())
-            if(receiver_public_key==None):
-                print("No such person available in directory...")
-                continue
-            
-            try:
-                amt=float(amt)
-            except ValueError:
-                print("Amount must be a number")
-                continue
-            
-            if amt<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
-                await self.create_and_broadcast_tx(receiver_public_key, amt)
-            else:
-                print("Insufficient Account Balance")
-            
     async def connect_to_peer(self, host, port):
         """
             Function to form an outbound connection to the given host:port
@@ -491,39 +518,41 @@ class Peer:
             transactions in mem pool
         """
         while True:
-            async with self.mem_pool_condition:
-                await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
+            await asyncio.sleep(30)
+            async with self.mem_pool_condition: # Works the same as lock
+                # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
                 # We check the about condition in lambda every time we get notified after a new transaction has been added
-                transaction_list=[]
-                for transaction in list(self.mem_pool):
-                    if Chain.instance.transaction_exists_in_chain(transaction):
-                        self.mem_pool.discard(transaction)
-                        continue
-                    else:
-                        transaction_list.append(transaction)
+                if(len(self.mem_pool)>0):
+                    transaction_list=[]
+                    for transaction in list(self.mem_pool):
+                        if Chain.instance.transaction_exists_in_chain(transaction):
+                            self.mem_pool.discard(transaction)
+                            continue
+                        else:
+                            transaction_list.append(transaction)
 
-                if(len(transaction_list)>=3):
-                    newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                    await asyncio.to_thread(Chain.instance.mine, newBlock)
-                    newBlock.miner=self.wallet.public_key
-                    
-                    if Chain.instance.isValidBlock(newBlock):
-                        Chain.instance.chain.append(newBlock)
-                        print("\n\n Block Appended \n\n")
-                        pkt={
-                            "type":"new_block",
-                            "id":str(uuid.uuid4()),
-                            "block":newBlock.to_dict(),
-                            "miner":self.wallet.public_key
-                        }
-                        self.seen_message_ids.add(pkt["id"])
-                        await self.broadcast_message(pkt)
-                    else:
-                        print("\n\n Invalid Block \n\n")
+                    if(len(transaction_list)>0):
+                        newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
+                        await asyncio.to_thread(Chain.instance.mine, newBlock)
+                        newBlock.miner=self.wallet.public_key
+                        
+                        if Chain.instance.isValidBlock(newBlock):
+                            Chain.instance.chain.append(newBlock)
+                            print("\nBlock Appended \n")
+                            pkt={
+                                "type":"new_block",
+                                "id":str(uuid.uuid4()),
+                                "block":newBlock.to_dict(),
+                                "miner":self.wallet.public_key
+                            }
+                            self.seen_message_ids.add(pkt["id"])
+                            await self.broadcast_message(pkt)
+                        else:
+                            print("\n Invalid Block \n")
 
-                for transaction in list(self.mem_pool):
-                    if newBlock.transaction_exists_in_block(transaction):
-                        self.mem_pool.discard(transaction)
+                        for transaction in list(self.mem_pool):
+                            if newBlock.transaction_exists_in_block(transaction):
+                                self.mem_pool.discard(transaction)
                             
     async def find_longest_chain(self):
         """
@@ -535,7 +564,9 @@ class Peer:
                 "type":"chain_request",
                 "id":str(uuid.uuid4())
             }
+            self.seen_message_ids.add(pkt["id"])
             await self.broadcast_message(pkt)
+            print("\nSent out chain requests...")
             await asyncio.sleep(60)
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
@@ -572,18 +603,6 @@ class Peer:
         if self.miner:
             self.mine_task.cancel()
             
-        i=0
-        # We print all the blocks
-        for block in Chain.instance.chain:
-            print(f"block{i}: {block}\n")
-            i+=1
-        
-        i=0
-        for transaction in list(self.mem_pool):
-            print(f"transaction{i}: {transaction}\n\n")
-            i+=1
-        print("Account Balance = ", Chain.instance.calc_balance(self.wallet.public_key))
-
 def strtobool(v):
     if isinstance(v, bool):
         return v

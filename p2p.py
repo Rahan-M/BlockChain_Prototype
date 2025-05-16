@@ -179,8 +179,9 @@ class Peer:
         elif t =='peer_info' or t == "add_peer":
             # print("Received Peer Info")
             data=msg["data"]
+            normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
-            if normalized_endpoint not in self.known_peers:
+            if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
@@ -195,8 +196,9 @@ class Peer:
             # print("Received Known Peers")
             peers=msg["peers"]
             for peer in peers:
+                normalized_self=normalize_endpoint((self.host, self.port))
                 normalized_endpoint = normalize_endpoint((peer["host"], peer["port"]))
-                if normalized_endpoint not in self.known_peers and normalized_endpoint!=(self.host, self.port):
+                if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self:
                     print(f"Discovered peer {peer["name"]} at {peer["host"]}:{peer["port"]}")
                     self.known_peers[normalized_endpoint]=(peer["name"], peer["public_key"])
                     self.name_to_public_key_dict[peer["name"].lower()]=peer["public_key"]
@@ -628,7 +630,6 @@ class Peer:
         flask_thread.start()
 
         inp_task=asyncio.create_task(self.user_input_handler())
-        ping_task=asyncio.create_task(self.keep_pinging())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
 
@@ -638,7 +639,6 @@ class Peer:
         await inp_task
 
         disc_task.cancel()
-        ping_task.cancel()
         consensus_task.cancel()
 
         if self.miner:

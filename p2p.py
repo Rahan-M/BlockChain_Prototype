@@ -1,11 +1,9 @@
 import asyncio, websockets, traceback
 import argparse, json, uuid, base64
-from typing import Set, Dict, List, Tuple, Any
-import threading
+from typing import Set, Dict, List, Tuple
 import socket
 from blochain_structures import Transaction, Block, Wallet, Chain
-from flask_app import create_flask_app, run_flask_app
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
 
 MAX_CONNECTIONS = 8
@@ -393,7 +391,7 @@ class Peer:
         """
         while True:
             print("Block Chain Menu\n***************")
-            print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5)Quit")
+            print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Quit")
 
             ch= await asyncio._get_running_loop().run_in_executor(
                 None, input, "Enter Your Choice: "
@@ -404,11 +402,11 @@ class Peer:
                 print("\nPlease enter a valid number!!!\n")
             if ch==1:
                 rec= await asyncio._get_running_loop().run_in_executor(
-                    None, input, "\n Enter Receiver's Name: "
+                    None, input, "\nEnter Receiver's Name: "
                 )
 
                 amt= await asyncio._get_running_loop().run_in_executor(
-                    None, input, "\n Enter Amount to send: "
+                    None, input, "\nEnter Amount to send: "
                 )
                 
                 receiver_public_key=self.name_to_public_key_dict.get(rec.lower().strip())
@@ -623,11 +621,6 @@ class Peer:
             asyncio.create_task(self.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port))
         else:
             self.chain=Chain(publicKey=self.wallet.public_key)
-
-        # Create flask app
-        flask_app = create_flask_app(self)
-        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
-        flask_thread.start()
 
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())

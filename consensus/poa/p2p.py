@@ -522,7 +522,7 @@ class Peer:
                 self.miners.add(miner_node_id)
                 if miner_node_id == self.node_id:
                     await self.update_role(True)
-                self.broadcast_miners_list()
+                await self.broadcast_miners_list()
             elif ch==7:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
@@ -531,7 +531,7 @@ class Peer:
                 self.miners.discard(miner_node_id)
                 if miner_node_id == self.node_id:
                     await self.update_role(False)
-                self.broadcast_miners_list()
+                await self.broadcast_miners_list()
             elif ch==8:
                 print("Quitting...")
                 break
@@ -768,6 +768,9 @@ def main():
             print("Invalid Bootstrap Format. Use host:port")
             return
     peer=Peer(args.host, args.port, args.name)
+
+    peer.name_to_node_id_dict[peer.name.lower()] = peer.node_id
+    peer.node_id_to_name_dict[peer.node_id] = peer.name.lower()
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

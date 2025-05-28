@@ -324,9 +324,6 @@ class Peer:
             if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id):
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
-                if self.miner and self.mine_task and not self.mine_task.done():
-                    self.mine_task.cancel()
-                    print("New Block received Cancelled Mining...")
                 
                 async with self.mem_pool_condition:
                     for transaction in list(self.mem_pool):

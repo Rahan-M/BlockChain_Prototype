@@ -321,7 +321,6 @@ class Peer:
             new_block_dict=msg["block"]
             newBlock=self.block_dict_to_block(new_block_dict)
             if Chain.instance.isValidBlock(newBlock):
-                newBlock.miner=msg["miner"]
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 if self.miner and self.mine_task and not self.mine_task.done():
@@ -332,8 +331,6 @@ class Peer:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
                             self.mem_pool.discard(transaction)
-                # if self.miner:
-                #     self.mine_task=asyncio.create_task(self.mine_blocks())
                 await self.broadcast_message(msg)
 
         elif t=="chain_request":
@@ -668,8 +665,9 @@ class Peer:
                             if(len(transaction_list)>0):
                                 print("Mining Started")
                                 print("Mining...")
-                                newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                                newBlock.miner=self.wallet.public_key
+                                newBlock = Block(Chain.instance.lastBlock.hash, transaction_list)
+                                newBlock.miner_node_id = self.node_id
+                                newBlock.miner_public_key = self.wallet.public_key
                             
                                 if Chain.instance.isValidBlock(newBlock):
                                     Chain.instance.chain.append(newBlock)
@@ -677,8 +675,7 @@ class Peer:
                                     pkt={
                                         "type":"new_block",
                                         "id":str(uuid.uuid4()),
-                                        "block":newBlock.to_dict(),
-                                        "miner":self.wallet.public_key
+                                        "block":newBlock.to_dict()
                                     }
                                     self.seen_message_ids.add(pkt["id"])
                                     await self.broadcast_message(pkt)

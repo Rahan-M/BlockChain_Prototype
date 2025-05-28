@@ -45,14 +45,12 @@ def txs_to_json_digestable_form(transactions: List[Transaction]):
 
 class Block:
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, id=None):
+        self.id=id or str(uuid.uuid4())
+        self.ts=ts or int(datetime.now().timestamp() * 1000)
         self.prevHash=prevHash
         self.transactions=transactions
-
-        self.ts=ts or int(datetime.now().timestamp() * 1000)
-
-        self.id=id or str(uuid.uuid4())
-        
-        self.miner: str=None
+        self.miner_node_id= None
+        self.miner_public_key= None
 
     def to_dict(self):
         return {

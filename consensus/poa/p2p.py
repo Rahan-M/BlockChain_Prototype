@@ -652,41 +652,42 @@ class Peer:
         try:
             while True:
                 await asyncio.sleep(30)
-                async with self.mem_pool_condition: # Works the same as lock
-                    # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
-                    # We check the about condition in lambda every time we get notified after a new transaction has been added
-                    if(len(self.mem_pool)>0):
-                        transaction_list=[]
-                        for transaction in list(self.mem_pool):
-                            if Chain.instance.transaction_exists_in_chain(transaction):
-                                self.mem_pool.discard(transaction)
-                                continue
-                            else:
-                                transaction_list.append(transaction)
-
-                        if(len(transaction_list)>0):
-                            print("Mining Started")
-                            print("Mining...")
-                            newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                            newBlock.miner=self.wallet.public_key
-                        
-                            if Chain.instance.isValidBlock(newBlock):
-                                Chain.instance.chain.append(newBlock)
-                                print("\nBlock Appended \n")
-                                pkt={
-                                    "type":"new_block",
-                                    "id":str(uuid.uuid4()),
-                                    "block":newBlock.to_dict(),
-                                    "miner":self.wallet.public_key
-                                }
-                                self.seen_message_ids.add(pkt["id"])
-                                await self.broadcast_message(pkt)
-                            else:
-                                print("\n Invalid Block \n")
-
+                if self.node_id == self.miners[len(Chain.instance.chain) % len(self.miners)]:
+                    async with self.mem_pool_condition: # Works the same as lock
+                        # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
+                        # We check the about condition in lambda every time we get notified after a new transaction has been added
+                        if(len(self.mem_pool)>0):
+                            transaction_list=[]
                             for transaction in list(self.mem_pool):
-                                if newBlock.transaction_exists_in_block(transaction):
-                                    self.mem_pool.discard(transaction)      
+                                if Chain.instance.transaction_exists_in_chain(transaction):
+                                    self.mem_pool.discard(transaction)
+                                    continue
+                                else:
+                                    transaction_list.append(transaction)
+
+                            if(len(transaction_list)>0):
+                                print("Mining Started")
+                                print("Mining...")
+                                newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
+                                newBlock.miner=self.wallet.public_key
+                            
+                                if Chain.instance.isValidBlock(newBlock):
+                                    Chain.instance.chain.append(newBlock)
+                                    print("\nBlock Appended \n")
+                                    pkt={
+                                        "type":"new_block",
+                                        "id":str(uuid.uuid4()),
+                                        "block":newBlock.to_dict(),
+                                        "miner":self.wallet.public_key
+                                    }
+                                    self.seen_message_ids.add(pkt["id"])
+                                    await self.broadcast_message(pkt)
+                                else:
+                                    print("\n Invalid Block \n")
+
+                                for transaction in list(self.mem_pool):
+                                    if newBlock.transaction_exists_in_block(transaction):
+                                        self.mem_pool.discard(transaction)      
         except asyncio.CancelledError:
             print("Miner task stopped cleanly")
             raise

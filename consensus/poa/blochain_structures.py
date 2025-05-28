@@ -151,7 +151,10 @@ class Chain:
         
         return False
                 
-    def isValidBlock(self, block: Block):
+    def isValidBlock(self, block: Block, reqd_miner_node_id):
+        if block.miner_node_id != reqd_miner_node_id:
+            print("Mined by malicious miner")
+            return False
         if self.lastBlock.hash!=block.prevHash:
             print("Hash Problem")
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")

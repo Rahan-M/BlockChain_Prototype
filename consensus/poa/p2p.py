@@ -320,7 +320,8 @@ class Peer:
         elif t=="new_block":
             new_block_dict=msg["block"]
             newBlock=self.block_dict_to_block(new_block_dict)
-            if Chain.instance.isValidBlock(newBlock):
+            reqd_miner_node_id = self.miners[len(Chain.instance.chain) % len(self.miners)]
+            if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id):
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 if self.miner and self.mine_task and not self.mine_task.done():

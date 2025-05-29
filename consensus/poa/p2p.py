@@ -37,7 +37,7 @@ class Peer:
 
         self.node_id = str(uuid.uuid4())
 
-        self.miners: Set[str]= set()
+        self.miners: List[str]= list()
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -129,7 +129,7 @@ class Peer:
         pkt={
             "type":"miners_list_update",
             "id":str(uuid.uuid4()),
-            "miners_list": list(self.miners)
+            "miners_list": self.miners
         }
         self.seen_message_ids.add(pkt["id"])
         await self.broadcast_message(pkt)
@@ -195,7 +195,7 @@ class Peer:
         self.seen_message_ids.add(id)
 
         if t=="miners_list_update":
-            self.miners = set(msg["miners_list"])
+            self.miners = msg["miners_list"]
             if self.node_id in self.miners:
                 await self.update_role(True)
             else:
@@ -257,13 +257,13 @@ class Peer:
                 "type": "network_details",
                 "id":str(uuid.uuid4()),
                 "admin": self.admin_id,
-                "miners": list(self.miners)
+                "miners": self.miners
             }
             await websocket.send(json.dumps(pkt))
 
         elif t=="network_details":
             self.admin_id = msg["admin"]
-            self.miners = set(msg["miners"])
+            self.miners = msg["miners"]
             if self.node_id in self.miners:
                 await self.update_role(True)
             else:
@@ -505,28 +505,34 @@ class Peer:
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
             elif ch==5:
-                miner_names = set()
+                miner_names = list()
                 for miner in self.miners:
-                    miner_names.add(self.node_id_to_name_dict[miner])
+                    miner_names.append(self.node_id_to_name_dict[miner])
                 print(miner_names)
             elif ch==6:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
                 miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
-                self.miners.add(miner_node_id)
-                if miner_node_id == self.node_id:
-                    await self.update_role(True)
-                await self.broadcast_miners_list()
+                if miner_node_id not in self.miners:
+                    self.miners.append(miner_node_id)
+                    if miner_node_id == self.node_id:
+                        await self.update_role(True)
+                    await self.broadcast_miners_list()
+                else:
+                    print(f"{miner_name} is already in miners list")
             elif ch==7:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
                 miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
-                self.miners.discard(miner_node_id)
-                if miner_node_id == self.node_id:
-                    await self.update_role(False)
-                await self.broadcast_miners_list()
+                if miner_node_id in self.miners:
+                    self.miners.remove(miner_node_id)
+                    if miner_node_id == self.node_id:
+                        await self.update_role(False)
+                    await self.broadcast_miners_list()
+                else:
+                    print(f"{miner_name} is already not in miners list")
             elif ch==8:
                 print("Quitting...")
                 break
@@ -715,7 +721,7 @@ class Peer:
         else:
             self.chain=Chain(publicKey=self.wallet.public_key)
             self.admin_id = self.node_id
-            self.miners.add(self.node_id)
+            self.miners.append(self.node_id)
             await self.update_role(True)
 
         # Create flask app

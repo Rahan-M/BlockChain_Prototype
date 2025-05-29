@@ -720,6 +720,8 @@ class Peer:
             asyncio.create_task(self.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port))
         else:
             self.chain=Chain(publicKey=self.wallet.public_key)
+            Chain.instance.chain[0].miner_node_id = self.node_id
+            Chain.instance.chain[0].miner_public_key = self.wallet.public_key
             self.admin_id = self.node_id
             self.miners.append(self.node_id)
             await self.update_role(True)

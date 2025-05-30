@@ -166,9 +166,9 @@ class Peer:
             # Stop mining
             self.miner = False
             if self.miner_task:
-                self.miner_task.cancel()
                 try:
-                    await self.miner_task.cancel()
+                    self.miner_task.cancel()
+                    await self.miner_task
                 except asyncio.CancelledError:
                     pass
 

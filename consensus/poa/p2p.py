@@ -313,7 +313,17 @@ class Peer:
         elif t=="new_block":
             new_block_dict=msg["block"]
             newBlock=self.block_dict_to_block(new_block_dict)
-            reqd_miner_node_id = self.miners[len(Chain.instance.chain) % len(self.miners)]
+            miners_list = list()
+            if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
+                miners_list = self.miners[0][0]
+                for i in range(1, len(self.miners)):
+                    if self.miners[i][1] == len(Chain.instance.chain):
+                        miners_list = self.miners[i][0]
+                    else:
+                        break
+            else:
+                miners_list = Chain.instance.chain[-1].miners_list
+            reqd_miner_node_id = miners_list[len(Chain.instance.chain) % len(miners_list)]
             if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id):
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
@@ -693,7 +703,8 @@ class Peer:
                             break
                 else:
                     miners_list = Chain.instance.chain[-1].miners_list
-                if self.node_id == miners_list[len(Chain.instance.chain) % len(miners_list)]:
+                reqd_miner_node_id = miners_list[len(Chain.instance.chain) % len(miners_list)]
+                if self.node_id == reqd_miner_node_id:
                     async with self.mem_pool_condition: # Works the same as lock
                         # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
                         # We check the about condition in lambda every time we get notified after a new transaction has been added
@@ -714,7 +725,7 @@ class Peer:
                                 newBlock.miner_public_key = self.wallet.public_key
                                 newBlock.miners_list = miners_list
                             
-                                if Chain.instance.isValidBlock(newBlock):
+                                if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id):
                                     Chain.instance.chain.append(newBlock)
                                     print("\nBlock Appended \n")
                                     pkt={

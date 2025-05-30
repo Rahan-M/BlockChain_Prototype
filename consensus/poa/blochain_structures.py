@@ -51,6 +51,7 @@ class Block:
         self.transactions=transactions
         self.miner_node_id= None
         self.miner_public_key= None
+        self.miners_list = None # List of miner nodes
 
     def to_dict(self):
         return {

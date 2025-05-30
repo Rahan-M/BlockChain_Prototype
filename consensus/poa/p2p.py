@@ -37,7 +37,7 @@ class Peer:
 
         self.node_id = str(uuid.uuid4())
 
-        self.miners: List[str]= list()
+        self.miners: List[list]= list() # List of [miners_list, activation_block]
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -125,11 +125,12 @@ class Peer:
         self.seen_message_ids.add(pkt["id"])
         await websocket.send(json.dumps(pkt))
 
-    async def broadcast_miners_list(self):
+    async def broadcast_miners_list(self, miners_list, activation_block):
         pkt={
             "type":"miners_list_update",
             "id":str(uuid.uuid4()),
-            "miners_list": self.miners
+            "miners_list": miners_list,
+            "activation_block": activation_block
         }
         self.seen_message_ids.add(pkt["id"])
         await self.broadcast_message(pkt)
@@ -195,11 +196,11 @@ class Peer:
         self.seen_message_ids.add(id)
 
         if t=="miners_list_update":
-            self.miners = msg["miners_list"]
-            if self.node_id in self.miners:
-                await self.update_role(True)
-            else:
-                await self.update_role(False)
+            self.miners.append([msg["miners_list"], msg["activation_block"]])
+            # if self.node_id in self.miners:
+            #     await self.update_role(True)
+            # else:
+            #     await self.update_role(False)
             await self.broadcast_message(msg)
 
         elif t=="ping":
@@ -264,10 +265,10 @@ class Peer:
         elif t=="network_details":
             self.admin_id = msg["admin"]
             self.miners = msg["miners"]
-            if self.node_id in self.miners:
-                await self.update_role(True)
-            else:
-                await self.update_role(False)
+            # if self.node_id in self.miners:
+            #     await self.update_role(True)
+            # else:
+            #     await self.update_role(False)
             pkt={
                 "type":"chain_request",
                 "id":str(uuid.uuid4())
@@ -325,11 +326,19 @@ class Peer:
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 
+                await self.broadcast_message(msg)
+
                 async with self.mem_pool_condition:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
                             self.mem_pool.discard(transaction)
-                await self.broadcast_message(msg)
+
+                if self.miners:
+                    for miner_item in self.miners:
+                        if miner_item[1] < len(Chain.instance.chain):
+                            self.miners.remove(miner_item)
+                        else:
+                            break
 
         elif t=="chain_request":
             pkt={
@@ -506,19 +515,32 @@ class Peer:
                     i+=1
             elif ch==5:
                 miner_names = list()
-                for miner in self.miners:
+                for miner in Chain.instance.chain[-1].miners_list:
                     miner_names.append(self.node_id_to_name_dict[miner])
+                print("Current miners")
                 print(miner_names)
+                for miner_item in self.miners:
+                    miner_names.clear()
+                    for miner in miner_item[0]:
+                        miner_names.append(self.node_id_to_name_dict[miner])
+                    print(f"Miners to be activated from block {miner_item[1]}")
+                    print(miner_names)
             elif ch==6:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
                 miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
-                if miner_node_id not in self.miners:
-                    self.miners.append(miner_node_id)
-                    if miner_node_id == self.node_id:
-                        await self.update_role(True)
-                    await self.broadcast_miners_list()
+                miners_list = None
+                if self.miners:
+                    miners_list = self.miners[-1][0]
+                else:
+                    miners_list = Chain.instance.chain[-1].miners_list
+                if miner_node_id not in miners_list:
+                    miners_list.append(miner_node_id)
+                    self.miners.append([miners_list, len(Chain.instance.chain) + 3])
+                    # if miner_node_id == self.node_id:
+                    #     await self.update_role(True)
+                    await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already in miners list")
             elif ch==7:
@@ -526,11 +548,17 @@ class Peer:
                     None, input, "\nEnter Miner's Name: "
                 )
                 miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
+                miners_list = None
+                if self.miners:
+                    miners_list = self.miners[-1][0]
+                else:
+                    miners_list = Chain.instance.chain[-1].miners_list
                 if miner_node_id in self.miners:
-                    self.miners.remove(miner_node_id)
-                    if miner_node_id == self.node_id:
-                        await self.update_role(False)
-                    await self.broadcast_miners_list()
+                    miners_list.remove(miner_node_id)
+                    self.miners.append([miners_list, len(Chain.instance.chain) + 3])
+                    # if miner_node_id == self.node_id:
+                    #     await self.update_role(False)
+                    await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already not in miners list")
             elif ch==8:
@@ -653,7 +681,17 @@ class Peer:
         try:
             while True:
                 await asyncio.sleep(30)
-                if self.node_id == self.miners[len(Chain.instance.chain) % len(self.miners)]:
+                miners_list = list()
+                if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
+                    miners_list = self.miners[0][0]
+                    for i in range(1, len(self.miners)):
+                        if self.miners[i][1] == len(Chain.instance.chain):
+                            miners_list = self.miners[i][0]
+                        else:
+                            break
+                else:
+                    miners_list = Chain.instance.chain[-1].miners_list
+                if self.node_id == miners_list[len(Chain.instance.chain) % len(miners_list)]:
                     async with self.mem_pool_condition: # Works the same as lock
                         # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
                         # We check the about condition in lambda every time we get notified after a new transaction has been added
@@ -672,6 +710,7 @@ class Peer:
                                 newBlock = Block(Chain.instance.lastBlock.hash, transaction_list)
                                 newBlock.miner_node_id = self.node_id
                                 newBlock.miner_public_key = self.wallet.public_key
+                                newBlock.miners_list = miners_list
                             
                                 if Chain.instance.isValidBlock(newBlock):
                                     Chain.instance.chain.append(newBlock)
@@ -683,6 +722,12 @@ class Peer:
                                     }
                                     self.seen_message_ids.add(pkt["id"])
                                     await self.broadcast_message(pkt)
+                                    if self.miners:
+                                        for miner_item in self.miners:
+                                            if miner_item[1] < len(Chain.instance.chain):
+                                                self.miners.remove(miner_item)
+                                            else:
+                                                break
                                 else:
                                     print("\n Invalid Block \n")
 
@@ -722,6 +767,7 @@ class Peer:
             self.chain=Chain(publicKey=self.wallet.public_key)
             Chain.instance.chain[0].miner_node_id = self.node_id
             Chain.instance.chain[0].miner_public_key = self.wallet.public_key
+            Chain.instance.chain[0].miners_list = [self.node_id]
             self.admin_id = self.node_id
             self.miners.append(self.node_id)
             await self.update_role(True)

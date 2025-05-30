@@ -197,10 +197,6 @@ class Peer:
 
         if t=="miners_list_update":
             self.miners.append([msg["miners_list"], msg["activation_block"]])
-            # if self.node_id in self.miners:
-            #     await self.update_role(True)
-            # else:
-            #     await self.update_role(False)
             await self.broadcast_message(msg)
 
         elif t=="ping":
@@ -265,10 +261,6 @@ class Peer:
         elif t=="network_details":
             self.admin_id = msg["admin"]
             self.miners = msg["miners"]
-            # if self.node_id in self.miners:
-            #     await self.update_role(True)
-            # else:
-            #     await self.update_role(False)
             pkt={
                 "type":"chain_request",
                 "id":str(uuid.uuid4())
@@ -339,6 +331,20 @@ class Peer:
                             self.miners.remove(miner_item)
                         else:
                             break
+
+                if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
+                    new_miners_list = self.miners[0][0]
+                    for i in range(1, len(self.miners)):
+                        if self.miners[i][1] == len(Chain.instance.chain):
+                            new_miners_list = self.miners[i][0]
+                        else:
+                            break
+                else:
+                    new_miners_list = Chain.instance.chain[-1].miners_list
+                if self.node_id in new_miners_list:
+                    await self.update_role(True)
+                else:
+                    await self.update_role(False)
 
         elif t=="chain_request":
             pkt={
@@ -538,8 +544,6 @@ class Peer:
                 if miner_node_id not in miners_list:
                     miners_list.append(miner_node_id)
                     self.miners.append([miners_list, len(Chain.instance.chain) + 3])
-                    # if miner_node_id == self.node_id:
-                    #     await self.update_role(True)
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already in miners list")
@@ -556,8 +560,6 @@ class Peer:
                 if miner_node_id in self.miners:
                     miners_list.remove(miner_node_id)
                     self.miners.append([miners_list, len(Chain.instance.chain) + 3])
-                    # if miner_node_id == self.node_id:
-                    #     await self.update_role(False)
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already not in miners list")
@@ -728,6 +730,20 @@ class Peer:
                                                 self.miners.remove(miner_item)
                                             else:
                                                 break
+                                    new_miners_list = list()
+                                    if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
+                                        new_miners_list = self.miners[0][0]
+                                        for i in range(1, len(self.miners)):
+                                            if self.miners[i][1] == len(Chain.instance.chain):
+                                                new_miners_list = self.miners[i][0]
+                                            else:
+                                                break
+                                    else:
+                                        new_miners_list = Chain.instance.chain[-1].miners_list
+                                    if self.node_id in new_miners_list:
+                                        await self.update_role(True)
+                                    else:
+                                        await self.update_role(False)
                                 else:
                                     print("\n Invalid Block \n")
 

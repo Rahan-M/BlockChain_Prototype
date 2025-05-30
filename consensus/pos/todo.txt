@@ -1,0 +1,10 @@
+[] Create seed generater as a Chain method
+[] Create VRF generator
+
+one publishes
+{
+  "block_data": {...},
+  "vrf_output": "0x8234...",
+  "vrf_proof": "0x123abc...",
+  "public_key": "0xdeadbeef..."
+}

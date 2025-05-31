@@ -574,7 +574,7 @@ class Peer:
                     miners_list = copy.deepcopy(self.miners[-1][0])
                 else:
                     miners_list = copy.deepcopy(Chain.instance.chain[-1].miners_list)
-                if miner_node_id in self.miners:
+                if miner_node_id in miners_list:
                     miners_list.remove(miner_node_id)
                     self.miners.append([miners_list, len(Chain.instance.chain) + 3])
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)

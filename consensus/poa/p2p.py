@@ -1,6 +1,7 @@
 import asyncio, websockets, traceback
 import argparse, json, uuid, base64
 from typing import Set, Dict, List, Tuple
+import copy
 import threading
 import socket
 from blochain_structures import Transaction, Block, Wallet, Chain
@@ -554,9 +555,9 @@ class Peer:
                 miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
                 miners_list = None
                 if self.miners:
-                    miners_list = self.miners[-1][0]
+                    miners_list = copy.deepcopy(self.miners[-1][0])
                 else:
-                    miners_list = Chain.instance.chain[-1].miners_list
+                    miners_list = copy.deepcopy(Chain.instance.chain[-1].miners_list)
                 if miner_node_id not in miners_list:
                     miners_list.append(miner_node_id)
                     self.miners.append([miners_list, len(Chain.instance.chain) + 3])
@@ -570,9 +571,9 @@ class Peer:
                 miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
                 miners_list = None
                 if self.miners:
-                    miners_list = self.miners[-1][0]
+                    miners_list = copy.deepcopy(self.miners[-1][0])
                 else:
-                    miners_list = Chain.instance.chain[-1].miners_list
+                    miners_list = copy.deepcopy(Chain.instance.chain[-1].miners_list)
                 if miner_node_id in self.miners:
                     miners_list.remove(miner_node_id)
                     self.miners.append([miners_list, len(Chain.instance.chain) + 3])

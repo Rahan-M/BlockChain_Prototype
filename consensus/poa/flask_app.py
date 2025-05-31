@@ -16,7 +16,10 @@ def create_flask_app(peer):
                 "prevHash": block.prevHash,
                 "transactions": txs_to_json_digestable_form(block.transactions),
                 "ts": block.ts,
-                "hash": block.hash
+                "hash": block.hash,
+                "miner_node_id": block.miner_node_id,
+                "miner_public_key": block.miner_public_key,
+                "miners_list": block.miners_list,
             })
         outbound_peers_list = []
         for outbound_peer in peer.outbound_peers:
@@ -32,7 +35,7 @@ def create_flask_app(peer):
                 ("is_miner", peer.miner),
                 ("admin_id", peer.admin_id),
                 ("node_id", peer.node_id),
-                ("miners", list(peer.miners)),
+                ("miners", peer.miners),
                 ("name to node id dict", peer.name_to_node_id_dict),
                 ("node_id_to_name_dict", peer.node_id_to_name_dict),
                 ("known_peers", list(map(lambda x: peer.known_peers[x][0]+":"+x[0]+":"+str(x[1])+":"+peer.known_peers[x][1], peer.known_peers.keys()))),

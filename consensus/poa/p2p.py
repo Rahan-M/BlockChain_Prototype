@@ -147,13 +147,19 @@ class Peer:
         new_block_id=block_dict["id"]
         new_block_prevHash=block_dict["prevHash"]
         new_block_ts=block_dict["ts"]
+        new_block_miner_node_id = block_dict["miner_node_id"]
+        new_block_miner_public_key = block_dict["miner_public_key"]
+        new_block_miners_list = block_dict["miners_list"]
 
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
             transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"])
             transactions.append(transaction)
         
-        newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_id)   
+        newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_id)
+        newBlock.miner_node_id = new_block_miner_node_id
+        newBlock.miner_public_key = new_block_miner_public_key
+        newBlock.miners_list = new_block_miners_list
         return newBlock
 
     async def update_role(self, is_miner_now):

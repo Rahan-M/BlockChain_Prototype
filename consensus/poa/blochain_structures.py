@@ -58,7 +58,10 @@ class Block:
             "id":self.id,
             "prevHash":self.prevHash,
             "transactions":txs_to_json_digestable_form(self.transactions),
-            "ts":self.ts
+            "ts":self.ts,
+            "miner_node_id":self.miner_node_id,
+            "miner_public_key":self.miner_public_key,
+            "miners_list":self.miners_list,
         }
 
     def __str__(self):

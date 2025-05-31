@@ -802,7 +802,6 @@ class Peer:
             Chain.instance.chain[0].miner_public_key = self.wallet.public_key
             Chain.instance.chain[0].miners_list = [self.node_id]
             self.admin_id = self.node_id
-            self.miners.append(self.node_id)
             await self.update_role(True)
 
         # Create flask app

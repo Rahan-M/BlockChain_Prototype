@@ -20,6 +20,7 @@ def create_flask_app(peer):
                 "miner_node_id": block.miner_node_id,
                 "miner_public_key": block.miner_public_key,
                 "miners_list": block.miners_list,
+                "signature": block.signature,
             })
         outbound_peers_list = []
         for outbound_peer in peer.outbound_peers:

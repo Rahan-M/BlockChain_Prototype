@@ -89,7 +89,6 @@ class Peer:
             async with self.mem_pool_condition is executed only if
             there is no other such block currently being executed
         """
-        self.mine_task=None
 
     async def send_peer_info(self, websocket):
         """

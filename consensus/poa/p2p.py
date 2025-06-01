@@ -25,6 +25,12 @@ def normalize_endpoint(ep):
     host, port = ep
     return (socket.gethostbyname(host), int(port))
 
+def get_public_key_by_node_id(data, target_node_id):
+    for (host, port), (name, public_key, node_id) in data.items():
+        if node_id == target_node_id:
+            return public_key
+    return None
+
 class Peer:
     def __init__(self, host, port, name):
         self.host = host
@@ -150,6 +156,7 @@ class Peer:
         new_block_miner_node_id = block_dict["miner_node_id"]
         new_block_miner_public_key = block_dict["miner_public_key"]
         new_block_miners_list = block_dict["miners_list"]
+        new_block_signature = block_dict["signature"]
 
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
@@ -160,6 +167,7 @@ class Peer:
         newBlock.miner_node_id = new_block_miner_node_id
         newBlock.miner_public_key = new_block_miner_public_key
         newBlock.miners_list = new_block_miners_list
+        newBlock.signature = new_block_signature
         return newBlock
 
     async def update_role(self, is_miner_now):
@@ -330,7 +338,8 @@ class Peer:
             else:
                 miners_list = Chain.instance.chain[-1].miners_list
             reqd_miner_node_id = miners_list[len(Chain.instance.chain) % len(miners_list)]
-            if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id):
+            reqd_miner_pulic_key = get_public_key_by_node_id(self.known_peers, reqd_miner_node_id)
+            if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 
@@ -695,6 +704,15 @@ class Peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
 
+    def sign_block(self, block, private_key):
+        message = block.get_message_to_sign()
+        signature = private_key.sign(
+            message,
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+        block.signature = signature.hex()  # Store as hex string for transport
+
     async def mine_blocks(self):
         try:
             while True:
@@ -730,8 +748,10 @@ class Peer:
                                 newBlock.miner_node_id = self.node_id
                                 newBlock.miner_public_key = self.wallet.public_key
                                 newBlock.miners_list = miners_list
-                            
-                                if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id):
+                                self.sign_block(newBlock, self.wallet.private_key)
+
+                                reqd_miner_pulic_key = self.wallet.public_key
+                                if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
                                     Chain.instance.chain.append(newBlock)
                                     print("\nBlock Appended \n")
                                     pkt={
@@ -770,7 +790,7 @@ class Peer:
         except asyncio.CancelledError:
             print("Miner task stopped cleanly")
             raise
-                            
+
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace
@@ -801,6 +821,7 @@ class Peer:
             Chain.instance.chain[0].miner_node_id = self.node_id
             Chain.instance.chain[0].miner_public_key = self.wallet.public_key
             Chain.instance.chain[0].miners_list = [self.node_id]
+            self.sign_block(Chain.instance.chain[0], self.wallet.private_key)
             self.admin_id = self.node_id
             await self.update_role(True)
 

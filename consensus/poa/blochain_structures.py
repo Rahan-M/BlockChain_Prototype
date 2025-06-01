@@ -4,6 +4,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
+import binascii
 
 
 class Transaction:
@@ -51,6 +52,7 @@ class Block:
         self.transactions=transactions
         self.miner_node_id= None
         self.miner_public_key= None
+        self.signature = None # This will hold the digital signature from the miner
         self.miners_list = None # List of miner nodes
 
     def to_dict(self):
@@ -62,6 +64,7 @@ class Block:
             "miner_node_id":self.miner_node_id,
             "miner_public_key":self.miner_public_key,
             "miners_list":self.miners_list,
+            "signature":self.signature,
         }
 
     def __str__(self):
@@ -77,6 +80,39 @@ class Block:
             if self.transactions[i]==transaction:
                 return True
         return False
+    
+    def get_message_to_sign(self):
+        return json.dumps({
+            "id": self.id,
+            "ts": self.ts,
+            "prevHash": self.prevHash,
+            "transactions": [tx.to_dict() for tx in self.transactions],
+            "miner_node_id": self.miner_node_id,
+            "miner_public_key": self.miner_public_key,
+            "miners_list": self.miners_list,
+        }, sort_keys=True).encode()
+    
+    def is_valid_signature(self):
+        try:
+            # Load public key from PEM string
+            public_key = serialization.load_pem_public_key(
+                self.miner_public_key.encode(),
+                backend=default_backend()
+            )
+
+            message = self.get_message_to_sign()
+            signature = binascii.unhexlify(self.signature)
+
+            public_key.verify(
+                signature,
+                message,
+                padding.PKCS1v15(),
+                hashes.SHA256()
+            )
+            return True
+        except Exception as e:
+            print(f"Invalid block signature: {e}")
+            return False
 
 class Chain:
     instance =None #Class Variable
@@ -128,7 +164,7 @@ class Chain:
         
         return False
                 
-    def isValidBlock(self, block: Block, reqd_miner_node_id):
+    def isValidBlock(self, block: Block, reqd_miner_node_id, reqd_miner_public_key):
         if block.miner_node_id != reqd_miner_node_id:
             print("Mined by malicious miner")
             return False
@@ -140,6 +176,11 @@ class Chain:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
                 return False
+        if block.miner_public_key != reqd_miner_public_key:
+            print("Invalid miner public key")
+            return False
+        if not block.is_valid_signature():
+            return False
 
         return True
 

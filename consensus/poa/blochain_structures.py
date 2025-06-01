@@ -121,33 +121,6 @@ class Chain:
         
         Chain.instance.chain=blockList.copy()
 
-    def addBlock(self, transactions: List[Transaction], senderPublicKey: str, signature: bytes):
-        # Load public key, converts from string in PEM format to Bytes
-        public_key=serialization.load_pem_public_key(senderPublicKey.encode())
-
-        is_valid=False
-        try:
-            public_key.verify(
-                signature,
-                str(txs_to_json_digestable_form(transactions)).encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
-                ),
-                hashes.SHA256()
-            )
-            is_valid=True
-        except Exception as e:
-            print(e)
-            pass
-
-        if is_valid:
-            newBlock=Block(self.lastBlock.hash,transactions)
-            self.chain.append(newBlock)
-            return newBlock
-        else :
-            return None
-
     def transaction_exists_in_chain(self, transaction: Transaction):
         for block in reversed(self.chain):
             if block.transaction_exists_in_block(transaction):
@@ -216,23 +189,6 @@ class Wallet:
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         ).decode()
-    
-    def sendMoney(self, amount: float, payeePublicKey:str):
-        transaction=Transaction(amount, self.public_key, payeePublicKey)
-        transactions=[transaction]
-        transactions_data=str(txs_to_json_digestable_form(transactions)).encode()
-
-        signature=self.private_key.sign(
-            transactions_data,
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
-        )
-
-        Chain.instance.addBlock(transactions, self.public_key, signature)
-        return transaction
 
 # Chain()
 

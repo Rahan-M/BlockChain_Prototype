@@ -1,4 +1,7 @@
-[] Create seed generater as a Chain method
+[x] Create seed generater as a Chain method
+[] Handle incoming stake_registrations
+[] Create vrf and compare to threshold
+[] Modify how we check isValid for incoming blocks
 [] Create VRF generator
 
 one publishes

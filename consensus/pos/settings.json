@@ -1,0 +1,5 @@
+{"python.analysis.extraPaths": [
+    "/home/rahanm/.local/lib/python3.13/site-packages"
+  ],
+  "python.defaultInterpreterPath": "/usr/bin/python3.13"
+}

@@ -4,6 +4,10 @@ from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec
+from pathlib import Path
+import numpy as np
+
 
 
 class Transaction:
@@ -48,11 +52,10 @@ class Block:
         self.prevHash=prevHash
         self.transactions=transactions
 
-        self.ts=ts or int(datetime.now().timestamp() * 1000)
-        self.nonce=nonce or 0 #The _ are purely to make it easier on the eye
+        self.ts=ts or datetime.now().timestamp()
 
         self.id=id or str(uuid.uuid4())
-        
+        self.timestamp=datetime.now()
         self.miner: str=None
 
     def to_dict(self):
@@ -77,7 +80,7 @@ class Block:
             if self.transactions[i]==transaction:
                 return True
         return False
-
+    
 class Chain:
     instance =None #Class Variable
 
@@ -106,16 +109,6 @@ class Chain:
     @property
     def lastBlock(self):
         return self.chain[-1]
-
-    def mine(self, block:Block):
-        block.nonce=0
-        print("Mining...")
-        
-        while not block.hash.startswith("00000") :
-            block.nonce+=1
-
-        print(f"Solution Found!!! nonce = {block.nonce} hash = {block.hash}") 
-        return block.nonce
 
     def to_block_dict_list(self):
         block_dict_list=[]
@@ -222,24 +215,21 @@ class Chain:
                     bal-=transaction.amount
         return bal
 
-
     def epoch_seed(self, publicKey, pending_transactions:List[Transaction]=None):
         bal=0
         last_finalized_block_hash=self.chain[self.valid_chain_length()].hash
         return last_finalized_block_hash
 
-
 class Wallet:
     def __init__(self):
-        self.private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
+        self.private_key = ec.generate_private_key(
+            ec.SECP256R1(),  # or SECP256K1, depending on your choice
+            default_backend()
         )
-        
+
         self.private_key_pem = self.private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption()
         ).decode()
 
@@ -247,6 +237,8 @@ class Wallet:
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         ).decode()
+
+        self.vrf_private_key, self.vrf_public_key=vrf.generate_key_pair()
     
     def sendMoney(self, amount: float, payeePublicKey:str):
         transaction=Transaction(amount, self.public_key, payeePublicKey)

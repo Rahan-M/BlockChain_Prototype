@@ -25,11 +25,11 @@ def normalize_endpoint(ep):
     return (socket.gethostbyname(host), int(port))
 
 class Peer:
-    def __init__(self, host, port, name, miner:bool):
+    def __init__(self, host, port, name, staker:bool):
         self.host = host
         self.port = port
         self.name = name
-        self.miner=miner
+        self.staker=staker
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -40,13 +40,12 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        self.known_peers : Dict[Tuple[str, int], Tuple[str, str]]={} # (host, port):(name, public key)
         """
             We store all the peers we know here, we compare this with outbound peers in dicover_peers
             to find to which nodes we have not yet made a connection
         """
         
-
+        self.staked_amt:int=0
         self.got_pong: Dict[websockets.WebSocketServerProtocol, bool]={}
         """
             We set the value of each websocket in this dictionary false before sending ping
@@ -63,19 +62,21 @@ class Peer:
         """
 
         self.mem_pool: Set[Transaction]=set()
-
+        self.mem_pool_lock=asyncio.Lock() 
+        
+        self.current_stakers: Dict[str, int]={} # Public key is stored as pem string
+        self.curr_stakers_lock=asyncio.Condition() 
+        
         self.name_to_public_key_dict: Dict[str, str]={}
         
         self.wallet=Wallet()
         self.chain: Chain=None
 
 
-        self.mem_pool_condition=asyncio.Condition() 
+        self.create_block_condition=asyncio.Condition()
         """
-            Any block under this condition must acquire lock before moving on so we don't need to use both at the same time
-            A condition is a synchronous primitive with an inbuilt lock
-            This means that while a block of code starting with
-            async with self.mem_pool_condition is executed only if
+            While a block of code starting with
+            async with self.mem_pool_lock is executed only if
             there is no other such block currently being executed
         """
         self.mine_task=None
@@ -246,10 +247,18 @@ class Peer:
             print(f"\n{msg["type"]}: {msg["transaction"]}")
             print("\n")
 
-            async with self.mem_pool_condition:
+            async with self.mem_pool_lock:
                 self.mem_pool.add(transaction)
-                # self.mem_pool_condition.notify_all()
+                # self.mem_pool_lock.notify_all()
             await self.broadcast_message(msg)
+
+        elif t=="stake_announcement":
+            pid=msg.get("public_key")
+            amt=msg.get("amt")
+            if(pid and amt):
+                async with self.curr_stakers_lock:
+                    self.current_stakers[pid]=amt
+
 
         elif t=="new_block":
             new_block_dict=msg["block"]
@@ -262,10 +271,13 @@ class Peer:
                     self.mine_task.cancel()
                     print("New Block received Cancelled Mining...")
                 
-                async with self.mem_pool_condition:
+                async with self.mem_pool_lock:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
                             self.mem_pool.discard(transaction)
+                async with self.curr_stakers_lock:
+                    self.current_stakers.clear()
+
                 if self.miner:
                     self.mine_task=asyncio.create_task(self.mine_blocks())
                 await self.broadcast_message(msg)
@@ -297,7 +309,7 @@ class Peer:
             
             else:
                 print("\nCurrent Chain Longer than received chain")
-            async with self.mem_pool_condition:
+            async with self.mem_pool_lock:
                 for transaction in list(self.mem_pool):
                     if Chain.instance.transaction_exists_in_chain(transaction):
                         self.mem_pool.discard(transaction)
@@ -378,9 +390,9 @@ class Peer:
         if Chain.instance.transaction_exists_in_chain(transaction):
             return
         
-        async with self.mem_pool_condition:
+        async with self.mem_pool_lock:
                 self.mem_pool.add(transaction)
-                # self.mem_pool_condition.notify_all()
+                # self.mem_pool_lock.notify_all()
 
         print("Transaction Created", transaction)
         print("\n")
@@ -554,48 +566,34 @@ class Peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
 
-    async def mine_blocks(self):
+    async def send_stake_announcements(self, amt: int):
         """
-            We mine blocks whenever there are greater than or equal to three
-            transactions in mem pool
+            Used for sending stake announcements
         """
+        pkt={
+            "id":str(uuid.uuid4()),
+            "type":"stake_announcement",
+            "public_key":self.wallet.public_key,
+            "staked_amt":amt
+        }
+
+        self.seen_message_ids.add(pkt["id"])
+        async with self.curr_stakers_lock:
+            self.current_stakers[self.wallet.public_key]=amt
+        self.staked_amt=amt
+        self.broadcast_message(pkt)
+
+    async def create_blocks(self):
+        if(not self.miner):
+            return
+        
         while True:
-            await asyncio.sleep(30)
-            async with self.mem_pool_condition: # Works the same as lock
-                # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
-                # We check the about condition in lambda every time we get notified after a new transaction has been added
-                if(len(self.mem_pool)>0):
-                    transaction_list=[]
-                    for transaction in list(self.mem_pool):
-                        if Chain.instance.transaction_exists_in_chain(transaction):
-                            self.mem_pool.discard(transaction)
-                            continue
-                        else:
-                            transaction_list.append(transaction)
+            async with self.create_block_condition:
+                self.create_block_condition.wait()
+                await asyncio.sleep(12)
+                async with self.staked_amt:# So that no new stake comes in
+                    vrf_output, vrf_proof=VRF_
 
-                    if(len(transaction_list)>0):
-                        newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                        await asyncio.to_thread(Chain.instance.mine, newBlock)
-                        newBlock.miner=self.wallet.public_key
-                        
-                        if Chain.instance.isValidBlock(newBlock):
-                            Chain.instance.chain.append(newBlock)
-                            print("\nBlock Appended \n")
-                            pkt={
-                                "type":"new_block",
-                                "id":str(uuid.uuid4()),
-                                "block":newBlock.to_dict(),
-                                "miner":self.wallet.public_key
-                            }
-                            self.seen_message_ids.add(pkt["id"])
-                            await self.broadcast_message(pkt)
-                        else:
-                            print("\n Invalid Block \n")
-
-                        for transaction in list(self.mem_pool):
-                            if newBlock.transaction_exists_in_block(transaction):
-                                self.mem_pool.discard(transaction)
-                            
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace
@@ -632,16 +630,16 @@ class Peer:
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
 
-        if self.miner:
-            self.mine_task=asyncio.create_task(self.mine_blocks())
+        if self.staker:
+            self.create_task=asyncio.create_task(self.create_blocks())
 
         await inp_task
 
         disc_task.cancel()
         consensus_task.cancel()
 
-        if self.miner:
-            self.mine_task.cancel()
+        if self.staker:
+            self.create_task.cancel()
             
 def strtobool(v):
     if isinstance(v, bool):
@@ -655,13 +653,12 @@ def strtobool(v):
 
     raise argparse.ArgumentTypeError("Boolean Value Expected")    
 
-
 def main():
     parser=argparse.ArgumentParser(description="Handshaker")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--name", default=None)
-    parser.add_argument("--miner",type=strtobool, default=True)
+    parser.add_argument("--staker",type=strtobool, default=True)
     parser.add_argument("--connect", default=None)
 
     args=parser.parse_args()
@@ -674,7 +671,7 @@ def main():
         except ValueError:
             print("Invalid Bootstrap Format. Use host:port")
             return
-    peer=Peer(args.host, args.port, args.name, args.miner)
+    peer=Peer(args.host, args.port, args.name, args.staker)
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

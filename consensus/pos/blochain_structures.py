@@ -6,7 +6,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
 from pathlib import Path
-import numpy as np
+
+from ecdsa import SigningKey, SECP256k1
+import binascii
 
 
 
@@ -48,7 +50,7 @@ def txs_to_json_digestable_form(transactions: List[Transaction]):
     return l
 
 class Block:
-    def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, nonce=None, id=None):
+    def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, id=None):
         self.prevHash=prevHash
         self.transactions=transactions
 
@@ -56,7 +58,7 @@ class Block:
 
         self.id=id or str(uuid.uuid4())
         self.timestamp=datetime.now()
-        self.miner: str=None
+        self.creator: str=None
 
     def to_dict(self):
         return {
@@ -64,7 +66,6 @@ class Block:
             "prevHash":self.prevHash,
             "transactions":txs_to_json_digestable_form(self.transactions),
             "ts":self.ts,
-            "nonce":self.nonce
         }
 
     def __str__(self):
@@ -100,8 +101,6 @@ class Chain:
             if publicKey and not blockList:
                 self.chain=[Block(None, [Transaction(50,"Genesis",publicKey)])]
                 print("Initializing Chain...")
-                sol=self.mine(self.chain[0])
-                self.chain[0].solution=sol
                 
             elif blockList and not publicKey:
                 self.chain=blockList.copy()
@@ -123,34 +122,6 @@ class Chain:
         
         Chain.instance.chain=blockList.copy()
 
-    def addBlock(self, transactions: List[Transaction], senderPublicKey: str, signature: bytes):
-        # Load public key, converts from string in PEM format to Bytes
-        public_key=serialization.load_pem_public_key(senderPublicKey.encode())
-
-        is_valid=False
-        try:
-            public_key.verify(
-                signature,
-                str(txs_to_json_digestable_form(transactions)).encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
-                ),
-                hashes.SHA256()
-            )
-            is_valid=True
-        except Exception as e:
-            print(e)
-            pass
-
-        if is_valid:
-            newBlock=Block(self.lastBlock.hash,transactions)
-            solution=self.mine(newBlock.nonce)
-            newBlock.solution=solution
-            self.chain.append(newBlock)
-            return newBlock
-        else :
-            return None
 
     def transaction_exists_in_chain(self, transaction: Transaction):
         for block in reversed(self.chain):
@@ -170,10 +141,10 @@ class Chain:
                 return False
             
         #Verify Pow:
-        if not block.hash.startswith("00000"):
-            print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
+        # if not block.hash.startswith("00000"):
+        #     print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
 
-            return False
+        #     return False
 
         return True
 
@@ -222,53 +193,11 @@ class Chain:
 
 class Wallet:
     def __init__(self):
-        self.private_key = ec.generate_private_key(
-            ec.SECP256R1(),  # or SECP256K1, depending on your choice
-            default_backend()
-        )
+        self.private_key = SigningKey.generate(curve=SECP256k1)
+        
+        self.private_key_pem = self.private_key.to_pem().decode()
 
-        self.private_key_pem = self.private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        ).decode()
+        self.public_key = self.private_key.get_verifying_key()
 
-        self.public_key = self.private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        ).decode()
-
-        self.vrf_private_key, self.vrf_public_key=vrf.generate_key_pair()
+        self.public_key_pem = self.public_key.to_pem().decode()
     
-    def sendMoney(self, amount: float, payeePublicKey:str):
-        transaction=Transaction(amount, self.public_key, payeePublicKey)
-        transactions=[transaction]
-        transactions_data=str(txs_to_json_digestable_form(transactions)).encode()
-
-        signature=self.private_key.sign(
-            transactions_data,
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
-        )
-
-        Chain.instance.addBlock(transactions, self.public_key, signature)
-        return transaction
-
-# Chain()
-
-# rahan=Wallet()
-# jefin=Wallet()
-# elias=Wallet()
-
-# tx1=rahan.sendMoney(50, jefin.public_key)
-# tx2=jefin.sendMoney(30, elias.public_key)
-# tx3=elias.sendMoney(60, rahan.public_key)
-
-# print(tx1)
-# print("\n\n")
-# print(tranx)
-
-# print(tx1==tranx)

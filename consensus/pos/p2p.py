@@ -1,4 +1,4 @@
-import asyncio, websockets, traceback
+import asyncio, websockets, traceback, hashlib
 import argparse, json, uuid, base64
 from typing import Set, Dict, List, Tuple
 import threading
@@ -7,8 +7,10 @@ from blochain_structures import Transaction, Block, Wallet, Chain
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
+from ecdsa import VerifyingKey, BadSignatureError
 
 MAX_CONNECTIONS = 8
+MAX_OUTPUT=2**256
 
 def get_random_element(s):
     """
@@ -25,11 +27,10 @@ def normalize_endpoint(ep):
     return (socket.gethostbyname(host), int(port))
 
 class Peer:
-    def __init__(self, host, port, name, staker:bool):
+    def __init__(self, host, port, name, ):
         self.host = host
         self.port = port
         self.name = name
-        self.staker=staker
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -40,6 +41,7 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
+        self.known_peers : Dict[Tuple[str, int], Tuple[str, str]]={} # (host, port):(name, public key)
         """
             We store all the peers we know here, we compare this with outbound peers in dicover_peers
             to find to which nodes we have not yet made a connection
@@ -61,11 +63,13 @@ class Peer:
             I'll explain the handshake in README.md
         """
 
+        
+
         self.mem_pool: Set[Transaction]=set()
         self.mem_pool_lock=asyncio.Lock() 
         
         self.current_stakers: Dict[str, int]={} # Public key is stored as pem string
-        self.curr_stakers_lock=asyncio.Condition() 
+        self.curr_stakers_condition=asyncio.Condition() 
         
         self.name_to_public_key_dict: Dict[str, str]={}
         
@@ -92,7 +96,7 @@ class Peer:
                 "host":self.host,
                 "port":self.port,
                 "name":self.name,
-                "public_key":self.wallet.public_key
+                "public_key":self.wallet.public_key_pem
                 }
         }
 
@@ -106,7 +110,7 @@ class Peer:
         """
         peers=[{"host":h, "port":p, "name":n, "public_key":s}
                for (h, p), (n,s) in self.known_peers.items()]
-        peers.append({"host":self.host, "port":self.port, "name":self.name, "public_key":self.wallet.public_key})
+        peers.append({"host":self.host, "port":self.port, "name":self.name, "public_key":self.wallet.public_key_pem})
         pkt={
             "type":"known_peers",
             "id":str(uuid.uuid4()),
@@ -127,14 +131,13 @@ class Peer:
         new_block_id=block_dict["id"]
         new_block_prevHash=block_dict["prevHash"]
         new_block_ts=block_dict["ts"]
-        new_block_nonce=block_dict["nonce"]
 
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
             transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"])
             transactions.append(transaction)
         
-        newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_nonce, new_block_id)   
+        newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_id)   
         return newBlock
 
     async def handle_messages(self, websocket, msg):
@@ -169,7 +172,7 @@ class Peer:
             self.seen_message_ids.add(pkt["id"])
             await websocket.send(json.dumps(pkt))
 
-        if t=="pong":
+        elif t=="pong":
             # print("Received Pong")
             self.got_pong[websocket]=True
             if not self.have_sent_peer_info.get(websocket, True):
@@ -225,15 +228,10 @@ class Peer:
 
             is_valid=True
             try:
-                public_key=serialization.load_pem_public_key(tx['sender'].encode())
+                public_key=VerifyingKey.from_pem(msg['sender_pem'].encode())
                 public_key.verify(
                     sign_bytes,
-                    tx_str.encode(),
-                    padding.PSS(
-                        mgf=padding.MGF1(hashes.SHA256()),
-                        salt_length=padding.PSS.MAX_LENGTH
-                    ),
-                    hashes.SHA256()
+                    tx_str.encode()
                 )
             except:
                 is_valid=False
@@ -244,7 +242,7 @@ class Peer:
                 return
             
             print("\nValid Transaction")
-            print(f"\n{msg["type"]}: {msg["transaction"]}")
+            print(f"\n{msg['type']}: {msg['transaction']}")
             print("\n")
 
             async with self.mem_pool_lock:
@@ -256,30 +254,42 @@ class Peer:
             pid=msg.get("public_key")
             amt=msg.get("amt")
             if(pid and amt):
-                async with self.curr_stakers_lock:
-                    self.current_stakers[pid]=amt
-
+                async with self.curr_stakers_condition:
+                    self.current_stakers[pid]=int(amt)
 
         elif t=="new_block":
             new_block_dict=msg["block"]
             newBlock=self.block_dict_to_block(new_block_dict)
+            vk=VerifyingKey.from_pem(msg["creator"])
+            vrf_proof=base64.b64decode(msg["vrf_proof"])
+
+            try:
+                vk.verify(vrf_proof, Chain.instance.epoch_seed())
+
+                vrf_output=hashlib.sha256(vrf_proof)
+                staked_amt=self.current_stakers[msg["creator"]]
+                total_amt_staked=sum(self.current_stakers.values())
+
+                threshold=(staked_amt/total_amt_staked) * MAX_OUTPUT
+                if(vrf_output>=threshold):
+                    raise Exception("VRF_Output is not less than threshold")
+                
+            except (BadSignatureError, Exception) as e:
+                print("\nInvalid Block, Stake should be slashed\n")
+                return
+
             if Chain.instance.isValidBlock(newBlock):
                 newBlock.miner=msg["miner"]
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
-                if self.miner and self.mine_task and not self.mine_task.done():
-                    self.mine_task.cancel()
-                    print("New Block received Cancelled Mining...")
                 
                 async with self.mem_pool_lock:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
                             self.mem_pool.discard(transaction)
-                async with self.curr_stakers_lock:
+                async with self.curr_stakers_condition:
                     self.current_stakers.clear()
 
-                if self.miner:
-                    self.mine_task=asyncio.create_task(self.mine_blocks())
                 await self.broadcast_message(msg)
 
         elif t=="chain_request":
@@ -363,16 +373,11 @@ class Peer:
         """
             Function to create and broadcast transactions
         """
-        transaction=Transaction(amt, self.wallet.public_key, receiver_public_key)
+        transaction=Transaction(amt, self.wallet.public_key_pem, receiver_public_key)
         transaction_str=str(transaction)
         
         signature=self.wallet.private_key.sign(
             transaction_str.encode(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
         )
 
         signature_b64=base64.b64encode(signature).decode()
@@ -383,7 +388,7 @@ class Peer:
             "id":str(uuid.uuid4()),
             "transaction":transaction_str,
             "sign":signature_b64,
-            "sender_pem":self.wallet.public_key # Already available as a pem string as defined in constructor
+            "sender_pem":self.wallet.public_key_pem # Already available as a pem string as defined in constructor
         }
         
         self.seen_message_ids.add(pkt["id"])
@@ -434,12 +439,12 @@ class Peer:
                     print("Amount must be a number")
                     continue
                 
-                if amt<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                if amt<=Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool)):
                     await self.create_and_broadcast_tx(receiver_public_key, amt)
                 else:
                     print("Insufficient Account Balance")
             elif ch==2:
-                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)))
+                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool)))
             elif ch==3:
                 i=0
                 # We print all the blocks
@@ -485,7 +490,7 @@ class Peer:
                         "host":self.host,
                         "port":self.port,
                         "name":self.name,
-                        "public_key":self.wallet.public_key
+                        "public_key":self.wallet.public_key_pem
                     }
                 }
 
@@ -573,27 +578,69 @@ class Peer:
         pkt={
             "id":str(uuid.uuid4()),
             "type":"stake_announcement",
-            "public_key":self.wallet.public_key,
+            "public_key":self.wallet.public_key_pem,
             "staked_amt":amt
         }
 
         self.seen_message_ids.add(pkt["id"])
-        async with self.curr_stakers_lock:
-            self.current_stakers[self.wallet.public_key]=amt
+        async with self.curr_stakers_condition:
+            self.current_stakers[self.wallet.public_key_pem]=amt
         self.staked_amt=amt
         self.broadcast_message(pkt)
 
     async def create_blocks(self):
         if(not self.miner):
             return
-        
+    
         while True:
             async with self.create_block_condition:
                 self.create_block_condition.wait()
-                await asyncio.sleep(12)
-                async with self.staked_amt:# So that no new stake comes in
-                    vrf_output, vrf_proof=VRF_
+                await asyncio.sleep(30)
+                if(len(self.current_stakers)<=0):
+                    print("\nNo stakers\n")                    
+                    continue 
+                
+                transactions_in_mem_pool=List(self.mem_pool)
+                pending_transactions=[]
+                for transaction in transactions_in_mem_pool:
+                    if(not Chain.instance.transaction_exists_in_chain(transaction)):
+                        pending_transactions.append(transaction)
+                
+                if(len(pending_transactions)<=0):
+                    print("\nNo pending transactions\n")
+                    continue
+                
+                async with self.curr_stakers_condition:# So that no new stakes don't comes in
+                    message=Chain.instance.epoch_seed()
+                    vrf_proof=self.wallet.private_key.sign(message)
+                    vrf_output=hashlib.sha256(vrf_proof)
+                    total_stake=sum(self.current_stakers.values())
 
+                    threshold=(self.staked_amt/total_stake)*MAX_OUTPUT
+                    if(vrf_output>=threshold):
+                        print("\nYou've lost\n")
+                        continue
+                    
+                    #The following code is for the winner
+                    newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
+                    newBlock.creator=self.wallet.public_key_pem
+
+                    vrf_proof_b64=base64.b64encode(vrf_proof).decode()
+                    pkt={
+                        "type":"new_block",
+                        "id":str(uuid.uuid4()),
+                        "block":newBlock.to_dict(),
+                        "creator":self.wallet.public_key_pem,
+                        "vrf_proof":vrf_proof_b64,
+                    }
+                    self.seen_message_ids.add(pkt["id"])
+                    await self.broadcast_message(pkt)
+                self.create_block_condition.notify_all()
+
+                for transaction in list(self.mem_pool):
+                    if newBlock.transaction_exists_in_block(transaction):
+                        self.mem_pool.discard(transaction)
+                            
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace
@@ -620,7 +667,7 @@ class Peer:
             normalized_bootstrap_host, normalized_bootstrap_port = normalize_endpoint((bootstrap_host, bootstrap_port))
             asyncio.create_task(self.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port))
         else:
-            self.chain=Chain(publicKey=self.wallet.public_key)
+            self.chain=Chain(publicKey=self.wallet.public_key_pem)
 
         # Create flask app
         flask_app = create_flask_app(self)
@@ -671,7 +718,7 @@ def main():
         except ValueError:
             print("Invalid Bootstrap Format. Use host:port")
             return
-    peer=Peer(args.host, args.port, args.name, args.staker)
+    peer=Peer(args.host, args.port, args.name)
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

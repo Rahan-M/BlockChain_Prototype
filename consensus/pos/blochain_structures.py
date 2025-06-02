@@ -173,7 +173,7 @@ class Chain:
                     bal-=transaction.amount
                 elif transaction.receiver==publicKey:
                     bal+=transaction.amount
-            if Chain.instance.chain[i].miner==publicKey:
+            if Chain.instance.chain[i].creator==publicKey:
                 bal+=6 #Miner reward
         
         # Since these transactions are not part of the chain we don't add

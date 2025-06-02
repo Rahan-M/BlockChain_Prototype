@@ -1,16 +1,15 @@
 import asyncio, websockets, traceback, hashlib
 import argparse, json, uuid, base64
+import threading, socket
+from datetime import datetime, timedelta
 from typing import Set, Dict, List, Tuple
-import threading
-import socket
 from blochain_structures import Transaction, Block, Wallet, Chain
 from flask_app import create_flask_app, run_flask_app
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes, serialization
 from ecdsa import VerifyingKey, BadSignatureError
 
 MAX_CONNECTIONS = 8
 MAX_OUTPUT=2**256
+EPOCH_TIME=60
 
 def get_random_element(s):
     """
@@ -27,10 +26,11 @@ def normalize_endpoint(ep):
     return (socket.gethostbyname(host), int(port))
 
 class Peer:
-    def __init__(self, host, port, name, ):
+    def __init__(self, host, port, name, staker:bool):
         self.host = host
         self.port = port
         self.name = name
+        self.staker=staker
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -64,7 +64,7 @@ class Peer:
         """
 
         
-
+        self.last_epoch_end_ts=datetime.now()
         self.mem_pool: Set[Transaction]=set()
         self.mem_pool_lock=asyncio.Lock() 
         
@@ -79,9 +79,7 @@ class Peer:
 
         self.create_block_condition=asyncio.Condition()
         """
-            While a block of code starting with
-            async with self.mem_pool_lock is executed only if
-            there is no other such block currently being executed
+            Starts a timer for the creation of next block
         """
         self.mine_task=None
 
@@ -252,10 +250,12 @@ class Peer:
 
         elif t=="stake_announcement":
             pid=msg.get("public_key")
-            amt=msg.get("amt")
+            amt=msg.get("staked_amt")
             if(pid and amt):
+                print("Hit here")
                 async with self.curr_stakers_condition:
                     self.current_stakers[pid]=int(amt)
+                    print(f"New stake : {pid}:{amt}")
 
         elif t=="new_block":
             new_block_dict=msg["block"]
@@ -279,10 +279,11 @@ class Peer:
                 return
 
             if Chain.instance.isValidBlock(newBlock):
-                newBlock.miner=msg["miner"]
+                newBlock.creator=msg["creator"]
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
-                
+                self.last_epoch_end_ts=datetime.now()
+
                 async with self.mem_pool_lock:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
@@ -397,7 +398,6 @@ class Peer:
         
         async with self.mem_pool_lock:
                 self.mem_pool.add(transaction)
-                # self.mem_pool_lock.notify_all()
 
         print("Transaction Created", transaction)
         print("\n")
@@ -410,7 +410,10 @@ class Peer:
         """
         while True:
             print("Block Chain Menu\n***************")
-            print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Quit")
+            if(self.staker):
+                print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Stake\n0) Quit")
+            else:
+                print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n0) Quit")
 
             ch= await asyncio._get_running_loop().run_in_executor(
                 None, input, "Enter Your Choice: "
@@ -457,6 +460,25 @@ class Peer:
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
             elif ch==5:
+                currTime=datetime.now()
+                if(currTime-self.last_epoch_end_ts>timedelta(seconds=EPOCH_TIME*5/6)):
+                    print("\nStake registration period closed, try again in the next epoch\n")
+                    continue
+
+                amt= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter Amount to stake: "
+                )
+                
+                try:
+                    amt=int(amt)
+                    await self.send_stake_announcements(amt)
+                    print("Sent stake")
+                    self.staked_amt=amt
+                    await self.create_blocks()
+                except:
+                    print("\nPlease enter a valid number!!!\n")
+
+            elif ch==0:
                 print("Quitting...")
                 break
 
@@ -472,6 +494,7 @@ class Peer:
             return
 
         uri=f"ws://{host}:{port}"
+        websocket=None
         
         try:
             websocket=await websockets.connect(uri)
@@ -515,8 +538,9 @@ class Peer:
             self.outbound_peers.discard(endpoint)
             self.got_pong.pop(websocket, None)
             self.have_sent_peer_info.pop(websocket, None)
-            await websocket.close()
-            await websocket.wait_closed()
+            if(websocket):
+                await websocket.close()
+                await websocket.wait_closed()
 
     async def discover_peers(self):
         """
@@ -586,60 +610,65 @@ class Peer:
         async with self.curr_stakers_condition:
             self.current_stakers[self.wallet.public_key_pem]=amt
         self.staked_amt=amt
-        self.broadcast_message(pkt)
+        print("Stake Created")
+        await self.broadcast_message(pkt)
 
     async def create_blocks(self):
-        if(not self.miner):
+        if(not self.staker):
             return
     
-        while True:
-            async with self.create_block_condition:
-                self.create_block_condition.wait()
-                await asyncio.sleep(30)
-                if(len(self.current_stakers)<=0):
-                    print("\nNo stakers\n")                    
-                    continue 
-                
-                transactions_in_mem_pool=List(self.mem_pool)
-                pending_transactions=[]
-                for transaction in transactions_in_mem_pool:
-                    if(not Chain.instance.transaction_exists_in_chain(transaction)):
-                        pending_transactions.append(transaction)
-                
-                if(len(pending_transactions)<=0):
-                    print("\nNo pending transactions\n")
-                    continue
-                
-                async with self.curr_stakers_condition:# So that no new stakes don't comes in
-                    message=Chain.instance.epoch_seed()
-                    vrf_proof=self.wallet.private_key.sign(message)
-                    vrf_output=hashlib.sha256(vrf_proof)
-                    total_stake=sum(self.current_stakers.values())
+        await asyncio.sleep(EPOCH_TIME/6)
+        if(len(self.current_stakers)<=0):
+            print("\nNo stakers\n")
+            self.last_epoch_end_ts=datetime.now()
+            return
+        
+        transactions_in_mem_pool=List(self.mem_pool)
+        pending_transactions=[]
+        for transaction in transactions_in_mem_pool:
+            if(not Chain.instance.transaction_exists_in_chain(transaction)):
+                pending_transactions.append(transaction)
+        
+        if(len(pending_transactions)<=0):
+            print("\nNo pending transactions\n")
+            self.last_epoch_end_ts=datetime.now()
+            return
+        
+        async with self.curr_stakers_condition:# So that no new stakes don't comes in
+            message=Chain.instance.epoch_seed()
+            vrf_proof=self.wallet.private_key.sign(message)
+            vrf_output=hashlib.sha256(vrf_proof)
+            total_stake=sum(self.current_stakers.values())
 
-                    threshold=(self.staked_amt/total_stake)*MAX_OUTPUT
-                    if(vrf_output>=threshold):
-                        print("\nYou've lost\n")
-                        continue
-                    
-                    #The following code is for the winner
-                    newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
-                    newBlock.creator=self.wallet.public_key_pem
+            threshold=(self.staked_amt/total_stake)*MAX_OUTPUT
+            if(vrf_output>=threshold):
+                print("\nYou've lost\n")
+                return
+            
+            #The following code is for the winner
+            newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
+            Chain.instance.chain.append(newBlock)
+            print("Block Appended")
+            newBlock.creator=self.wallet.public_key_pem
 
-                    vrf_proof_b64=base64.b64encode(vrf_proof).decode()
-                    pkt={
-                        "type":"new_block",
-                        "id":str(uuid.uuid4()),
-                        "block":newBlock.to_dict(),
-                        "creator":self.wallet.public_key_pem,
-                        "vrf_proof":vrf_proof_b64,
-                    }
-                    self.seen_message_ids.add(pkt["id"])
-                    await self.broadcast_message(pkt)
-                self.create_block_condition.notify_all()
+            vrf_proof_b64=base64.b64encode(vrf_proof).decode()
+            pkt={
+                "type":"new_block",
+                "id":str(uuid.uuid4()),
+                "block":newBlock.to_dict(),
+                "creator":self.wallet.public_key_pem,
+                "vrf_proof":vrf_proof_b64,
+            }
+            self.seen_message_ids.add(pkt["id"])
+            await self.broadcast_message(pkt)
+        self.last_epoch_end_ts=datetime.now()
 
-                for transaction in list(self.mem_pool):
-                    if newBlock.transaction_exists_in_block(transaction):
-                        self.mem_pool.discard(transaction)
+        for transaction in list(self.mem_pool):
+            if newBlock.transaction_exists_in_block(transaction):
+                self.mem_pool.discard(transaction)
+        
+        asyncio.create_task(self.callOneSelf())
+
                             
     async def find_longest_chain(self):
         """
@@ -668,6 +697,7 @@ class Peer:
             asyncio.create_task(self.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port))
         else:
             self.chain=Chain(publicKey=self.wallet.public_key_pem)
+            self.last_epoch_end_ts=datetime.now()
 
         # Create flask app
         flask_app = create_flask_app(self)
@@ -677,16 +707,12 @@ class Peer:
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
 
-        if self.staker:
-            self.create_task=asyncio.create_task(self.create_blocks())
 
         await inp_task
 
         disc_task.cancel()
         consensus_task.cancel()
 
-        if self.staker:
-            self.create_task.cancel()
             
 def strtobool(v):
     if isinstance(v, bool):
@@ -718,7 +744,7 @@ def main():
         except ValueError:
             print("Invalid Bootstrap Format. Use host:port")
             return
-    peer=Peer(args.host, args.port, args.name)
+    peer=Peer(args.host, args.port, args.name, args.staker)
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

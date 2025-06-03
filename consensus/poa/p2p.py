@@ -8,6 +8,8 @@ from blochain_structures import Transaction, Block, Wallet, Chain
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
+import binascii
 
 MAX_CONNECTIONS = 8
 
@@ -136,8 +138,15 @@ class Peer:
             "type":"miners_list_update",
             "id":str(uuid.uuid4()),
             "miners_list": miners_list,
-            "activation_block": activation_block
+            "activation_block": activation_block,
         }
+        message = json.dumps(pkt, sort_keys=True).encode()
+        signature = self.wallet.private_key.sign(
+            message,
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+        pkt["signature"] = signature.hex()
         self.seen_message_ids.add(pkt["id"])
         await self.broadcast_message(pkt)
 
@@ -210,6 +219,30 @@ class Peer:
         self.seen_message_ids.add(id)
 
         if t=="miners_list_update":
+            try:
+                public_key = serialization.load_pem_public_key(
+                    get_public_key_by_node_id(self.known_peers, self.admin_id).encode(),
+                    backend=default_backend()
+                )
+
+                message = json.dumps({
+                    "type":"miners_list_update",
+                    "id":msg["id"],
+                    "miners_list":msg["miners_list"],
+                    "activation_block":msg["activation_block"],
+                }, sort_keys=True).encode()
+
+                signature = binascii.unhexlify(msg["signature"])
+
+                public_key.verify(
+                    signature,
+                    message,
+                    padding.PKCS1v15(),
+                    hashes.SHA256()
+                )
+            except Exception as e:
+                print(f"Invalid miners list update signature: {e}")
+                return
             self.miners.append([msg["miners_list"], msg["activation_block"]])
             await self.broadcast_message(msg)
 

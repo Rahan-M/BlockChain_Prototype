@@ -41,6 +41,8 @@ class Peer:
 
         self.miner= False
         self.miner_task = None
+        self.round = 0
+        self.round_task = None
 
         self.admin_id = None
 
@@ -194,6 +196,20 @@ class Peer:
                     await self.miner_task
                 except asyncio.CancelledError:
                     pass
+
+    async def round_calculator(self):
+        self.round = 0
+        try:
+            while True:
+                asyncio.sleep(10)
+                if len(self.mem_pool) > 0:
+                    asyncio.sleep(80)
+                    print("Shifting miner...")
+                    self.round = self.round + 1
+                    print("Miner shifted")
+        except asyncio.CancelledError:
+            print("Round calculator task stopped cleanly")
+            raise
 
     async def handle_messages(self, websocket, msg):
         """
@@ -370,13 +386,15 @@ class Peer:
                         break
             else:
                 miners_list = Chain.instance.chain[-1].miners_list
-            reqd_miner_node_id = miners_list[len(Chain.instance.chain) % len(miners_list)]
+            reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
             reqd_miner_pulic_key = get_public_key_by_node_id(self.known_peers, reqd_miner_node_id)
             if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 
                 await self.broadcast_message(msg)
+                self.round_task.cancel()
+                self.round_task = asyncio.create_task(self.round_calculator())
 
                 async with self.mem_pool_condition:
                     for transaction in list(self.mem_pool):
@@ -760,7 +778,7 @@ class Peer:
                             break
                 else:
                     miners_list = Chain.instance.chain[-1].miners_list
-                reqd_miner_node_id = miners_list[len(Chain.instance.chain) % len(miners_list)]
+                reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
                 if self.node_id == reqd_miner_node_id:
                     async with self.mem_pool_condition: # Works the same as lock
                         # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
@@ -794,6 +812,8 @@ class Peer:
                                     }
                                     self.seen_message_ids.add(pkt["id"])
                                     await self.broadcast_message(pkt)
+                                    self.round_task.cancel()
+                                    self.round_task = asyncio.create_task(self.round_calculator())
                                     if self.miners:
                                         for miner_item in self.miners:
                                             if miner_item[1] < len(Chain.instance.chain):
@@ -865,11 +885,13 @@ class Peer:
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
+        self.round_task = asyncio.create_task(self.round_calculator())
 
         await inp_task
 
         disc_task.cancel()
         consensus_task.cancel()
+        self.round_task.cancel()
         await self.update_role(False)
 
             

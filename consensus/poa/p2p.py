@@ -449,6 +449,7 @@ class Peer:
             
             else:
                 print("\nCurrent Chain Longer than received chain")
+                return
             async with self.mem_pool_condition:
                 for transaction in list(self.mem_pool):
                     if Chain.instance.transaction_exists_in_chain(transaction):
@@ -836,12 +837,12 @@ class Peer:
                                         await self.update_role(True)
                                     else:
                                         await self.update_role(False)
+
+                                    for transaction in list(self.mem_pool):
+                                        if newBlock.transaction_exists_in_block(transaction):
+                                            self.mem_pool.discard(transaction)      
                                 else:
                                     print("\n Invalid Block \n")
-
-                                for transaction in list(self.mem_pool):
-                                    if newBlock.transaction_exists_in_block(transaction):
-                                        self.mem_pool.discard(transaction)      
         except asyncio.CancelledError:
             print("Miner task stopped cleanly")
             raise

@@ -201,9 +201,9 @@ class Peer:
         self.round = 0
         try:
             while True:
-                asyncio.sleep(10)
+                await asyncio.sleep(10)
                 if len(self.mem_pool) > 0:
-                    asyncio.sleep(80)
+                    await asyncio.sleep(80)
                     print("Shifting miner...")
                     self.round = self.round + 1
                     print("Miner shifted")
@@ -781,7 +781,7 @@ class Peer:
                 reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
                 if self.node_id == reqd_miner_node_id:
                     if self.round != 0:
-                        asyncio.sleep(15)
+                        await asyncio.sleep(15)
                     async with self.mem_pool_condition: # Works the same as lock
                         # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
                         # We check the about condition in lambda every time we get notified after a new transaction has been added

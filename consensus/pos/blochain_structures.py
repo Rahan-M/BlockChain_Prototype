@@ -149,7 +149,7 @@ class Chain:
         return True
 
     def valid_chain_length(self):
-        valid_chain_len=len(Chain.instance.chain)
+        valid_chain_len=len(Chain.instance.chain) # because we use zero indexing4
 
         if valid_chain_len>=50:
             valid_chain_len-=10
@@ -186,9 +186,9 @@ class Chain:
                     bal-=transaction.amount
         return bal
 
-    def epoch_seed(self, publicKey, pending_transactions:List[Transaction]=None):
+    def epoch_seed(self):
         bal=0
-        last_finalized_block_hash=self.chain[self.valid_chain_length()].hash
+        last_finalized_block_hash=self.chain[self.valid_chain_length()-1].hash
         return last_finalized_block_hash
 
 class Wallet:

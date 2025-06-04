@@ -182,11 +182,11 @@ class Peer:
             # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
-            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
-                self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
-                self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
-                print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
+                self.known_peers[normalized_endpoint]=(data['name'], data['public_key'])
+                self.name_to_public_key_dict[data['name'].lower()]=data['public_key']
+                print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
                 if t == 'peer_info':
                     await self.send_known_peers(websocket)
                     # print("Sent Known Peers")
@@ -199,11 +199,11 @@ class Peer:
             peers=msg["peers"]
             for peer in peers:
                 normalized_self=normalize_endpoint((self.host, self.port))
-                normalized_endpoint = normalize_endpoint((peer["host"], peer["port"]))
+                normalized_endpoint = normalize_endpoint((peer['host'], peer['port']))
                 if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self:
-                    print(f"Discovered peer {peer["name"]} at {peer["host"]}:{peer["port"]}")
-                    self.known_peers[normalized_endpoint]=(peer["name"], peer["public_key"])
-                    self.name_to_public_key_dict[peer["name"].lower()]=peer["public_key"]
+                    print(f"Discovered peer {peer['name']} at {peer['host']}:{peer['port']}")
+                    self.known_peers[normalized_endpoint]=(peer['name'], peer['public_key'])
+                    self.name_to_public_key_dict[peer['name'].lower()]=peer['public_key']
             pkt={
                 "type":"chain_request",
                 "id":str(uuid.uuid4())
@@ -264,14 +264,15 @@ class Peer:
             vrf_proof=base64.b64decode(msg["vrf_proof"])
 
             try:
-                vk.verify(vrf_proof, Chain.instance.epoch_seed())
+                vk.verify(vrf_proof, Chain.instance.epoch_seed().encode())
 
-                vrf_output=hashlib.sha256(vrf_proof)
+                vrf_output=hashlib.sha256(vrf_proof).hexdigest()
+                vrf_output_int=int(vrf_output, 16)
                 staked_amt=self.current_stakers[msg["creator"]]
                 total_amt_staked=sum(self.current_stakers.values())
 
                 threshold=(staked_amt/total_amt_staked) * MAX_OUTPUT
-                if(vrf_output>=threshold):
+                if(vrf_output_int>=threshold):
                     raise Exception("VRF_Output is not less than threshold")
                 
             except (BadSignatureError, Exception) as e:
@@ -460,8 +461,12 @@ class Peer:
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
             elif ch==5:
+                if(not self.staker):
+                    continue
+
                 currTime=datetime.now()
-                if(currTime-self.last_epoch_end_ts>timedelta(seconds=EPOCH_TIME*5/6)):
+                time_since=currTime-self.last_epoch_end_ts
+                if(time_since>timedelta(seconds=EPOCH_TIME*5/6)):
                     print("\nStake registration period closed, try again in the next epoch\n")
                     continue
 
@@ -474,9 +479,15 @@ class Peer:
                     await self.send_stake_announcements(amt)
                     print("Sent stake")
                     self.staked_amt=amt
-                    await self.create_blocks()
-                except:
-                    print("\nPlease enter a valid number!!!\n")
+                    time_left=EPOCH_TIME-time_since.seconds
+                    print(f"Creating block in {time_left} seconds")
+                    await self.create_blocks(time_left)
+                except ValueError as e:
+                    print("\nPlease enter a valid number!!!\n", e)
+                except Exception as e:
+                    print("\nUnexpected error occured!!!\n", e)
+
+
 
             elif ch==0:
                 print("Quitting...")
@@ -613,17 +624,26 @@ class Peer:
         print("Stake Created")
         await self.broadcast_message(pkt)
 
-    async def create_blocks(self):
+    async def restart_epoch(self):
+        while True:
+            await asyncio.sleep(EPOCH_TIME)
+            currTime=datetime.now()
+            if(currTime-self.last_epoch_end_ts>timedelta(seconds=EPOCH_TIME*1.5)):
+                self.last_epoch_end_ts=datetime.now()
+
+    async def create_blocks(self, time):
         if(not self.staker):
+            print("Hit here")
+            print(self.staker)
             return
     
-        await asyncio.sleep(EPOCH_TIME/6)
+        await asyncio.sleep(time)
         if(len(self.current_stakers)<=0):
             print("\nNo stakers\n")
             self.last_epoch_end_ts=datetime.now()
             return
         
-        transactions_in_mem_pool=List(self.mem_pool)
+        transactions_in_mem_pool=list(self.mem_pool)
         pending_transactions=[]
         for transaction in transactions_in_mem_pool:
             if(not Chain.instance.transaction_exists_in_chain(transaction)):
@@ -634,18 +654,22 @@ class Peer:
             self.last_epoch_end_ts=datetime.now()
             return
         
+        print("\nRunning vrf\n")
         async with self.curr_stakers_condition:# So that no new stakes don't comes in
             message=Chain.instance.epoch_seed()
-            vrf_proof=self.wallet.private_key.sign(message)
-            vrf_output=hashlib.sha256(vrf_proof)
+            vrf_proof=self.wallet.private_key.sign(message.encode())
+            vrf_output=hashlib.sha256(vrf_proof).hexdigest()
+            vrf_output_int=int(vrf_output, 16)
+            print("\nHit Here 1\n")
             total_stake=sum(self.current_stakers.values())
 
             threshold=(self.staked_amt/total_stake)*MAX_OUTPUT
-            if(vrf_output>=threshold):
+            if(vrf_output_int>=threshold):
                 print("\nYou've lost\n")
                 return
             
             #The following code is for the winner
+            print("\nYou won\n")
             newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
             Chain.instance.chain.append(newBlock)
             print("Block Appended")
@@ -663,13 +687,12 @@ class Peer:
             await self.broadcast_message(pkt)
         self.last_epoch_end_ts=datetime.now()
 
-        for transaction in list(self.mem_pool):
-            if newBlock.transaction_exists_in_block(transaction):
-                self.mem_pool.discard(transaction)
+        async with self.mem_pool_lock:
+            for transaction in list(self.mem_pool):
+                if newBlock.transaction_exists_in_block(transaction):
+                    self.mem_pool.discard(transaction)
         
-        asyncio.create_task(self.callOneSelf())
-
-                            
+                          
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace
@@ -703,6 +726,8 @@ class Peer:
         flask_app = create_flask_app(self)
         flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
         flask_thread.start()
+
+        reset_task=asyncio.create_task(self.restart_epoch())
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
@@ -710,6 +735,7 @@ class Peer:
 
         await inp_task
 
+        reset_task.cancel()
         disc_task.cancel()
         consensus_task.cancel()
 

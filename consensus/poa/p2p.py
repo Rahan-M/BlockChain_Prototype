@@ -194,7 +194,7 @@ class Peer:
             miners_list = Chain.instance.chain[-1].miners_list
         return miners_list
 
-    async def update_role(self, is_miner_now):
+    async def update_role(self, is_miner_now): 
         if is_miner_now and not self.miner:
             # Become miner
             self.miner = True
@@ -214,9 +214,11 @@ class Peer:
         self.round = 0
         try:
             while True:
-                await asyncio.sleep(10)
+                for _ in range(2):
+                    await asyncio.sleep(5)
                 if len(self.mem_pool) > 0:
-                    await asyncio.sleep(80)
+                    for _ in range(16):
+                        await asyncio.sleep(5)
                     print("Shifting miner...")
                     self.round = self.round + 1
                     print("Miner shifted")
@@ -398,6 +400,7 @@ class Peer:
                 
                 await self.broadcast_message(msg)
                 self.round_task.cancel()
+                await self.round_task
                 self.round_task = asyncio.create_task(self.round_calculator())
 
                 async with self.mem_pool_condition:
@@ -717,14 +720,16 @@ class Peer:
                     if new_peer:
                         asyncio.create_task(self.connect_to_peer(*new_peer))
                         await asyncio.sleep(1)
-            await asyncio.sleep(30)
+            for _ in range(6):
+                    await asyncio.sleep(5)
 
     async def gossip_peer_sampler(self):
         """
             Every 60s, drops one existing peer and connects to one new peer.
         """
         while True:
-            await asyncio.sleep(60)
+            for _ in range(12):
+                    await asyncio.sleep(5)
             if len(self.known_peers) <= len(self.outbound_peers) or len(self.outbound_peers) < MAX_CONNECTIONS:
                 continue  # Nothing to swap
 
@@ -764,12 +769,14 @@ class Peer:
     async def mine_blocks(self):
         try:
             while True:
-                await asyncio.sleep(30)
-                miners_list = self.get_current_miners_list
+                for _ in range(6):
+                    await asyncio.sleep(5)
+                miners_list = self.get_current_miners_list()
                 reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
                 if self.node_id == reqd_miner_node_id:
                     if self.round != 0:
-                        await asyncio.sleep(15)
+                        for _ in range(3):
+                            await asyncio.sleep(5)
                     async with self.mem_pool_condition: # Works the same as lock
                         # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
                         # We check the about condition in lambda every time we get notified after a new transaction has been added
@@ -803,6 +810,7 @@ class Peer:
                                     self.seen_message_ids.add(pkt["id"])
                                     await self.broadcast_message(pkt)
                                     self.round_task.cancel()
+                                    await self.round_task
                                     self.round_task = asyncio.create_task(self.round_calculator())
                                     if self.miners:
                                         for miner_item in self.miners:
@@ -838,7 +846,8 @@ class Peer:
             self.seen_message_ids.add(pkt["id"])
             await self.broadcast_message(pkt)
             print("\nSent out chain requests...")
-            await asyncio.sleep(60)
+            for _ in range(12):
+                    await asyncio.sleep(5)
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         # We start the server

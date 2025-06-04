@@ -27,12 +27,6 @@ def normalize_endpoint(ep):
     host, port = ep
     return (socket.gethostbyname(host), int(port))
 
-def get_public_key_by_node_id(data, target_node_id):
-    for (host, port), (name, public_key, node_id) in data.items():
-        if node_id == target_node_id:
-            return public_key
-    return None
-
 class Peer:
     def __init__(self, host, port, name):
         self.host = host
@@ -181,6 +175,12 @@ class Peer:
         newBlock.signature = new_block_signature
         return newBlock
 
+    def get_public_key_by_node_id(self, target_node_id):
+        for (host, port), (name, public_key, node_id) in self.known_peers.items():
+            if node_id == target_node_id:
+                return public_key
+        return None
+
     async def update_role(self, is_miner_now):
         if is_miner_now and not self.miner:
             # Become miner
@@ -237,7 +237,7 @@ class Peer:
         if t=="miners_list_update":
             try:
                 public_key = serialization.load_pem_public_key(
-                    get_public_key_by_node_id(self.known_peers, self.admin_id).encode(),
+                    self.get_public_key_by_node_id(self.admin_id).encode(),
                     backend=default_backend()
                 )
 
@@ -387,7 +387,7 @@ class Peer:
             else:
                 miners_list = Chain.instance.chain[-1].miners_list
             reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
-            reqd_miner_pulic_key = get_public_key_by_node_id(self.known_peers, reqd_miner_node_id)
+            reqd_miner_pulic_key = self.get_public_key_by_node_id(reqd_miner_node_id)
             if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")

@@ -181,6 +181,19 @@ class Peer:
                 return public_key
         return None
 
+    def get_current_miners_list(self):
+        miners_list = None
+        if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
+            miners_list = self.miners[0][0]
+            for i in range(1, len(self.miners)):
+                if self.miners[i][1] == len(Chain.instance.chain):
+                    miners_list = self.miners[i][0]
+                else:
+                    break
+        else:
+            miners_list = Chain.instance.chain[-1].miners_list
+        return miners_list
+
     async def update_role(self, is_miner_now):
         if is_miner_now and not self.miner:
             # Become miner
@@ -376,16 +389,7 @@ class Peer:
         elif t=="new_block":
             new_block_dict=msg["block"]
             newBlock=self.block_dict_to_block(new_block_dict)
-            miners_list = list()
-            if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
-                miners_list = self.miners[0][0]
-                for i in range(1, len(self.miners)):
-                    if self.miners[i][1] == len(Chain.instance.chain):
-                        miners_list = self.miners[i][0]
-                    else:
-                        break
-            else:
-                miners_list = Chain.instance.chain[-1].miners_list
+            miners_list = self.get_current_miners_list()
             reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
             reqd_miner_pulic_key = self.get_public_key_by_node_id(reqd_miner_node_id)
             if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
@@ -408,15 +412,7 @@ class Peer:
                         else:
                             break
 
-                if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
-                    new_miners_list = self.miners[0][0]
-                    for i in range(1, len(self.miners)):
-                        if self.miners[i][1] == len(Chain.instance.chain):
-                            new_miners_list = self.miners[i][0]
-                        else:
-                            break
-                else:
-                    new_miners_list = Chain.instance.chain[-1].miners_list
+                new_miners_list = self.get_current_miners_list()
                 if self.node_id in new_miners_list:
                     await self.update_role(True)
                 else:
@@ -769,16 +765,7 @@ class Peer:
         try:
             while True:
                 await asyncio.sleep(30)
-                miners_list = list()
-                if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
-                    miners_list = self.miners[0][0]
-                    for i in range(1, len(self.miners)):
-                        if self.miners[i][1] == len(Chain.instance.chain):
-                            miners_list = self.miners[i][0]
-                        else:
-                            break
-                else:
-                    miners_list = Chain.instance.chain[-1].miners_list
+                miners_list = self.get_current_miners_list
                 reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
                 if self.node_id == reqd_miner_node_id:
                     if self.round != 0:
@@ -823,16 +810,7 @@ class Peer:
                                                 self.miners.remove(miner_item)
                                             else:
                                                 break
-                                    new_miners_list = list()
-                                    if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
-                                        new_miners_list = self.miners[0][0]
-                                        for i in range(1, len(self.miners)):
-                                            if self.miners[i][1] == len(Chain.instance.chain):
-                                                new_miners_list = self.miners[i][0]
-                                            else:
-                                                break
-                                    else:
-                                        new_miners_list = Chain.instance.chain[-1].miners_list
+                                    new_miners_list = self.get_current_miners_list()
                                     if self.node_id in new_miners_list:
                                         await self.update_role(True)
                                     else:

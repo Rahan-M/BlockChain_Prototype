@@ -875,12 +875,14 @@ class Peer:
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
+        sampler_task = asyncio.create_task(self.gossip_peer_sampler())
         self.round_task = asyncio.create_task(self.round_calculator())
 
         await inp_task
 
-        disc_task.cancel()
         consensus_task.cancel()
+        disc_task.cancel()
+        sampler_task.cancel()
         self.round_task.cancel()
         await self.update_role(False)
 

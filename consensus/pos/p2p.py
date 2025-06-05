@@ -453,8 +453,10 @@ class Peer:
                     await self.create_and_broadcast_tx(receiver_public_key, amt)
                 else:
                     print("Insufficient Account Balance")
+            
             elif ch==2:
                 print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool), self.staked_amt))
+
             elif ch==3:
                 i=0
                 # We print all the blocks
@@ -463,7 +465,8 @@ class Peer:
                     continue
                 for block in Chain.instance.chain:
                     print(f"block{i}: {block}\n")
-                    i+=1            
+                    i+=1
+
             elif ch==4:
                 i=0
                 for transaction in list(self.mem_pool):
@@ -509,7 +512,7 @@ class Peer:
                     self.staked_amt=amt
                     time_left=EPOCH_TIME-time_since.seconds
                     print(f"Creating block in {time_left} seconds")
-                    await self.create_blocks(time_left)
+                    asyncio.create_task(self.create_blocks(time_left))
 
                 except ValueError as e:
                     print("\nPlease enter a valid number!!!\n", e)

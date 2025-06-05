@@ -220,7 +220,7 @@ class Peer:
             
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode turns bytes into a string
-            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool))):
+            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool), self.staked_amt)):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
@@ -289,12 +289,17 @@ class Peer:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
                             self.mem_pool.discard(transaction)
+                
+                self.staked_amt=0
                 async with self.curr_stakers_condition:
                     self.current_stakers.clear()
 
                 await self.broadcast_message(msg)
 
         elif t=="chain_request":
+            if(not Chain.instance.chain):
+                return
+            
             pkt={
                 "type":"chain",
                 "id":str(uuid.uuid4()),
@@ -412,9 +417,9 @@ class Peer:
         while True:
             print("Block Chain Menu\n***************")
             if(self.staker):
-                print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Stake\n0) Quit")
+                print("0) Quit\n1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Print Current Stakers\n6) Time since last epoch\n7) Stake\n")
             else:
-                print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n0) Quit")
+                print("0) Quit\n1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\5) Print Current Stakers\n6) Time since last epoch\n")
 
             ch= await asyncio._get_running_loop().run_in_executor(
                 None, input, "Enter Your Choice: "
@@ -423,6 +428,7 @@ class Peer:
                 ch=int(ch)
             except:
                 print("\nPlease enter a valid number!!!\n")
+
             if ch==1:
                 rec= await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Receiver's Name: "
@@ -448,10 +454,13 @@ class Peer:
                 else:
                     print("Insufficient Account Balance")
             elif ch==2:
-                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool)))
+                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool), self.staked_amt))
             elif ch==3:
                 i=0
                 # We print all the blocks
+                if(not Chain.instance.chain):
+                    print("\nChain hasn't been initialized yet\n")
+                    continue
                 for block in Chain.instance.chain:
                     print(f"block{i}: {block}\n")
                     i+=1            
@@ -460,14 +469,29 @@ class Peer:
                 for transaction in list(self.mem_pool):
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
+
             elif ch==5:
+                async with self.curr_stakers_condition:
+                    print("\n")
+                    for key in self.current_stakers:
+                        print(f"{key}:{self.current_stakers[key]}\n")
+                    print("\n")
+
+            elif ch==6:
+                print(f"\n{(datetime.now()-self.last_epoch_end_ts).seconds}\n")
+
+            elif ch==7:
                 if(not self.staker):
                     continue
 
                 currTime=datetime.now()
                 time_since=currTime-self.last_epoch_end_ts
+                if(self.staked_amt>0):
+                    print("Can't sent multiple stakes in one epoch")
+                    continue
+
                 if(time_since>timedelta(seconds=EPOCH_TIME*5/6)):
-                    print("\nStake registration period closed, try again in the next epoch\n")
+                    print(F"\nStake registration period closed, try again in the next epoch, time till next epoch : {EPOCH_TIME-time_since.seconds}\n")
                     continue
 
                 amt= await asyncio._get_running_loop().run_in_executor(
@@ -476,18 +500,21 @@ class Peer:
                 
                 try:
                     amt=int(amt)
+                    if(amt>Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool))):
+                        print("\nInsufficient bank balance\n")
+                        continue
+
                     await self.send_stake_announcements(amt)
                     print("Sent stake")
                     self.staked_amt=amt
                     time_left=EPOCH_TIME-time_since.seconds
                     print(f"Creating block in {time_left} seconds")
                     await self.create_blocks(time_left)
+
                 except ValueError as e:
                     print("\nPlease enter a valid number!!!\n", e)
                 except Exception as e:
                     print("\nUnexpected error occured!!!\n", e)
-
-
 
             elif ch==0:
                 print("Quitting...")
@@ -630,10 +657,11 @@ class Peer:
             currTime=datetime.now()
             if(currTime-self.last_epoch_end_ts>timedelta(seconds=EPOCH_TIME*1.5)):
                 self.last_epoch_end_ts=datetime.now()
+                self.staked_amt=0
+                self.current_stakers.clear()
 
     async def create_blocks(self, time):
         if(not self.staker):
-            print("Hit here")
             print(self.staker)
             return
     
@@ -641,6 +669,7 @@ class Peer:
         if(len(self.current_stakers)<=0):
             print("\nNo stakers\n")
             self.last_epoch_end_ts=datetime.now()
+            self.staked_amt=0
             return
         
         transactions_in_mem_pool=list(self.mem_pool)
@@ -652,6 +681,9 @@ class Peer:
         if(len(pending_transactions)<=0):
             print("\nNo pending transactions\n")
             self.last_epoch_end_ts=datetime.now()
+            self.staked_amt=0
+            async with self.curr_stakers_condition:
+                self.current_stakers.clear()
             return
         
         print("\nRunning vrf\n")
@@ -660,19 +692,23 @@ class Peer:
             vrf_proof=self.wallet.private_key.sign(message.encode())
             vrf_output=hashlib.sha256(vrf_proof).hexdigest()
             vrf_output_int=int(vrf_output, 16)
-            print("\nHit Here 1\n")
             total_stake=sum(self.current_stakers.values())
 
             threshold=(self.staked_amt/total_stake)*MAX_OUTPUT
             if(vrf_output_int>=threshold):
                 print("\nYou've lost\n")
+                self.staked_amt=0
                 return
             
             #The following code is for the winner
             print("\nYou won\n")
             newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
             Chain.instance.chain.append(newBlock)
+            self.last_epoch_end_ts=datetime.now()
             print("Block Appended")
+            self.staked_amt=0
+            self.current_stakers.clear()
+
             newBlock.creator=self.wallet.public_key_pem
 
             vrf_proof_b64=base64.b64encode(vrf_proof).decode()
@@ -691,8 +727,7 @@ class Peer:
             for transaction in list(self.mem_pool):
                 if newBlock.transaction_exists_in_block(transaction):
                     self.mem_pool.discard(transaction)
-        
-                          
+                                
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace
@@ -738,8 +773,7 @@ class Peer:
         reset_task.cancel()
         disc_task.cancel()
         consensus_task.cancel()
-
-            
+          
 def strtobool(v):
     if isinstance(v, bool):
         return v

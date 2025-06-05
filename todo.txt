@@ -2,3 +2,4 @@
 [x] Think again on synchronisation
 Okay so what we do is, we only allow stake announcements after 20s of prev block creation and we create the next block roughly 30s after it
 [] Hande User Input
+[] Make it such that after staking, we can still submit transactions till 

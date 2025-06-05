@@ -159,11 +159,9 @@ class Chain:
             valid_chain_len-=3
         elif valid_chain_len>=5:
             valid_chain_len-=2
-        elif valid_chain_len>=2:
-            valid_chain_len-=1
         return valid_chain_len    
 
-    def calc_balance(self, publicKey, pending_transactions:List[Transaction]=None):
+    def calc_balance(self, publicKey, pending_transactions:List[Transaction]=None, staked_amt=0):
         bal=0
         valid_chain_len=self.valid_chain_length()
 
@@ -184,7 +182,7 @@ class Chain:
             for transaction in pending_transactions:
                 if transaction.sender==publicKey:
                     bal-=transaction.amount
-        return bal
+        return bal-staked_amt
 
     def epoch_seed(self):
         bal=0

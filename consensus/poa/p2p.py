@@ -324,7 +324,7 @@ class Peer:
                 if t == 'add_peer':
                     await self.broadcast_message(msg)
                 message = self.get_known_peers_message()
-                await self.message(websocket, message, False)
+                await self.send_message(websocket, message, False)
 
         elif t=="known_peers":
             # print("Received Known Peers")

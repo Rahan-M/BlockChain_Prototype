@@ -684,6 +684,7 @@ class Peer:
 
         uri=f"ws://{host}:{port}"
         
+        websocket = None
         try:
             websocket=await websockets.connect(uri)
             self.client_connections.add(websocket)
@@ -721,8 +722,9 @@ class Peer:
                 await self.handle_messages(websocket, msg)
         except Exception as e:
             print(f"Failed to connect to {host}:{port} ::: {e}")
-            traceback.print_exc()
         finally:
+            if not websocket:
+                return
             self.discard_client_connection_details(websocket)
             await websocket.close()
             await websocket.wait_closed()

@@ -94,7 +94,7 @@ class Peer:
             there is no other such block currently being executed
         """
 
-    async def get_peer_info_message(self):
+    def get_peer_info_message(self):
         """
             Function made to send the peer (self) info
         """
@@ -114,7 +114,7 @@ class Peer:
 
         return pkt
 
-    async def get_known_peers_message(self):
+    def get_known_peers_message(self):
         """
             Function for sending known_peers
             (information regarding all the peers we know)

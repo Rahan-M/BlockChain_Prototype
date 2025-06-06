@@ -726,7 +726,7 @@ class Peer:
             print(f"Failed to connect to {host}:{port} ::: {e}")
             traceback.print_exc()
         finally:
-            self.discard_client_connection_details()
+            self.discard_client_connection_details(websocket)
             await websocket.close()
             await websocket.wait_closed()
 

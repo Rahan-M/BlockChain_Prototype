@@ -498,11 +498,8 @@ class Peer:
     async def send_message(self, websocket, message, client_connection):
         try:
             await websocket.send(json.dumps(message))
-        except websockets.exceptions.ConnectionClosed as e:
-            print(f"Connection closed: {e}")
         except Exception as e:
             print(f"Unexpected error during WebSocket send: {e}")
-        finally:
             if client_connection:
                 self.discard_client_connection_details(websocket)
             else:

@@ -611,7 +611,12 @@ class Peer:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
-                miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
+                miner_node_id = None
+                try:
+                    miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
+                except Exception as e:
+                    print(f"An error occured: {e}")
+                    continue
                 miners_list = None
                 if self.miners:
                     miners_list = copy.deepcopy(self.miners[-1][0])
@@ -627,7 +632,12 @@ class Peer:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
-                miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
+                miner_node_id = None
+                try:
+                    miner_node_id = self.name_to_node_id_dict[miner_name.lower()]
+                except Exception as e:
+                    print(f"An error occured: {e}")
+                    continue
                 miners_list = None
                 if self.miners:
                     miners_list = copy.deepcopy(self.miners[-1][0])

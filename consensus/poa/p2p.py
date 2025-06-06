@@ -415,15 +415,15 @@ class Peer:
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 
-                await self.broadcast_message(msg)
-                self.round_task.cancel()
-                await self.round_task
-                self.round_task = asyncio.create_task(self.round_calculator())
-
                 async with self.mem_pool_condition:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
                             self.mem_pool.discard(transaction)
+
+                await self.broadcast_message(msg)
+                self.round_task.cancel()
+                await self.round_task
+                self.round_task = asyncio.create_task(self.round_calculator())
 
                 if self.miners:
                     for miner_item in self.miners:
@@ -829,6 +829,11 @@ class Peer:
                                 if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
                                     Chain.instance.chain.append(newBlock)
                                     print("\nBlock Appended \n")
+
+                                    for transaction in list(self.mem_pool):
+                                        if newBlock.transaction_exists_in_block(transaction):
+                                            self.mem_pool.discard(transaction)     
+
                                     pkt={
                                         "type":"new_block",
                                         "id":str(uuid.uuid4()),
@@ -850,10 +855,6 @@ class Peer:
                                         await self.update_role(True)
                                     else:
                                         await self.update_role(False)
-
-                                    for transaction in list(self.mem_pool):
-                                        if newBlock.transaction_exists_in_block(transaction):
-                                            self.mem_pool.discard(transaction)      
                                 else:
                                     print("\n Invalid Block \n")
         except asyncio.CancelledError:

@@ -94,7 +94,7 @@ class Peer:
             there is no other such block currently being executed
         """
 
-    async def send_peer_info(self, websocket):
+    async def get_peer_info_message(self):
         """
             Function made to send the peer (self) info
         """
@@ -111,9 +111,10 @@ class Peer:
         }
 
         self.seen_message_ids.add(pkt["id"])
-        await websocket.send(json.dumps(pkt))
 
-    async def send_known_peers(self, websocket):
+        return pkt
+
+    async def get_known_peers_message(self):
         """
             Function for sending known_peers
             (information regarding all the peers we know)
@@ -126,8 +127,10 @@ class Peer:
             "id":str(uuid.uuid4()),
             "peers":peers
         }
+
         self.seen_message_ids.add(pkt["id"])
-        await websocket.send(json.dumps(pkt))
+
+        return pkt
 
     async def broadcast_miners_list(self, miners_list, activation_block):
         pkt={
@@ -193,6 +196,16 @@ class Peer:
         else:
             miners_list = Chain.instance.chain[-1].miners_list
         return miners_list
+
+    def discard_server_connection_details(self, websocket):
+        self.server_connections.discard(websocket)
+
+    def discard_client_connection_details(self, websocket):
+        normalized_endpoint = normalize_endpoint((websocket.remote_address[0], websocket.remote_address[1]))
+        self.client_connections.discard(websocket)
+        self.outbound_peers.discard(normalized_endpoint)
+        self.got_pong.pop(websocket, None)
+        self.have_sent_peer_info.pop(websocket, None)
 
     async def update_role(self, is_miner_now): 
         if is_miner_now and not self.miner:
@@ -278,19 +291,22 @@ class Peer:
             await self.broadcast_message(msg)
 
         elif t=="ping":
-            # print("Received Ping")
+
             pkt={
                 "type":"pong",
                 "id":str(uuid.uuid4())
                 }
+            
             self.seen_message_ids.add(pkt["id"])
-            await websocket.send(json.dumps(pkt))
+
+            await self.send_message(websocket, pkt, False)
 
         elif t=="pong":
             # print("Received Pong")
             self.got_pong[websocket]=True
             if not self.have_sent_peer_info.get(websocket, True):
-                await self.send_peer_info(websocket)
+                message = self.get_peer_info_message()
+                await self.send_message(websocket, message, True)
                 self.have_sent_peer_info[websocket]=True
             # print(f"[Sent peer]")
 
@@ -307,7 +323,8 @@ class Peer:
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
                 if t == 'add_peer':
                     await self.broadcast_message(msg)
-                await self.send_known_peers(websocket)
+                message = self.get_known_peers_message()
+                await self.message(websocket, message, False)
 
         elif t=="known_peers":
             # print("Received Known Peers")
@@ -325,7 +342,7 @@ class Peer:
                 "type":"network_details_request",
                 "id":str(uuid.uuid4())
             }
-            await websocket.send(json.dumps(pkt))
+            await self.send_message(websocket, pkt, True)
 
         elif t=="network_details_request":
             pkt={
@@ -334,7 +351,7 @@ class Peer:
                 "admin": self.admin_id,
                 "miners": self.miners
             }
-            await websocket.send(json.dumps(pkt))
+            await self.send_message(websocket, pkt, False)
 
         elif t=="network_details":
             self.admin_id = msg["admin"]
@@ -343,7 +360,7 @@ class Peer:
                 "type":"chain_request",
                 "id":str(uuid.uuid4())
             }
-            await websocket.send(json.dumps(pkt))
+            await self.send_message(websocket, pkt, True)
 
         elif t=="new_tx":
             tx_str=msg["transaction"]
@@ -427,7 +444,7 @@ class Peer:
                 "id":str(uuid.uuid4()),
                 "chain":Chain.instance.to_block_dict_list()
             }
-            await websocket.send(json.dumps(pkt))
+            await self.send_message(websocket, pkt, False)
 
         elif t=="chain":
             print("Received a Chain")
@@ -474,7 +491,22 @@ class Peer:
             print(f"Inbound Connection Closed: {peer_addr}")
 
         finally:
-            self.server_connections.discard(websocket)
+            self.discard_server_connection_details(websocket)
+            await websocket.close()
+            await websocket.wait_closed()
+
+    async def send_message(self, websocket, message, client_connection):
+        try:
+            await websocket.send(json.dumps(message))
+        except websockets.exceptions.ConnectionClosed as e:
+            print(f"Connection closed: {e}")
+        except Exception as e:
+            print(f"Unexpected error during WebSocket send: {e}")
+        finally:
+            if client_connection:
+                self.discard_client_connection_details(websocket)
+            else:
+                self.discard_server_connection_details(websocket)
             await websocket.close()
             await websocket.wait_closed()
 
@@ -483,21 +515,10 @@ class Peer:
 
         targets=self.server_connections | self.client_connections
         for ws in targets:
-            try:
-                await ws.send(json.dumps(pkt))
-
-            except Exception as e:
-                print(f"Error broadcasting: {e}")
-                if ws in self.server_connections:
-                    self.server_connections.discard(ws)
-                else:
-                    normalized_endpoint = normalize_endpoint((ws.remote_address[0], ws.remote_address[1]))
-                    self.client_connections.discard(ws)
-                    self.outbound_peers.discard(normalized_endpoint)
-                    self.got_pong.pop(ws, None)
-                    self.have_sent_peer_info.pop(ws, None)
-                await ws.close()
-                await ws.wait_closed()
+            if ws in self.server_connections:
+                await self.send_message(ws, pkt, False)
+            else:
+                await self.send_message(ws, pkt, True)
 
     async def create_and_broadcast_tx(self, receiver_public_key, amt):
         """
@@ -689,14 +710,14 @@ class Peer:
                 }
 
                 self.seen_message_ids.add(pkt["id"])
-                await websocket.send(json.dumps(pkt))
+                await self.send_message(websocket, pkt, True)
                 
             ping={
                 "type":"ping",
                 "id":str(uuid.uuid4()),
             }
             self.seen_message_ids.add(ping["id"])
-            await websocket.send(json.dumps(ping))
+            await self.send_message(websocket, ping, True)
 
             async for raw in websocket:
                 msg=json.loads(raw)
@@ -705,10 +726,7 @@ class Peer:
             print(f"Failed to connect to {host}:{port} ::: {e}")
             traceback.print_exc()
         finally:
-            self.client_connections.discard(websocket)
-            self.outbound_peers.discard(endpoint)
-            self.got_pong.pop(websocket, None)
-            self.have_sent_peer_info.pop(websocket, None)
+            self.discard_client_connection_details()
             await websocket.close()
             await websocket.wait_closed()
 

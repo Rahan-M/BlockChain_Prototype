@@ -33,6 +33,7 @@ def create_flask_app(peer):
                 ("name", peer.name),
                 ("host", peer.host),
                 ("port", peer.port),
+                ("mining_round", peer.round),
                 ("is_miner", peer.miner),
                 ("admin_id", peer.admin_id),
                 ("node_id", peer.node_id),

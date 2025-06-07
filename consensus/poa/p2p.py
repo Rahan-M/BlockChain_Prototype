@@ -424,12 +424,11 @@ class Peer:
                 await self.round_task
                 self.round_task = asyncio.create_task(self.round_calculator())
 
-                if self.miners:
-                    for miner_item in self.miners:
-                        if miner_item[1] < len(Chain.instance.chain):
-                            self.miners.remove(miner_item)
-                        else:
-                            break
+                while self.miners:
+                    if self.miners[0][1] < len(Chain.instance.chain):
+                        self.miners.pop(0)
+                    else:
+                        break
 
                 new_miners_list = self.get_current_miners_list()
                 if self.node_id in new_miners_list:
@@ -843,12 +842,11 @@ class Peer:
                                     self.round_task.cancel()
                                     await self.round_task
                                     self.round_task = asyncio.create_task(self.round_calculator())
-                                    if self.miners:
-                                        for miner_item in self.miners:
-                                            if miner_item[1] < len(Chain.instance.chain):
-                                                self.miners.remove(miner_item)
-                                            else:
-                                                break
+                                    while self.miners:
+                                        if self.miners[0][1] < len(Chain.instance.chain):
+                                            self.miners.pop(0)
+                                        else:
+                                            break
                                     new_miners_list = self.get_current_miners_list()
                                     if self.node_id in new_miners_list:
                                         await self.update_role(True)

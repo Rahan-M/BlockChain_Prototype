@@ -237,7 +237,6 @@ class Peer:
                     print("Miner shifted")
         except asyncio.CancelledError:
             print("Round calculator task stopped cleanly")
-            raise
 
     async def handle_messages(self, websocket, msg):
         """

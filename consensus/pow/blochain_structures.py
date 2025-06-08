@@ -1,4 +1,4 @@
-import json, hashlib, uuid
+import json, hashlib, uuid, base64
 from typing import List
 from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -7,19 +7,22 @@ from cryptography.hazmat.backends import default_backend
 
 
 class Transaction:
-    def __init__(self, amount: float, sender: str, receiver: str, id=None):
+    def __init__(self, amount: float, sender: str, receiver: str, id=None, ts=None):
         self.id=id or str(uuid.uuid4())
         self.amount: float=amount
         self.sender: str=sender   # Public Key
         self.receiver: str=receiver   # Public Key
 
+        self.sign:bytes=None
+        self.ts=ts or datetime.now().timestamp()
 
     def to_dict(self):
         dict={
             "id":self.id,
             "amount":self.amount,
             "sender":self.sender,
-            "receiver":self.receiver
+            "receiver":self.receiver,
+            "ts":self.ts
         }
         return dict
     
@@ -40,7 +43,10 @@ class Transaction:
 def txs_to_json_digestable_form(transactions: List[Transaction]):
     l=[]
     for i in range(len(transactions)):
-        l.append(transactions[i].to_dict())
+        tx_dict=transactions[i].to_dict()
+        if(transactions[i].sender!="Genesis"):
+            tx_dict["sign"]=base64.b64encode(transactions[i].sign).decode()
+        l.append(tx_dict)
     return l
 
 class Block:
@@ -78,6 +84,20 @@ class Block:
                 return True
         return False
 
+
+def valid_chain_length(i):
+    valid_chain_len=i # because we use zero indexing4
+
+    if valid_chain_len>=50:
+        valid_chain_len-=10
+    elif valid_chain_len>=25:
+        valid_chain_len-=5
+    elif valid_chain_len>=10:
+        valid_chain_len-=3
+    elif valid_chain_len>=5:
+        valid_chain_len-=2
+    return valid_chain_len 
+
 class Chain:
     instance =None #Class Variable
 
@@ -97,8 +117,7 @@ class Chain:
             if publicKey and not blockList:
                 self.chain=[Block(None, [Transaction(50,"Genesis",publicKey)])]
                 print("Initializing Chain...")
-                sol=self.mine(self.chain[0])
-                self.chain[0].solution=sol
+                self.mine(self.chain[0])
                 
             elif blockList and not publicKey:
                 self.chain=blockList.copy()
@@ -172,10 +191,25 @@ class Chain:
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
         for transaction in block.transactions:
+
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
                 return False
             
+            vk_tx=serialization.load_pem_public_key(transaction.sender.encode())
+            try:
+                vk_tx.verify(transaction.sign,
+                             str(transaction).encode(),
+                             padding.PSS(
+                                mgf=padding.MGF1(hashes.SHA256()),
+                                salt_length=padding.PSS.MAX_LENGTH
+                             ),
+                             hashes.SHA256()
+                             )
+            except:
+                print("\nInvalid signature on transaction\n")
+                return False
+
         #Verify Pow:
         if not block.hash.startswith("00000"):
             print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
@@ -186,12 +220,7 @@ class Chain:
 
     def calc_balance(self, publicKey, pending_transactions:List[Transaction]=None):
         bal=0
-        valid_chain_len=len(Chain.instance.chain)
-
-        if valid_chain_len>=5:
-            valid_chain_len-=1
-        elif valid_chain_len>=10:
-            valid_chain_len-=3
+        valid_chain_len=valid_chain_length(len(self.chain))
 
         for i in range(valid_chain_len):
             for transaction in (Chain.instance.chain[i]).transactions:
@@ -213,6 +242,7 @@ class Chain:
         return bal
 
 class Wallet:
+
     def __init__(self):
         self.private_key = rsa.generate_private_key(
             public_exponent=65537,
@@ -247,6 +277,55 @@ class Wallet:
 
         Chain.instance.addBlock(transactions, self.public_key, signature)
         return transaction
+
+def calc_balance_block_list(block_list:List[Block], publicKey, i):
+    bal=0
+    valid_chain_len=valid_chain_length(i)
+
+    for i in range(valid_chain_len):
+        for transaction in (block_list[i]).transactions:
+            if transaction.sender==publicKey:   
+                bal-=transaction.amount
+            elif transaction.receiver==publicKey:
+                bal+=transaction.amount
+        if block_list[i].miner==publicKey:
+            bal+=6 #Miner reward
+        
+    return bal
+
+def isvalidChain(blockList:List[Block]):
+    for i in range(len(blockList)):
+        currBlock=blockList[i]        
+        if(i<=0):
+            continue
+   
+        if not currBlock.hash.startswith("00000"):
+            return False
+
+        for transaction in blockList[i].transactions:
+            sign=transaction.sign
+            vk_tx=serialization.load_pem_public_key(transaction.sender.encode())
+            try:
+                vk_tx.verify(sign,
+                             str(transaction).encode(),
+                             padding.PSS(
+                                mgf=padding.MGF1(hashes.SHA256()),
+                                salt_length=padding.PSS.MAX_LENGTH
+                             ),
+                             hashes.SHA256()
+                             )
+            except:
+                print("\nInvalid signature on transaction\n")
+                return False
+
+            if(calc_balance_block_list(blockList, transaction.sender, i)<transaction.amount):
+                return False
+        
+        if (blockList[i].prevHash!=blockList[i-1].hash):
+            return False
+
+    return True
+
 
 # Chain()
 

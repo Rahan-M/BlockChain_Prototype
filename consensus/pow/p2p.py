@@ -3,7 +3,7 @@ import argparse, json, uuid, base64
 from typing import Set, Dict, List, Tuple
 import threading
 import socket
-from blochain_structures import Transaction, Block, Wallet, Chain
+from blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -130,8 +130,11 @@ class Peer:
 
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
-            transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"])
+            transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["ts"])
+            if(transaction.sender!="Genesis"):
+                transaction.sign=base64.b64decode(transaction_dict["sign"])
             transactions.append(transaction)
+
         
         newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_nonce, new_block_id)   
         return newBlock
@@ -139,8 +142,6 @@ class Peer:
     async def handle_messages(self, websocket, msg):
         """
             This is a function to handle messages as the name suggests
-        """
-        """
             It faciliates the handshake between client and server. 
             It also accepts transactions, blocks and chains in the format
             in which we send them. Then this function recreates these and
@@ -211,18 +212,17 @@ class Peer:
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
-            transaction: Transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'])
+            transaction: Transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return
             
             sign_bytes=base64.b64decode(msg["sign"])
-            #b64decode turns bytes into a string
+            #b64decode 
             if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool))):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
-            is_valid=True
             try:
                 public_key=serialization.load_pem_public_key(tx['sender'].encode())
                 public_key.verify(
@@ -235,13 +235,11 @@ class Peer:
                     hashes.SHA256()
                 )
             except:
-                is_valid=False
-
-
-            if not is_valid:
                 print("Invalid Signature")
                 return
-            
+
+            transaction.sign=sign_bytes
+
             print("\nValid Transaction")
             print(f"\n{msg["type"]}: {msg["transaction"]}")
             print("\n")
@@ -254,21 +252,26 @@ class Peer:
         elif t=="new_block":
             new_block_dict=msg["block"]
             newBlock=self.block_dict_to_block(new_block_dict)
-            if Chain.instance.isValidBlock(newBlock):
-                newBlock.miner=msg["miner"]
-                Chain.instance.chain.append(newBlock)
-                print("\n\n Block Appended \n\n")
-                if self.miner and self.mine_task and not self.mine_task.done():
-                    self.mine_task.cancel()
-                    print("New Block received Cancelled Mining...")
-                
-                async with self.mem_pool_condition:
-                    for transaction in list(self.mem_pool):
-                        if newBlock.transaction_exists_in_block(transaction):
-                            self.mem_pool.discard(transaction)
-                if self.miner:
-                    self.mine_task=asyncio.create_task(self.mine_blocks())
-                await self.broadcast_message(msg)
+
+            if not Chain.instance.isValidBlock(newBlock):
+                print("\nInvalid Block\n")
+                return
+            
+            newBlock.miner=msg["miner"]
+            Chain.instance.chain.append(newBlock)
+            print("\n\n Block Appended \n\n")
+            if self.miner and self.mine_task and not self.mine_task.done():
+                self.mine_task.cancel()
+                print("New Block received Cancelled Mining...")
+            
+            async with self.mem_pool_condition:
+                for transaction in list(self.mem_pool):
+                    if newBlock.transaction_exists_in_block(transaction):
+                        self.mem_pool.discard(transaction)
+                        
+            if self.miner:
+                self.mine_task=asyncio.create_task(self.mine_blocks())
+            await self.broadcast_message(msg)
 
         elif t=="chain_request":
             pkt={
@@ -283,13 +286,18 @@ class Peer:
             block_dict_list=msg["chain"]
             block_list: List[Block]=[]
 
+
             for block_dict in block_dict_list:
                 block=self.block_dict_to_block(block_dict)
                 block_list.append(block)
 
+            if not isvalidChain(block_list):
+                print("\nInvalid Chain\n")
+
             #If chain doesn't already exist we assign this as the chain
-            if not self.chain:
+            if not Chain.instance:
                 self.chain=Chain(blockList=block_list)
+                return            
 
             elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
@@ -382,6 +390,7 @@ class Peer:
                 self.mem_pool.add(transaction)
                 # self.mem_pool_condition.notify_all()
 
+        transaction.sign=signature
         print("Transaction Created", transaction)
         print("\n")
         await self.broadcast_message(pkt)
@@ -654,7 +663,6 @@ def strtobool(v):
         return False
 
     raise argparse.ArgumentTypeError("Boolean Value Expected")    
-
 
 def main():
     parser=argparse.ArgumentParser(description="Handshaker")

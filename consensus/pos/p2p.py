@@ -9,7 +9,7 @@ from ecdsa import VerifyingKey, BadSignatureError
 
 MAX_CONNECTIONS = 8
 MAX_OUTPUT=2**256
-EPOCH_TIME=30
+EPOCH_TIME=60
 
 class VrfThresholdException(Exception):
     pass
@@ -71,7 +71,7 @@ class Peer:
         self.mem_pool: Set[Transaction]=set()
         self.mem_pool_lock=asyncio.Lock() 
         
-        self.current_stakes: set[Stake]=[] # Public key is stored as pem string
+        self.current_stakes: set[Stake]=set() # Public key is stored as pem string
         self.current_stakers:Dict[str, int]={}
         self.curr_stakers_condition=asyncio.Condition() 
         
@@ -137,10 +137,11 @@ class Peer:
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
             transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["ts"])
-            transaction.sign=base64.b64decode(transaction["sign"])
+            if(transaction.sender!="Genesis"):
+                transaction.sign=base64.b64decode(transaction_dict["sign"])
             transactions.append(transaction)
         
-        if(not(new_block_id and new_block_ts and transactions)): # Genesis block doesn't have prevHash
+        if(not(new_block_id and new_block_ts and transactions)): # Genesis block doesn't have prevHash, it's an empty string
             return None
         
         newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_id)   

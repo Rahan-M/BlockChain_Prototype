@@ -43,7 +43,8 @@ def txs_to_json_digestable_form(transactions: List[Transaction]):
     l=[]
     for i in range(len(transactions)):
         tx_dict=transactions[i].to_dict()
-        tx_dict["sign"]=base64.b64encode(transactions[i].sign).decode()
+        if(transactions[i].sender!="Genesis"):
+            tx_dict["sign"]=base64.b64encode(transactions[i].sign).decode()
         l.append(tx_dict)
     return l
 
@@ -99,7 +100,8 @@ class Block:
         stakes_dict_list:List[Dict]=[]
         for stake in self.stakers:
             stake_dict=stake.to_dict()
-            stake_dict["sign"]=base64.b64encode(stake.sign).decode()
+            if(stake.sign):
+                stake_dict["sign"]=base64.b64encode(stake.sign).decode()
             stakes_dict_list.append(stake_dict)
 
         block_dict["stakers"]=stakes_dict_list
@@ -267,7 +269,7 @@ class Chain:
 
         for i in range(valid_chain_len):
             if Chain.instance.chain[i].slash_creator and Chain.instance.chain[i].creator==publicKey:
-                bal-=staked_amt
+                bal-=Chain.instance.chain[i].staked_amt
             if not Chain.instance.chain[i].is_valid:
                 continue
             

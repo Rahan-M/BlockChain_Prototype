@@ -173,11 +173,14 @@ class Peer:
             transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"])
             transactions.append(transaction)
         
+        
         newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_id)
         newBlock.miner_node_id = new_block_miner_node_id
         newBlock.miner_public_key = new_block_miner_public_key
         newBlock.miners_list = new_block_miners_list
+        newBlock.files=block_dict["files"]
         newBlock.signature = new_block_signature
+
         return newBlock
 
     def get_public_key_by_node_id(self, target_node_id):
@@ -416,6 +419,7 @@ class Peer:
             miners_list = self.get_current_miners_list()
             reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
             reqd_miner_pulic_key = self.get_public_key_by_node_id(reqd_miner_node_id)
+
             if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")

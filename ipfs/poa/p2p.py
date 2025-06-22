@@ -1,15 +1,14 @@
-import asyncio, websockets, ipfshttpclient
+import asyncio, websockets
 import argparse, json, uuid, base64
+import os, subprocess, binascii, re
+import copy, threading, socket
 from typing import Set, Dict, List, Tuple
-import copy
-import threading
-import socket
 from blochain_structures import Transaction, Block, Wallet, Chain
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
-import binascii
+from pathlib import Path
 
 MAX_CONNECTIONS = 8
 
@@ -30,8 +29,16 @@ def normalize_endpoint(ep):
 class Peer:
     def __init__(self, host, port, name):
         self.host = host
-        self.port = port
         self.name = name
+
+        self.port = port
+        self.ipfs_port = port + 50  # API port
+        self.gateway_port = port + 81  # Gateway port
+        self.swarm_tcp = port + 2
+        self.swarm_udp = port + 3
+        self.repo_path = Path.home() / f".ipfs_{port}"
+        self.env = os.environ.copy()
+        self.env["IPFS_PATH"] = str(self.repo_path)
 
         self.miner= False
         self.miner_task = None
@@ -94,7 +101,7 @@ class Peer:
             async with self.mem_pool_condition is executed only if
             there is no other such block currently being executed
         """
-        self.ipfsClient=None
+        self.daemon_process=None
 
     def get_peer_info_message(self):
         """
@@ -358,7 +365,7 @@ class Peer:
             await self.send_message(websocket, pkt, False)
 
         elif t=="file":
-            cid=pkt["cid"]
+            cid=msg["cid"]
             self.file_hashes.add(cid)
 
         elif t=="network_details":
@@ -571,10 +578,10 @@ class Peer:
         """
         while True:
             print("Block Chain Menu\n***************")
-            menu = "1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n"
+            menu = "1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Send Files\n"
             if self.node_id == self.admin_id:
-                menu = menu + "5) View Miners\n6) Add Miner\n7) Remove Miner\n"
-            menu = menu + "8) Quit"
+                menu = menu + "6) View Miners\n7) Add Miner\n8) Remove Miner\n"
+            menu = menu + "9) Quit"
             print(menu)
 
             ch= await asyncio._get_running_loop().run_in_executor(
@@ -622,6 +629,12 @@ class Peer:
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
             elif ch==5:
+                path= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter path of file: "
+                )
+                pkt=self.uploadFile(path)
+                await self.broadcast_message(pkt)
+            elif ch==6:
                 miner_names = list()
                 for miner in Chain.instance.chain[-1].miners_list:
                     miner_names.append(self.node_id_to_name_dict[miner])
@@ -633,7 +646,7 @@ class Peer:
                         miner_names.append(self.node_id_to_name_dict[miner])
                     print(f"Miners to be activated from block {miner_item[1]}")
                     print(miner_names)
-            elif ch==6:
+            elif ch==7:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
@@ -654,7 +667,7 @@ class Peer:
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already in miners list")
-            elif ch==7:
+            elif ch==8:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
@@ -675,7 +688,7 @@ class Peer:
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already not in miners list")
-            elif ch==8:
+            elif ch==9:
                 print("Quitting...")
                 break
 
@@ -792,9 +805,66 @@ class Peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
 
-    async def uploadFile(self, path:str):
-        res=self.ipfsClient.add(path)
-        cid=res['hash']
+    def addToIpfs(self, file_path):
+        try:
+            # Use the 'ipfs add' command WITHOUT the --json flag
+            # Older IPFS CLIs typically output something like:
+            # added QmYOURHASH /path/to/your/file.txt
+            # (followed by a progress bar line)
+            result = subprocess.run(
+                ['ipfs', 'add', file_path],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            output_lines = result.stdout.strip().split('\n')
+            print(f"Raw IPFS add output:\n{result.stdout}") # For debugging purposes
+
+            if output_lines:
+                # Look for lines starting with 'added '
+                # Iterate from the end as the final 'added' line is usually the most relevant
+                for line in reversed(output_lines):
+                    if line.startswith('added '):
+                        # Use regex to extract the hash and the name
+                        # \s+ matches one or more whitespace characters
+                        # (\S+) captures one or more non-whitespace characters (the hash)
+                        # (.+) captures the rest of the line (the name, potentially including spaces)
+                        match = re.match(r'added\s+(\S+)\s+(.+)', line)
+                        if match:
+                            ipfs_hash = match.group(1)
+                            # The name might include the full path depending on how you add it
+                            # You might need to adjust this parsing based on your exact desired 'name'
+                            ipfs_name = match.group(2)
+                            print(f"Successfully parsed: Hash={ipfs_hash}, Name={ipfs_name}") # For confirmation
+                            return ipfs_hash, ipfs_name
+                print("Error: Could not parse IPFS add output for hash and name.")
+                return None, None
+            else:
+                print("Error: No output received from ipfs add command.")
+                return None, None
+        except subprocess.CalledProcessError as e:
+            print(f"Error adding file to IPFS: {e}")
+            print(f"Stderr: {e.stderr}")
+            return None, None
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return None, None
+
+    def uploadFile(self, path:str):
+        file_path=Path(path)
+        if(not file_path.is_file()):
+            print("\nFile doesn't exist\n")
+            return
+
+        if not self.daemon_process: 
+            self.start_daemon()
+        
+        cid, name=self.addToIpfs(path)
+        if(not(cid and name)):
+            return
+        
+        print(f"\nNew File Created : {cid}\n")
         pkt={
             "type":"file",
             "id":str(uuid.uuid4()),
@@ -803,7 +873,33 @@ class Peer:
         
         self.seen_message_ids.add(pkt["id"])
         self.file_hashes.add(cid)
-        await self.broadcast_message(pkt)
+        return pkt
+
+    def init_repo(self):
+        """
+            Creates a ipfs repo of name ending in ipfs_port_no eg ipfs_5000 
+        """
+        if not self.repo_path.exists():
+            subprocess.run(["ipfs", "init"], env=self.env, check=True)
+            print("\nIPFS repo created\n")
+
+    def configure_ports(self):
+        subprocess.run(["ipfs", "config", "Addresses.API", f"/ip4/127.0.0.1/tcp/{self.ipfs_port}"], env=self.env, check=True)
+        subprocess.run(["ipfs", "config", "Addresses.Gateway", f"/ip4/127.0.0.1/tcp/{self.gateway_port}"], env=self.env, check=True)
+        subprocess.run([
+            "ipfs", "config", "Addresses.Swarm", "--json",
+            f'["/ip4/127.0.0.1/tcp/{self.swarm_tcp}", "/ip4/127.0.0.1/udp/{self.swarm_udp}/quic"]'
+        ], env=self.env, check=True)
+        print("\nConfigured Ports\n")
+
+    def start_daemon(self):
+        self.daemon_process= subprocess.Popen(["ipfs", "daemon"], env=self.env)
+        print("\nIPFS Daemon Started\n")
+
+    def stop_daemon(self):
+        if self.daemon_process:
+            self.daemon_process.terminate()
+            self.daemon_process.wait()
 
     def sign_block(self, block: Block, private_key):
         message = block.get_message_to_sign()
@@ -931,7 +1027,9 @@ class Peer:
         disc_task=asyncio.create_task(self.discover_peers())
         sampler_task = asyncio.create_task(self.gossip_peer_sampler())
         self.round_task = asyncio.create_task(self.round_calculator())
-        self.ipfsClient=ipfshttpclient.connect()
+
+        self.init_repo()
+        self.configure_ports()
 
         await inp_task
 
@@ -939,8 +1037,11 @@ class Peer:
         disc_task.cancel()
         sampler_task.cancel()
         self.round_task.cancel()
+
+        if self.daemon_process:
+            self.stop_daemon()
+
         await self.update_role(False)
-        self.ipfsClient.close()
 
 def strtobool(v):
     if isinstance(v, bool):

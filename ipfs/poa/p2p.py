@@ -4,11 +4,13 @@ import os, subprocess, binascii, re
 import copy, threading, socket
 from typing import Set, Dict, List, Tuple
 from blochain_structures import Transaction, Block, Wallet, Chain
+from ipfs import addToIpfs, download_ipfs_file_subprocess
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 from pathlib import Path
+
 
 MAX_CONNECTIONS = 8
 
@@ -83,7 +85,7 @@ class Peer:
         """
 
         self.mem_pool: Set[Transaction]=set()
-        self.file_hashes: Set[str]=set()
+        self.file_hashes: Dict[str, str]={}
 
         self.name_to_public_key_dict: Dict[str, str]={}
         self.node_id_to_name_dict: Dict[str, str]={}
@@ -366,7 +368,8 @@ class Peer:
 
         elif t=="file":
             cid=msg["cid"]
-            self.file_hashes.add(cid)
+            desc=msg["desc"]
+            self.file_hashes[desc]=cid
 
         elif t=="network_details":
             self.admin_id = msg["admin"]
@@ -435,6 +438,11 @@ class Peer:
                     for transaction in list(self.mem_pool):
                         if newBlock.transaction_exists_in_block(transaction):
                             self.mem_pool.discard(transaction)
+
+                for hash in list(self.file_hashes.keys()):
+                    if newBlock.cid_exists_in_block(hash):
+                        self.file_hashes.pop(hash, None)
+                    
 
                 await self.broadcast_message(msg)
                 self.round_task.cancel()
@@ -578,10 +586,10 @@ class Peer:
         """
         while True:
             print("Block Chain Menu\n***************")
-            menu = "1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Send Files\n"
+            menu = "1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Send Files\n6) Download Files\n"
             if self.node_id == self.admin_id:
-                menu = menu + "6) View Miners\n7) Add Miner\n8) Remove Miner\n"
-            menu = menu + "9) Quit"
+                menu = menu + "7) View Miners\n8) Add Miner\n8) Remove Miner\n"
+            menu = menu + "0) Quit"
             print(menu)
 
             ch= await asyncio._get_running_loop().run_in_executor(
@@ -629,12 +637,24 @@ class Peer:
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
             elif ch==5:
+                desc= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter description of file: "
+                )
                 path= await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter path of file: "
                 )
-                pkt=self.uploadFile(path)
+                pkt=self.uploadFile(desc, path)
                 await self.broadcast_message(pkt)
             elif ch==6:
+                cid= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter cid of file: "
+                )
+                path= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter path to download the file: "
+                )
+                download_ipfs_file_subprocess(cid, path)
+
+            elif ch==7:
                 miner_names = list()
                 for miner in Chain.instance.chain[-1].miners_list:
                     miner_names.append(self.node_id_to_name_dict[miner])
@@ -646,7 +666,7 @@ class Peer:
                         miner_names.append(self.node_id_to_name_dict[miner])
                     print(f"Miners to be activated from block {miner_item[1]}")
                     print(miner_names)
-            elif ch==7:
+            elif ch==8:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
@@ -667,7 +687,7 @@ class Peer:
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already in miners list")
-            elif ch==8:
+            elif ch==9:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
@@ -688,7 +708,7 @@ class Peer:
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already not in miners list")
-            elif ch==9:
+            elif ch==0:
                 print("Quitting...")
                 break
 
@@ -805,53 +825,7 @@ class Peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
 
-    def addToIpfs(self, file_path):
-        try:
-            # Use the 'ipfs add' command WITHOUT the --json flag
-            # Older IPFS CLIs typically output something like:
-            # added QmYOURHASH /path/to/your/file.txt
-            # (followed by a progress bar line)
-            result = subprocess.run(
-                ['ipfs', 'add', file_path],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-
-            output_lines = result.stdout.strip().split('\n')
-            print(f"Raw IPFS add output:\n{result.stdout}") # For debugging purposes
-
-            if output_lines:
-                # Look for lines starting with 'added '
-                # Iterate from the end as the final 'added' line is usually the most relevant
-                for line in reversed(output_lines):
-                    if line.startswith('added '):
-                        # Use regex to extract the hash and the name
-                        # \s+ matches one or more whitespace characters
-                        # (\S+) captures one or more non-whitespace characters (the hash)
-                        # (.+) captures the rest of the line (the name, potentially including spaces)
-                        match = re.match(r'added\s+(\S+)\s+(.+)', line)
-                        if match:
-                            ipfs_hash = match.group(1)
-                            # The name might include the full path depending on how you add it
-                            # You might need to adjust this parsing based on your exact desired 'name'
-                            ipfs_name = match.group(2)
-                            print(f"Successfully parsed: Hash={ipfs_hash}, Name={ipfs_name}") # For confirmation
-                            return ipfs_hash, ipfs_name
-                print("Error: Could not parse IPFS add output for hash and name.")
-                return None, None
-            else:
-                print("Error: No output received from ipfs add command.")
-                return None, None
-        except subprocess.CalledProcessError as e:
-            print(f"Error adding file to IPFS: {e}")
-            print(f"Stderr: {e.stderr}")
-            return None, None
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
-            return None, None
-
-    def uploadFile(self, path:str):
+    def uploadFile(self, desc: str, path:str):
         file_path=Path(path)
         if(not file_path.is_file()):
             print("\nFile doesn't exist\n")
@@ -860,7 +834,7 @@ class Peer:
         if not self.daemon_process: 
             self.start_daemon()
         
-        cid, name=self.addToIpfs(path)
+        cid, name=addToIpfs(path)
         if(not(cid and name)):
             return
         
@@ -868,11 +842,12 @@ class Peer:
         pkt={
             "type":"file",
             "id":str(uuid.uuid4()),
+            "desc":desc,
             "cid":cid
         }
         
         self.seen_message_ids.add(pkt["id"])
-        self.file_hashes.add(cid)
+        self.file_hashes[cid]=desc
         return pkt
 
     def init_repo(self):
@@ -941,7 +916,7 @@ class Peer:
                                 newBlock.miner_public_key = self.wallet.public_key
                                 newBlock.miners_list = miners_list
 
-                                newBlock.files.extend(list(self.file_hashes))  
+                                newBlock.files=self.file_hashes.copy()
                                 self.sign_block(newBlock, self.wallet.private_key)
 
                                 reqd_miner_pulic_key = self.wallet.public_key
@@ -953,9 +928,7 @@ class Peer:
                                         if newBlock.transaction_exists_in_block(transaction):
                                             self.mem_pool.discard(transaction)    
 
-                                    for file_hash in list(self.file_hashes):
-                                        if newBlock.cid_exists_in_block(file_hash):
-                                            self.file_hashes.discard(file_hash) 
+
 
                                     pkt={
                                         "type":"new_block",

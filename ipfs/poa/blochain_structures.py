@@ -1,5 +1,5 @@
 import json, hashlib, uuid
-from typing import List
+from typing import List, Dict
 from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -54,7 +54,7 @@ class Block:
         self.miner_public_key= None
         self.signature = None # This will hold the digital signature from the miner
         self.miners_list = None # List of miner nodes
-        self.files = []
+        self.files: Dict[str: str] = {}
 
     def to_dict(self):
         return {
@@ -84,7 +84,7 @@ class Block:
         return False
 
     def cid_exists_in_block(self, cid: str):
-        for file_hash in self.files:
+        for file_hash in list(self.files.keys()):
             if file_hash==cid:
                 return True
         return False

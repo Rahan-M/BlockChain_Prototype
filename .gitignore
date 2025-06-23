@@ -1,3 +1,5 @@
+ipfs/retreived
+
 # Virtual environments
 venv/
 myenv/
@@ -7,7 +9,7 @@ newEnv/
 __pycache__/
 
 # Temporary files
-haha.txt__pycache__/
+haha.txt
 *.pyc
 
 haha.txt

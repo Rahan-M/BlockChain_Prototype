@@ -2,6 +2,9 @@ from RestrictedPython import compile_restricted
 from RestrictedPython.Eval import default_guarded_getiter
 from RestrictedPython.Guards import safe_builtins
 from RestrictedPython.PrintCollector import PrintCollector
+from gas_meter import GasMeter
+
+GAS_LIMIT = 100
 
 def _getitem_(obj, index):
     return obj[index]
@@ -30,4 +33,13 @@ class ContractEnvironment:
         func = self.locals.get(func_name)
         if not func:
             raise Exception(f"Function '{func_name}' not found in contract.")
-        return func(*args)
+        
+        gas_meter = GasMeter(GAS_LIMIT)
+
+        try:
+            gas_meter.start()
+            result = func(*args)
+        finally:
+            gas_meter.stop()
+
+        return result, gas_meter.gas_used

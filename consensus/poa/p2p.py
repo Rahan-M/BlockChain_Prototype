@@ -5,6 +5,7 @@ import copy
 import threading
 import socket
 from blochain_structures import Transaction, Block, Wallet, Chain
+from contracts_db import smartContractDatabase
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -84,6 +85,7 @@ class Peer:
         self.wallet=Wallet()
         self.chain: Chain=None
 
+        self.contractsDB = smartContractDatabase()
 
         self.mem_pool_condition=asyncio.Condition() 
         """

@@ -82,6 +82,7 @@ class Peer:
         self.mem_pool_lock=asyncio.Lock() 
         
         self.file_hashes: Dict[str, str]={}
+        self.file_hashes_lock=asyncio.Lock()
         self.daemon_process=None
 
         self.current_stakes: set[Stake]=set() # Public key is stored as pem string
@@ -284,7 +285,8 @@ class Peer:
         elif t=="file":
             cid=msg["cid"]
             desc=msg["desc"]
-            self.file_hashes[cid]=desc
+            async with self.file_hashes_lock:
+                self.file_hashes[cid]=desc
 
         elif t=="new_tx":
             tx_str=msg["transaction"]
@@ -440,9 +442,10 @@ class Peer:
                     if newBlock.transaction_exists_in_block(transaction):
                         self.mem_pool.discard(transaction)
             
-            for hash in list(self.file_hashes.keys()):
-                if newBlock.cid_exists_in_block(hash):
-                    self.file_hashes.pop(hash, None)
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if newBlock.cid_exists_in_block(hash):
+                        self.file_hashes.pop(hash, None)
             
             self.staked_amt=0
             async with self.curr_stakers_condition:
@@ -545,9 +548,10 @@ class Peer:
                     if Chain.instance.transaction_exists_in_chain(transaction):
                         self.mem_pool.discard(transaction)
             
-            for hash in list(self.file_hashes.keys()):
-                if(Chain.instance.cid_exists_in_chain(hash)):
-                    self.file_hashes.pop(hash, None)
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if(Chain.instance.cid_exists_in_chain(hash)):
+                        self.file_hashes.pop(hash, None)
 
     async def verify_and_slash(self, block1:Block, block2:Block, pos:int, block_list:List[Block]):
         vk=VerifyingKey.from_pem(block1.creator)
@@ -754,7 +758,7 @@ class Peer:
                 path= await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter path of file: "
                 )
-                pkt=self.uploadFile(desc, path)
+                pkt=await self.uploadFile(desc, path)
                 await self.broadcast_message(pkt)
 
             elif ch==8:
@@ -812,7 +816,7 @@ class Peer:
                 print("Quitting...")
                 break
     
-    def uploadFile(self, desc: str, path:str):
+    async def uploadFile(self, desc: str, path:str):
         file_path=Path(path)
         if(not file_path.is_file()):
             print("\nFile doesn't exist\n")
@@ -821,7 +825,7 @@ class Peer:
         if not self.daemon_process: 
             self.start_daemon()
         
-        cid, name=addToIpfs(path)
+        cid, name = await asyncio.to_thread(addToIpfs, path)
         if(not(cid and name)):
             return
         
@@ -834,7 +838,8 @@ class Peer:
         }
         
         self.seen_message_ids.add(pkt["id"])
-        self.file_hashes[cid]=desc
+        async with self.file_hashes_lock:
+            self.file_hashes[cid]=desc
         return pkt
 
     def init_repo(self):
@@ -862,7 +867,6 @@ class Peer:
         if self.daemon_process:
             self.daemon_process.terminate()
             self.daemon_process.wait()
-
 
     async def connect_to_peer(self, host, port):
         """
@@ -1101,11 +1105,11 @@ class Peer:
                 if newBlock.transaction_exists_in_block(transaction):
                     self.mem_pool.discard(transaction)
 
-        for hash in list(self.file_hashes.keys()):
-            if newBlock.cid_exists_in_block(hash):
-                self.file_hashes.pop(hash, None)
-                                    
-                      
+        async with self.file_hashes_lock:
+            for hash in list(self.file_hashes.keys()):
+                if newBlock.cid_exists_in_block(hash):
+                    self.file_hashes.pop(hash, None)
+                                                       
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace

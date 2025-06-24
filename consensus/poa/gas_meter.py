@@ -1,14 +1,15 @@
 import sys
 
+GAS_LIMIT = 100
+
 class GasMeter:
-    def __init__(self, gas_limit):
-        self.gas_limit = gas_limit
+    def __init__(self):
         self.gas_used = 0
 
     def tracer(self, frame, event, arg):
         if event == "line":
             self.gas_used += 1
-            if self.gas_used > self.gas_limit:
+            if self.gas_used > GAS_LIMIT:
                 raise Exception("Out of gas")
         return self.tracer
 

@@ -4,8 +4,6 @@ from RestrictedPython.Guards import safe_builtins
 from RestrictedPython.PrintCollector import PrintCollector
 from gas_meter import GasMeter
 
-GAS_LIMIT = 100
-
 def _getitem_(obj, index):
     return obj[index]
 
@@ -34,7 +32,7 @@ class ContractEnvironment:
         if not func:
             raise Exception(f"Function '{func_name}' not found in contract.")
         
-        gas_meter = GasMeter(GAS_LIMIT)
+        gas_meter = GasMeter()
 
         try:
             gas_meter.start()

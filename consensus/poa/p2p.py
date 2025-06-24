@@ -5,7 +5,8 @@ import copy
 import threading
 import socket
 from blochain_structures import Transaction, Block, Wallet, Chain
-from contracts_db import smartContractDatabase
+from contracts_db import SmartContractDatabase
+from secure_executor import SecureContractExecutor
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -85,7 +86,7 @@ class Peer:
         self.wallet=Wallet()
         self.chain: Chain=None
 
-        self.contractsDB = smartContractDatabase()
+        self.contractsDB = SmartContractDatabase()
 
         self.mem_pool_condition=asyncio.Condition() 
         """
@@ -875,6 +876,18 @@ class Peer:
             print("\nSent out chain requests...")
             for _ in range(12):
                     await asyncio.sleep(5)
+
+    def run_contract(self, contract_id, func_name, *args):
+        code = self.contractsDB.get_contract(contract_id)
+        if code is None:
+            raise Exception(f"Contract '{contract_id}' not found.")
+        
+        state = self.contractsDB.get_contract_state(contract_id)
+        env = SecureContractExecutor(code)
+        response = env.run(func_name, *args, state)
+        self.contractsDB.update_contract_state(contract_id, state)
+
+        return response
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         # We start the server

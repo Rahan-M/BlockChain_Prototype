@@ -1,4 +1,4 @@
-class smartContractDatabase:
+class SmartContractDatabase:
     def __init__(self):
         self.contracts = {}
         self.contract_states = {}

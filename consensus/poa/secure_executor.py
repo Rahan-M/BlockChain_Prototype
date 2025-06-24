@@ -10,13 +10,13 @@ class SecureContractExecutor:
     def __init__(self, code: str):
         self.code = code
 
-    def run(self, func_name: str, *args):
+    def run(self, func_name: str, *args, state):
         manager = multiprocessing.Manager()
         return_dict = manager.dict()
 
         process = multiprocessing.Process(
             target=sandbox_contract_runner,
-            args=(self.code, func_name, args, return_dict)
+            args=(self.code, func_name, args, state, return_dict)
         )
 
         process.start()

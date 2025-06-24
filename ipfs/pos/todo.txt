@@ -1,0 +1,16 @@
+[x] Handle incoming blocks
+[x] Think again on synchronisation
+Okay so what we do is, we only allow stake announcements after 20s of prev block creation and we create the next block roughly 30s after it
+[x] Hande User Input
+[x] Make it such that after staking, we can still submit transactions till 
+
+[x] store current stakers in the block
+[x] Stakes need signs as well
+[x] Receiver must check that the current stakers included in that block is not fabricated
+[x] Create valid chain function
+
+[x] Involve current stakers in the calc balance so that they can't transact with what they have staked
+[x] Transaction amount and staked amount must be greater than 0
+[x] Store transaction sign in transaction, verify transactions before replacing chain
+
+[] Add timestamp on stake and transaction

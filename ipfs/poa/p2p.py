@@ -369,7 +369,7 @@ class Peer:
         elif t=="file":
             cid=msg["cid"]
             desc=msg["desc"]
-            self.file_hashes[desc]=cid
+            self.file_hashes[cid]=desc
 
         elif t=="network_details":
             self.admin_id = msg["admin"]
@@ -489,10 +489,15 @@ class Peer:
             else:
                 print("\nCurrent Chain Longer than received chain")
                 return
+            
             async with self.mem_pool_condition:
                 for transaction in list(self.mem_pool):
                     if Chain.instance.transaction_exists_in_chain(transaction):
                         self.mem_pool.discard(transaction)
+
+            for hash in list(self.file_hashes.keys()):
+                if(Chain.instance.cid_exists_in_chain(hash)):
+                    self.file_hashes.pop(hash, None)
 
     async def handle_connections(self, websocket):
         """
@@ -928,8 +933,10 @@ class Peer:
                                         if newBlock.transaction_exists_in_block(transaction):
                                             self.mem_pool.discard(transaction)    
 
-
-
+                                    for hash in list(self.file_hashes.keys()):
+                                        if newBlock.cid_exists_in_block(hash):
+                                            self.file_hashes.pop(hash, None)
+                                    
                                     pkt={
                                         "type":"new_block",
                                         "id":str(uuid.uuid4()),

@@ -1,6 +1,6 @@
 import sys
 
-GAS_LIMIT = 100
+GAS_LIMIT = 10000
 
 class GasMeter:
     def __init__(self):

@@ -3,8 +3,8 @@ import time
 import psutil
 from sandbox_runner import sandbox_contract_runner
 
-TIMEOUT = 2.0
-MEMORY_LIMIT_MB = 50
+TIMEOUT = 20.0
+MEMORY_LIMIT_MB = 500
 
 class SecureContractExecutor:
     def __init__(self, code: str):

@@ -27,7 +27,7 @@ class ContractEnvironment:
         self.compiled = compile_restricted(self.code, filename='<contract>', mode='exec')
         exec(self.compiled, self.globals, self.locals)
 
-    def run_contract(self, func_name: str, *args, state):
+    def run_contract(self, func_name: str, args, state):
         func = self.locals.get(func_name)
         if not func:
             raise Exception(f"Function '{func_name}' not found in contract.")

@@ -10,7 +10,7 @@ class SecureContractExecutor:
     def __init__(self, code: str):
         self.code = code
 
-    def run(self, func_name: str, *args, state):
+    def run(self, func_name: str, args, state):
         manager = multiprocessing.Manager()
         return_dict = manager.dict()
 

@@ -881,10 +881,10 @@ class Peer:
         code = self.contractsDB.get_contract(contract_id)
         if code is None:
             raise Exception(f"Contract '{contract_id}' not found.")
-        
+
         state = self.contractsDB.get_contract_state(contract_id)
-        env = SecureContractExecutor(code)
-        response = env.run(func_name, *args, state)
+        executor = SecureContractExecutor(code)
+        response = executor.run(func_name, args, state)
         self.contractsDB.update_contract_state(contract_id, state)
 
         return response

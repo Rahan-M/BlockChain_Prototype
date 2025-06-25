@@ -885,7 +885,8 @@ class Peer:
         state = self.contractsDB.get_contract_state(contract_id)
         executor = SecureContractExecutor(code)
         response = executor.run(func_name, args, state)
-        self.contractsDB.update_contract_state(contract_id, state)
+        new_state = response['state']
+        self.contractsDB.update_contract_state(contract_id, new_state)
 
         return response
 

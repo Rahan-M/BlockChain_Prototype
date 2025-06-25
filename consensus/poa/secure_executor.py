@@ -31,7 +31,8 @@ class SecureContractExecutor:
                 return {
                     "success": False,
                     "error": "Execution timeout",
-                    "result": None,
+                    "state": None,
+                    "msg": None,
                     "gas_used": 0
                 }
 
@@ -42,7 +43,8 @@ class SecureContractExecutor:
                     return {
                         "success": False,
                         "error": f"Memory limit exceeded ({int(mem_usage_mb)} MB)",
-                        "result": None,
+                        "state": None,
+                        "msg": None,
                         "gas_used": 0
                     }
             except psutil.NoSuchProcess:
@@ -55,6 +57,7 @@ class SecureContractExecutor:
         return {
             "success": return_dict.get("error") is None,
             "error": return_dict.get("error"),
-            "result": return_dict.get("result"),
+            "state": return_dict.get("state"),
+            "msg": return_dict.get("msg"),
             "gas_used": return_dict.get("gas_used")
         }

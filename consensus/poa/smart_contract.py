@@ -36,8 +36,8 @@ class ContractEnvironment:
 
         try:
             gas_meter.start()
-            result = func(*args, state)
+            state, msg = func(*args, state)
         finally:
             gas_meter.stop()
 
-        return result, gas_meter.gas_used
+        return state, msg, gas_meter.gas_used

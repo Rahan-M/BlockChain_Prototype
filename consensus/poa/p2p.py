@@ -14,6 +14,7 @@ from cryptography.hazmat.backends import default_backend
 import binascii
 
 MAX_CONNECTIONS = 8
+GAS_PRICE = 0.001 # coin per gas unit
 
 def get_random_element(s):
     """

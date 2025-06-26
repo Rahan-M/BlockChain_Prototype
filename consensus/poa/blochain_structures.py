@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 import binascii
 
+GAS_PRICE = 0.001 # coin per gas unit
 
 class Transaction:
     def __init__(self, payload, sender: str, receiver: str, id=None):

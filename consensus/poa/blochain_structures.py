@@ -195,8 +195,11 @@ class Chain:
 
         for i in range(valid_chain_len):
             for transaction in (Chain.instance.chain[i]).transactions:
-                if transaction.sender==publicKey:   
-                    bal-=transaction.amount
+                if transaction.sender==publicKey:
+                    if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                        bal-=transaction.payload[-1]
+                    else:
+                        bal-=transaction.payload
                 elif transaction.receiver==publicKey:
                     bal+=transaction.amount
             if Chain.instance.chain[i].miner_public_key==publicKey:
@@ -209,7 +212,10 @@ class Chain:
         if pending_transactions:
             for transaction in pending_transactions:
                 if transaction.sender==publicKey:
-                    bal-=transaction.amount
+                    if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                        bal-=transaction.payload[-1]
+                    else:
+                        bal-=transaction.payload
         return bal
 
 class Wallet:

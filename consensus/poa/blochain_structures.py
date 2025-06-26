@@ -8,17 +8,16 @@ import binascii
 
 
 class Transaction:
-    def __init__(self, amount: float, sender: str, receiver: str, id=None):
+    def __init__(self, payload, sender: str, receiver: str, id=None):
         self.id=id or str(uuid.uuid4())
-        self.amount: float=amount
+        self.payload=payload # amount or [code, amount] or [contract id, function_name, arguments, state, amount]
         self.sender: str=sender   # Public Key
-        self.receiver: str=receiver   # Public Key
-
+        self.receiver: str=receiver   # Public Key or "deploy" or "invoke"
 
     def to_dict(self):
         dict={
             "id":self.id,
-            "amount":self.amount,
+            "payload":self.payload,
             "sender":self.sender,
             "receiver":self.receiver
         }
@@ -27,7 +26,7 @@ class Transaction:
     def __eq__(self, other):
         return(
             self.id==other.id and
-            self.amount==other.amount and
+            self.payload==other.payload and
             self.sender==other.sender and
             self.receiver==other.receiver
         )

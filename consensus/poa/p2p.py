@@ -36,7 +36,7 @@ class Peer:
         self.port = port
         self.name = name
 
-        self.miner= False
+        self.miner = False
         self.miner_task = None
         self.round = 0
         self.round_task = None
@@ -172,7 +172,7 @@ class Peer:
 
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
-            transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"])
+            transaction=Transaction(transaction_dict["payload"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"])
             transactions.append(transaction)
         
         newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_id)
@@ -368,14 +368,20 @@ class Peer:
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
-            transaction: Transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'])
+            transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return
             
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode turns bytes into a string
-            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool))):
+
+            amount = 0
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if(amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool))):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
@@ -415,6 +421,11 @@ class Peer:
             reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
             reqd_miner_pulic_key = self.get_public_key_by_node_id(reqd_miner_node_id)
             if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
+                for transaction in newBlock.transactions:
+                    if transaction.receiver == "deploy":
+                        pass
+                    if transaction.receiver == "invoke":
+                        pass
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 
@@ -519,11 +530,11 @@ class Peer:
             else:
                 await self.send_message(ws, pkt, True)
 
-    async def create_and_broadcast_tx(self, receiver_public_key, amt):
+    async def create_and_broadcast_tx(self, receiver_public_key, payload):
         """
             Function to create and broadcast transactions
         """
-        transaction=Transaction(amt, self.wallet.public_key, receiver_public_key)
+        transaction=Transaction(payload, self.wallet.public_key, receiver_public_key)
         transaction_str=str(transaction)
         
         signature=self.wallet.private_key.sign(
@@ -579,29 +590,34 @@ class Peer:
             except:
                 print("\nPlease enter a valid number!!!\n")
             if ch==1:
-                rec= await asyncio._get_running_loop().run_in_executor(
+                rec = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Receiver's Name: "
                 )
 
-                amt= await asyncio._get_running_loop().run_in_executor(
-                    None, input, "\nEnter Amount to send: "
-                )
-                
-                receiver_public_key=self.name_to_public_key_dict.get(rec.lower().strip())
-                if(receiver_public_key==None):
-                    print("No such person available in directory...")
-                    continue
-                
-                try:
-                    amt=float(amt)
-                except ValueError:
-                    print("Amount must be a number")
-                    continue
-                
-                if amt<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
-                    await self.create_and_broadcast_tx(receiver_public_key, amt)
+                if rec == "deploy":
+                    pass
+                elif rec == "invoke":
+                    pass
                 else:
-                    print("Insufficient Account Balance")
+                    amt= await asyncio._get_running_loop().run_in_executor(
+                        None, input, "\nEnter Amount to send: "
+                    )
+                    receiver_public_key = self.name_to_public_key_dict.get(rec.lower().strip())
+                    if(receiver_public_key==None):
+                        print("No such person available in directory...")
+                        continue
+                    
+                    try:
+                        amt=float(amt)
+                    except ValueError:
+                        print("Amount must be a number")
+                        continue
+
+                    if amt<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                        await self.create_and_broadcast_tx(receiver_public_key, amt)
+                    else:
+                        print("Insufficient Account Balance")
+
             elif ch==2:
                 print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)))
             elif ch==3:
@@ -795,6 +811,14 @@ class Peer:
         )
         block.signature = signature.hex()  # Store as hex string for transport
 
+    def deploy_and_run_contracts(self, transaction_list):
+        for transaction in transaction_list:
+            if transaction.receiver == "deploy":
+                pass
+            if transaction.receiver == "invoke":
+                payload = transaction.payload
+                self.run_contract(payload)
+
     async def mine_blocks(self):
         try:
             while True:
@@ -819,6 +843,8 @@ class Peer:
                                     transaction_list.append(transaction)
 
                             if(len(transaction_list)>0):
+                                self.deploy_and_run_contracts(transaction_list)
+
                                 print("Mining Started")
                                 print("Mining...")
                                 newBlock = Block(Chain.instance.lastBlock.hash, transaction_list)
@@ -878,7 +904,8 @@ class Peer:
             for _ in range(12):
                     await asyncio.sleep(5)
 
-    def run_contract(self, contract_id, func_name, *args):
+    def run_contract(self, payload):
+        contract_id, func_name, args = payload[0], payload[1], payload[2]
         code = self.contractsDB.get_contract(contract_id)
         if code is None:
             raise Exception(f"Contract '{contract_id}' not found.")

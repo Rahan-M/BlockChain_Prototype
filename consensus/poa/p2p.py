@@ -630,7 +630,37 @@ class Peer:
                     else:
                         print("Insufficient Account Balance")
                 elif rec == "invoke":
-                    pass
+                    contract_id = await asyncio._get_running_loop().run_in_executor(
+                        None, input, "\nEnter Contract Id: "
+                    )
+                    if contract_id not in self.contractsDB.contracts:
+                        print("No such contract found...")
+                        continue
+
+                    func_name = await asyncio._get_running_loop().run_in_executor(
+                        None, input, "\nEnter Function Name: "
+                    )
+
+                    args = []
+                    loop = asyncio.get_running_loop()
+                    arg_number = 1
+                    while True:
+                        arg = await loop.run_in_executor(None, input, f"Enter argument {arg_number} (or \\q to finish): ")
+                        if arg.strip() == "\\q":
+                            break
+                        args.append(arg)
+                        arg_number += 1
+
+                    state = self.get_contract_state(contract_id)
+
+                    amount = self.get_contract_invocation_charge()
+
+                    payload = [contract_id, func_name, args, state, amount]
+
+                    if amount<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                        await self.create_and_broadcast_tx(rec, payload)
+                    else:
+                        print("Insufficient Account Balance")
                 else:
                     amt= await asyncio._get_running_loop().run_in_executor(
                         None, input, "\nEnter Amount to send: "

@@ -12,9 +12,13 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 import binascii
+import os
+import tempfile
+import subprocess
 
 MAX_CONNECTIONS = 8
 GAS_PRICE = 0.001 # coin per gas unit
+BASE_DEPLOY_COST = 5
 
 def get_random_element(s):
     """
@@ -29,6 +33,27 @@ def normalize_endpoint(ep):
     """
     host, port = ep
     return (socket.gethostbyname(host), int(port))
+
+def get_contract_code_from_notepad():
+    # Create a temporary file with a .py extension
+    with tempfile.NamedTemporaryFile(suffix=".py", delete=False, mode='w+', encoding='utf-8') as tmp_file:
+        temp_filename = tmp_file.name
+        tmp_file.write("# Write your smart contract function here.\n")
+        tmp_file.write("def contract_logic(parameter1, parameter2, parameter3, state):\n")
+        tmp_file.write("    # your code here\n")
+        tmp_file.write("    return state, 'some message'\n")
+    
+    # Open it in Notepad (waits until closed)
+    subprocess.call(["notepad.exe", temp_filename])
+
+    # Read the edited code
+    with open(temp_filename, 'r', encoding='utf-8') as f:
+        contract_code = f.read()
+
+    # Optional: remove the temp file
+    os.remove(temp_filename)
+
+    return contract_code
 
 class Peer:
     def __init__(self, host, port, name):
@@ -595,7 +620,15 @@ class Peer:
                 )
 
                 if rec == "deploy":
-                    pass
+                    contract_code = get_contract_code_from_notepad()
+                    gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
+                    amount = gas_used * GAS_PRICE
+                    payload = [contract_code, amount]
+
+                    if amount<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                        await self.create_and_broadcast_tx(rec, payload)
+                    else:
+                        print("Insufficient Account Balance")
                 elif rec == "invoke":
                     pass
                 else:

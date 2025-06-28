@@ -16,6 +16,7 @@ import os
 import tempfile
 import subprocess
 import hashlib
+import ast
 
 MAX_CONNECTIONS = 8
 GAS_PRICE = 0.001 # coin per gas unit
@@ -655,7 +656,11 @@ class Peer:
                         arg = await loop.run_in_executor(None, input, f"Enter argument {arg_number} (or \\q to finish): ")
                         if arg.strip() == "\\q":
                             break
-                        args.append(arg)
+                        try:
+                            parsed_arg = ast.literal_eval(arg)
+                        except Exception:
+                            parsed_arg = arg
+                        args.append(parsed_arg)
                         arg_number += 1
 
                     state = self.get_contract_state(contract_id)

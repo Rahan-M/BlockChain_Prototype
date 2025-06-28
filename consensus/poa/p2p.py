@@ -103,7 +103,7 @@ class Peer:
             I'll explain the handshake in README.md
         """
 
-        self.mem_pool: Set[Transaction]=set()
+        self.mem_pool: List[Transaction]=list()
 
         self.name_to_public_key_dict: Dict[str, str]={}
         self.node_id_to_name_dict: Dict[str, str]={}
@@ -435,7 +435,7 @@ class Peer:
             print("\n")
 
             async with self.mem_pool_condition:
-                self.mem_pool.add(transaction)
+                self.mem_pool.append(transaction)
                 # self.mem_pool_condition.notify_all()
             await self.broadcast_message(msg)
 
@@ -455,9 +455,9 @@ class Peer:
                 print("\n\n Block Appended \n\n")
                 
                 async with self.mem_pool_condition:
-                    for transaction in list(self.mem_pool):
+                    for transaction in self.mem_pool:
                         if newBlock.transaction_exists_in_block(transaction):
-                            self.mem_pool.discard(transaction)
+                            self.mem_pool.remove(transaction)
 
                 await self.broadcast_message(msg)
                 self.round_task.cancel()
@@ -587,7 +587,7 @@ class Peer:
             return
         
         async with self.mem_pool_condition:
-                self.mem_pool.add(transaction)
+                self.mem_pool.append(transaction)
                 # self.mem_pool_condition.notify_all()
 
         print("Transaction Created", transaction)
@@ -635,7 +635,7 @@ class Peer:
                     amount = gas_used * GAS_PRICE
                     payload = [contract_code, amount]
 
-                    if amount<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                    if amount<=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool):
                         await self.create_and_broadcast_tx(rec, payload)
                     else:
                         print("Insufficient Account Balance")
@@ -667,7 +667,7 @@ class Peer:
 
                     payload = [contract_id, func_name, args, state, amount]
 
-                    if amount<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                    if amount<=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool):
                         await self.create_and_broadcast_tx(rec, payload)
                     else:
                         print("Insufficient Account Balance")
@@ -686,13 +686,13 @@ class Peer:
                         print("Amount must be a number")
                         continue
 
-                    if amt<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                    if amt<=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool):
                         await self.create_and_broadcast_tx(receiver_public_key, amt)
                     else:
                         print("Insufficient Account Balance")
 
             elif ch==2:
-                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)))
+                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool))
             elif ch==3:
                 i=0
                 # We print all the blocks
@@ -701,7 +701,7 @@ class Peer:
                     i+=1            
             elif ch==4:
                 i=0
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
             elif ch==5:
@@ -910,7 +910,7 @@ class Peer:
                             transaction_list=[]
                             for transaction in list(self.mem_pool):
                                 if Chain.instance.transaction_exists_in_chain(transaction):
-                                    self.mem_pool.discard(transaction)
+                                    self.mem_pool.remove(transaction)
                                     continue
                                 else:
                                     transaction_list.append(transaction)
@@ -933,7 +933,7 @@ class Peer:
 
                                     for transaction in list(self.mem_pool):
                                         if newBlock.transaction_exists_in_block(transaction):
-                                            self.mem_pool.discard(transaction)     
+                                            self.mem_pool.remove(transaction)     
 
                                     pkt={
                                         "type":"new_block",

@@ -594,6 +594,13 @@ class Peer:
         print("\n")
         await self.broadcast_message(pkt)
 
+    def get_contract_state(self, contract_id):
+        for block in reversed(Chain.instance.chain):
+            for transaction in reversed(block.transactions):
+                if transaction.receiver == "invoke" and transaction.payload[0] == contract_id:
+                    return transaction.payload[3]
+        return []
+
     async def user_input_handler(self):
         """
             A function to constantly take input from the user 

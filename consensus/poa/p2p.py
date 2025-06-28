@@ -621,6 +621,9 @@ class Peer:
 
                 if rec == "deploy":
                     contract_code = get_contract_code_from_notepad()
+                    if not contract_code:
+                        print("Contract code field is empty")
+                        continue
                     gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
                     amount = gas_used * GAS_PRICE
                     payload = [contract_code, amount]

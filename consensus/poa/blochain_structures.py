@@ -204,7 +204,7 @@ class Chain:
                     else:
                         bal-=transaction.payload
                 elif transaction.receiver==publicKey:
-                    bal+=transaction.amount
+                    bal+=transaction.payload
             if Chain.instance.chain[i].miner_public_key==publicKey:
                 bal+=6 #Miner reward
         

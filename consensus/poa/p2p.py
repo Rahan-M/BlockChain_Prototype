@@ -892,8 +892,9 @@ class Peer:
         for transaction in transaction_list:
             if transaction.receiver == "deploy":
                 sender = transaction.sender
-                timestamp = transaction.timestamp
-                self.deploy_contract(sender, timestamp)
+                timestamp = transaction.ts
+                code = transaction.payload[0]
+                self.deploy_contract(sender, timestamp, code)
             if transaction.receiver == "invoke":
                 payload = transaction.payload
                 response = self.run_contract(payload)
@@ -930,6 +931,7 @@ class Peer:
                                 newBlock.miner_node_id = self.node_id
                                 newBlock.miner_public_key = self.wallet.public_key
                                 newBlock.miners_list = miners_list
+                                self.deploy_and_run_contracts(transaction_list)
                                 self.sign_block(newBlock, self.wallet.private_key)
 
                                 reqd_miner_pulic_key = self.wallet.public_key
@@ -940,8 +942,6 @@ class Peer:
                                     for transaction in list(self.mem_pool):
                                         if newBlock.transaction_exists_in_block(transaction):
                                             self.mem_pool.remove(transaction)     
-
-                                    self.deploy_and_run_contracts(transaction_list)
 
                                     pkt={
                                         "type":"new_block",

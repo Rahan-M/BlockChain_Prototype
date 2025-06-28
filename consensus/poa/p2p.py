@@ -15,6 +15,7 @@ import binascii
 import os
 import tempfile
 import subprocess
+import hashlib
 
 MAX_CONNECTIONS = 8
 GAS_PRICE = 0.001 # coin per gas unit
@@ -978,6 +979,15 @@ class Peer:
             print("\nSent out chain requests...")
             for _ in range(12):
                     await asyncio.sleep(5)
+
+    def calculate_contract_id(self, sender, timestamp):
+        data = f"{sender}:{timestamp}"
+        hash_object = hashlib.sha256(data.encode('utf-8'))
+        return hash_object.hexdigest()
+        
+    def deploy_contract(self, sender, timestamp, code):
+        contract_id = self.calculate_contract_id(sender, timestamp)
+        self.contractsDB.store_contract(contract_id, code)
 
     def run_contract(self, payload):
         contract_id, func_name, args = payload[0], payload[1], payload[2]

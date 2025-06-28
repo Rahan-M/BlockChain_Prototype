@@ -663,7 +663,9 @@ class Peer:
 
                     state = self.get_contract_state(contract_id)
 
-                    amount = self.get_contract_invocation_charge()
+                    response = self.run_contract([contract_id, func_name, args])
+                    gas_used = response["gas_used"]
+                    amount = gas_used * GAS_PRICE
 
                     payload = [contract_id, func_name, args, state, amount]
 

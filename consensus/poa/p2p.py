@@ -447,11 +447,7 @@ class Peer:
             reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
             reqd_miner_pulic_key = self.get_public_key_by_node_id(reqd_miner_node_id)
             if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
-                for transaction in newBlock.transactions:
-                    if transaction.receiver == "deploy":
-                        pass
-                    if transaction.receiver == "invoke":
-                        pass
+                self.deploy_and_run_contracts(newBlock.transactions)
                 Chain.instance.chain.append(newBlock)
                 print("\n\n Block Appended \n\n")
                 
@@ -890,10 +886,14 @@ class Peer:
     def deploy_and_run_contracts(self, transaction_list):
         for transaction in transaction_list:
             if transaction.receiver == "deploy":
-                pass
+                sender = transaction.sender
+                timestamp = transaction.timestamp
+                self.deploy_contract(sender, timestamp)
             if transaction.receiver == "invoke":
                 payload = transaction.payload
-                self.run_contract(payload)
+                response = self.run_contract(payload)
+                state = response["state"]
+                transaction.payload[3] = state
 
     async def mine_blocks(self):
         try:
@@ -919,8 +919,6 @@ class Peer:
                                     transaction_list.append(transaction)
 
                             if(len(transaction_list)>0):
-                                self.deploy_and_run_contracts(transaction_list)
-
                                 print("Mining Started")
                                 print("Mining...")
                                 newBlock = Block(Chain.instance.lastBlock.hash, transaction_list)
@@ -937,6 +935,8 @@ class Peer:
                                     for transaction in list(self.mem_pool):
                                         if newBlock.transaction_exists_in_block(transaction):
                                             self.mem_pool.remove(transaction)     
+
+                                    self.deploy_and_run_contracts(transaction_list)
 
                                     pkt={
                                         "type":"new_block",

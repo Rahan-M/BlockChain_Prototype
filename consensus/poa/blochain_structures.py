@@ -180,7 +180,6 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i):
     # transactions are added to the chain
     return bal
 
-
 class Chain:
     instance =None #Class Variable
 

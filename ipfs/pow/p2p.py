@@ -301,6 +301,8 @@ class Peer:
             await self.broadcast_message(msg)
 
         elif t=="chain_request":
+            if not self.chain:
+                return
             pkt={
                 "type":"chain",
                 "id":str(uuid.uuid4()),

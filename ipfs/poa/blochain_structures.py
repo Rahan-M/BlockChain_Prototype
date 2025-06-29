@@ -1,4 +1,4 @@
-import json, hashlib, uuid
+import json, hashlib, uuid, base64
 from typing import List, Dict
 from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -8,11 +8,13 @@ import binascii
 
 
 class Transaction:
-    def __init__(self, amount: float, sender: str, receiver: str, id=None):
+    def __init__(self, amount: float, sender: str, receiver: str, id=None, ts=None):
         self.id=id or str(uuid.uuid4())
         self.amount: float=amount
         self.sender: str=sender   # Public Key
         self.receiver: str=receiver   # Public Key
+        self.sign: bytes=None
+        self.ts=ts or datetime.now().timestamp()
 
 
     def to_dict(self):
@@ -20,7 +22,8 @@ class Transaction:
             "id":self.id,
             "amount":self.amount,
             "sender":self.sender,
-            "receiver":self.receiver
+            "receiver":self.receiver,
+            "ts":self.ts
         }
         return dict
     
@@ -37,12 +40,37 @@ class Transaction:
 
     def __str__(self):
         return json.dumps(self.to_dict())
-    
+
+    def is_valid_signature(self):
+        try:
+            # Load public key from PEM string
+            public_key = serialization.load_pem_public_key(
+                self.sender.encode(),
+                backend=default_backend()
+            )
+
+            message = str(self).encode()
+
+            public_key.verify(
+                self.sign,
+                message,
+                padding.PKCS1v15(),
+                hashes.SHA256()
+            )
+            return True
+        except Exception as e:
+            print(f"Invalid block signature: {e}")
+            return False
+
 def txs_to_json_digestable_form(transactions: List[Transaction]):
     l=[]
     for i in range(len(transactions)):
-        l.append(transactions[i].to_dict())
+        tx_dict=transactions[i].to_dict()
+        if(transactions[i].sender!="Genesis"):
+            tx_dict["sign"]=base64.b64encode(transactions[i].sign).decode()
+        l.append(tx_dict)
     return l
+
 
 class Block:
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, id=None):
@@ -123,6 +151,45 @@ class Block:
             print(f"Invalid block signature: {e}")
             return False
 
+def valid_chain_length(i):
+    valid_chain_len=i # because we use zero indexing4
+
+    if valid_chain_len>=50:
+        valid_chain_len-=10
+    elif valid_chain_len>=25:
+        valid_chain_len-=5
+    elif valid_chain_len>=10:
+        valid_chain_len-=3
+    elif valid_chain_len>=5:
+        valid_chain_len-=2
+    return valid_chain_len  
+
+def calc_balance_block_list(block_list:List[Block], publicKey, i):
+    bal=0
+    valid_chain_len=valid_chain_length(i)
+
+    for i in range(valid_chain_len):
+        if block_list[i].slash_creator and block_list[i].creator==publicKey:
+            bal-=block_list[i].staked_amt
+        if not block_list[i].is_valid:
+            continue
+        
+        for transaction in (block_list[i]).transactions:
+            if transaction.sender==publicKey:   
+                bal-=transaction.amount
+            elif transaction.receiver==publicKey:
+                bal+=transaction.amount
+                
+        if block_list[i].miner_public_key==publicKey:
+            bal+=6 #Miner reward
+
+    # Since these transactions are not part of the chain we don't add
+    # the money they gained yet because it could be invalid, but we subtract
+    # the amount they have given to prevent double spending before the
+    # transactions are added to the chain
+    return bal
+
+
 class Chain:
     instance =None #Class Variable
 
@@ -192,10 +259,29 @@ class Chain:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
                 return False
+            
+            sign_bytes=transaction.sign
+            try:
+                public_key=serialization.load_pem_public_key(transaction.sender.encode())
+                public_key.verify(
+                    sign_bytes,
+                    str(transaction).encode(),
+                    padding.PSS(
+                        mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH
+                    ),
+                    hashes.SHA256()
+                )
+            except:
+                print("\nInvalid Signature On Transaction\n")
+                return False
+
         if block.miner_public_key != reqd_miner_public_key:
             print("Invalid miner public key")
             return False
+        
         if not block.is_valid_signature():
+            print("\nInvalid Signature On Block\n")
             return False
 
         return True
@@ -247,18 +333,26 @@ class Wallet:
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         ).decode()
 
-# Chain()
+def isvalidChain(blockList:List[Block]):
+    for i in range(len(blockList)):
+        currBlock=blockList[i]
+        
+        if(not currBlock.is_valid_signature()):
+            return False
+        
+        if(i<=0):
+            continue
 
-# rahan=Wallet()
-# jefin=Wallet()
-# elias=Wallet()
 
-# tx1=rahan.sendMoney(50, jefin.public_key)
-# tx2=jefin.sendMoney(30, elias.public_key)
-# tx3=elias.sendMoney(60, rahan.public_key)
+        for transaction in blockList[i].transactions:
+            sign=transaction.sign
+            if not transaction.is_valid_signature():
+                return False
 
-# print(tx1)
-# print("\n\n")
-# print(tranx)
+            if(calc_balance_block_list(blockList, transaction.sender, i)<transaction.amount):
+                return False
+               
+        if (blockList[i].prevHash!=blockList[i-1].hash):
+            return False
 
-# print(tx1==tranx)
+    return True

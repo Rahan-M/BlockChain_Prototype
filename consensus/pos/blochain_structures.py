@@ -244,6 +244,7 @@ class Chain:
             print("Hash Problem")
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
+        
         for transaction in block.transactions:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
@@ -255,12 +256,6 @@ class Chain:
             except:
                 print("\nFake Transactions\n")
                 return False
-        #Verify Pow:
-        # if not block.hash.startswith("00000"):
-        #     print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
-
-        #     return False
-
         return True
  
     def calc_balance(self, publicKey, pending_transactions:List[Transaction]=None, current_stakes:List[Stake]=None):
@@ -344,7 +339,7 @@ def isvalidChain(blockList:List[Block]):
             vk.verify(currBlock.vrf_proof, currBlock.seed.encode())
         except BadSignatureError:
             print("\nInvalid signature on vrf_proof\n")
-            return False
+            return FalseblockList
         
         if(str(currBlock.seed)!=str(blockList[valid_chain_length(i)-1].hash)):
             print("\nInvalid Seed\n")

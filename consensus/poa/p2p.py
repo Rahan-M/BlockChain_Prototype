@@ -666,6 +666,9 @@ class Peer:
                     state = self.get_contract_state(contract_id)
 
                     response = self.run_contract([contract_id, func_name, args])
+                    if(response["error"] != None):
+                        print("Error: ", response["error"])
+                        continue
                     gas_used = response["gas_used"]
                     amount = gas_used * GAS_PRICE
 

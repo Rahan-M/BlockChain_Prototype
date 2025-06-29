@@ -597,7 +597,7 @@ class Peer:
             for transaction in reversed(block.transactions):
                 if transaction.receiver == "invoke" and transaction.payload[0] == contract_id:
                     return transaction.payload[3]
-        return []
+        return {}
 
     async def user_input_handler(self):
         """
@@ -900,6 +900,8 @@ class Peer:
                 response = self.run_contract(payload)
                 state = response["state"]
                 transaction.payload[3] = state
+                msg = response["msg"]
+                print(msg)
 
     async def mine_blocks(self):
         try:

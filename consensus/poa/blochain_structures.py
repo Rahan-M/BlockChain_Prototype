@@ -29,7 +29,6 @@ class Transaction:
     def __eq__(self, other):
         return(
             self.id==other.id and
-            self.payload==other.payload and
             self.sender==other.sender and
             self.receiver==other.receiver and
             self.ts==other.ts

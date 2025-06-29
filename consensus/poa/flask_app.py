@@ -45,7 +45,8 @@ def create_flask_app(peer):
                 ("client_connections", list(ws.remote_address[1] for ws in peer.client_connections)),
                 ("server_connections", list(ws.remote_address[1] for ws in peer.server_connections)),
                 ("mempool", txs_to_json_digestable_form(list(peer.mem_pool))),
-                ("chain", chain_list)
+                ("chain", chain_list),
+                ("contracts", peer.contractsDB.contracts),
             ])),
             mimetype='application/json'
         )

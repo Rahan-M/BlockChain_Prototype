@@ -170,12 +170,10 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i):
                 bal-=transaction.amount
             elif transaction.receiver==publicKey:
                 bal+=transaction.amount
-        if block_list[i].creator==publicKey:
+                
+        if block_list[i].miner_public_key==publicKey:
             bal+=6 #Miner reward
-    
-    for stake in block_list[i].stakers:
-        if stake.staker==publicKey:
-            bal-=stake.amt
+
     # Since these transactions are not part of the chain we don't add
     # the money they gained yet because it could be invalid, but we subtract
     # the amount they have given to prevent double spending before the

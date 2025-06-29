@@ -1,4 +1,4 @@
-import json, hashlib, uuid, base64
+import json, hashlib, uuid, base64, binascii
 from typing import List
 from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -39,7 +39,7 @@ class Transaction:
 
     def __str__(self):
         return json.dumps(self.to_dict())
-    
+        
 def txs_to_json_digestable_form(transactions: List[Transaction]):
     l=[]
     for i in range(len(transactions)):

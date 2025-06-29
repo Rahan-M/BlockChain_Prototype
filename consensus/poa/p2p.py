@@ -1,4 +1,4 @@
-import asyncio, websockets, traceback
+import asyncio, websockets
 import argparse, json, uuid, base64
 from typing import Set, Dict, List, Tuple
 import copy

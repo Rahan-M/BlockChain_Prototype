@@ -339,7 +339,7 @@ def isvalidChain(blockList:List[Block]):
             vk.verify(currBlock.vrf_proof, currBlock.seed.encode())
         except BadSignatureError:
             print("\nInvalid signature on vrf_proof\n")
-            return FalseblockList
+            return False
         
         if(str(currBlock.seed)!=str(blockList[valid_chain_length(i)-1].hash)):
             print("\nInvalid Seed\n")

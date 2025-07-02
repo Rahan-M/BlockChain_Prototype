@@ -1,10 +1,10 @@
-import asyncio, websockets, traceback
+import asyncio, websockets
 import argparse, json, uuid, base64
 from typing import Set, Dict, List, Tuple
 import copy
 import threading
 import socket
-from blochain_structures import Transaction, Block, Wallet, Chain
+from blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from contracts_db import SmartContractDatabase
 from secure_executor import SecureContractExecutor
 from flask_app import create_flask_app, run_flask_app
@@ -200,6 +200,8 @@ class Peer:
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
             transaction=Transaction(transaction_dict["payload"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["timestamp"])
+            if(transaction.sender!="Genesis"):
+                transaction.sign=base64.b64decode(transaction_dict["sign"])
             transactions.append(transaction)
         
         newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_id)
@@ -412,7 +414,6 @@ class Peer:
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
-            is_valid=True
             try:
                 public_key=serialization.load_pem_public_key(tx['sender'].encode())
                 public_key.verify(
@@ -425,12 +426,10 @@ class Peer:
                     hashes.SHA256()
                 )
             except:
-                is_valid=False
-
-
-            if not is_valid:
                 print("Invalid Signature")
                 return
+            
+            transaction.sign=sign_bytes
             
             print("\nValid Transaction")
             print(f"\n{msg["type"]}: {msg["transaction"]}")
@@ -447,34 +446,40 @@ class Peer:
             miners_list = self.get_current_miners_list()
             reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
             reqd_miner_pulic_key = self.get_public_key_by_node_id(reqd_miner_node_id)
-            if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
-                self.deploy_and_run_contracts(newBlock.transactions)
-                Chain.instance.chain.append(newBlock)
-                print("\n\n Block Appended \n\n")
-                
-                async with self.mem_pool_condition:
-                    for transaction in self.mem_pool:
-                        if newBlock.transaction_exists_in_block(transaction):
-                            self.mem_pool.remove(transaction)
 
-                await self.broadcast_message(msg)
-                self.round_task.cancel()
-                await self.round_task
-                self.round_task = asyncio.create_task(self.round_calculator())
+            if not Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
+                print("\nInvalid Block\n")
+                return
+            
+            self.deploy_and_run_contracts(newBlock.transactions)
+            Chain.instance.chain.append(newBlock)
+            print("\n\n Block Appended \n\n")
+            
+            async with self.mem_pool_condition:
+                for transaction in self.mem_pool:
+                    if newBlock.transaction_exists_in_block(transaction):
+                        self.mem_pool.remove(transaction)
 
-                while self.miners:
-                    if self.miners[0][1] < len(Chain.instance.chain):
-                        self.miners.pop(0)
-                    else:
-                        break
+            await self.broadcast_message(msg)
+            self.round_task.cancel()
+            await self.round_task
+            self.round_task = asyncio.create_task(self.round_calculator())
 
-                new_miners_list = self.get_current_miners_list()
-                if self.node_id in new_miners_list:
-                    await self.update_role(True)
+            while self.miners:
+                if self.miners[0][1] < len(Chain.instance.chain):
+                    self.miners.pop(0)
                 else:
-                    await self.update_role(False)
+                    break
+
+            new_miners_list = self.get_current_miners_list()
+            if self.node_id in new_miners_list:
+                await self.update_role(True)
+            else:
+                await self.update_role(False)
 
         elif t=="chain_request":
+            if not self.chain:
+                return
             pkt={
                 "type":"chain",
                 "id":str(uuid.uuid4()),
@@ -491,6 +496,9 @@ class Peer:
                 block=self.block_dict_to_block(block_dict)
                 block_list.append(block)
 
+            if not isvalidChain(block_list):
+                print("\nInvalid Chain\n")
+                return
             #If chain doesn't already exist we assign this as the chain
             if not self.chain:
                 self.chain=Chain(blockList=block_list)
@@ -584,6 +592,7 @@ class Peer:
         if Chain.instance.transaction_exists_in_chain(transaction):
             return
         
+        transaction.sign=signature
         async with self.mem_pool_condition:
                 self.mem_pool.append(transaction)
                 # self.mem_pool_condition.notify_all()
@@ -882,9 +891,9 @@ class Peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
 
-    def sign_block(self, block, private_key):
+    def sign_block(self, block: Block):
         message = block.get_message_to_sign()
-        signature = private_key.sign(
+        signature = self.wallet.private_key.sign(
             message,
             padding.PKCS1v15(),
             hashes.SHA256()
@@ -922,7 +931,7 @@ class Peer:
                         # We check the about condition in lambda every time we get notified after a new transaction has been added
                         if(len(self.mem_pool)>0):
                             transaction_list=[]
-                            for transaction in list(self.mem_pool):
+                            for transaction in self.mem_pool:
                                 if Chain.instance.transaction_exists_in_chain(transaction):
                                     self.mem_pool.remove(transaction)
                                     continue
@@ -937,39 +946,44 @@ class Peer:
                                 newBlock.miner_public_key = self.wallet.public_key
                                 newBlock.miners_list = miners_list
                                 self.deploy_and_run_contracts(transaction_list)
-                                self.sign_block(newBlock, self.wallet.private_key)
+                                self.sign_block(newBlock)
 
                                 reqd_miner_pulic_key = self.wallet.public_key
-                                if Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
-                                    Chain.instance.chain.append(newBlock)
-                                    print("\nBlock Appended \n")
+                                if not Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
+                                    print("\nInvalid Block\n")
+                                    return
+                        
+                                Chain.instance.chain.append(newBlock)
+                                print("\nBlock Appended \n")
 
-                                    for transaction in list(self.mem_pool):
-                                        if newBlock.transaction_exists_in_block(transaction):
-                                            self.mem_pool.remove(transaction)     
+                                for transaction in self.mem_pool:
+                                    if newBlock.transaction_exists_in_block(transaction):
+                                        self.mem_pool.remove(transaction)     
 
-                                    pkt={
-                                        "type":"new_block",
-                                        "id":str(uuid.uuid4()),
-                                        "block":newBlock.to_dict()
-                                    }
-                                    self.seen_message_ids.add(pkt["id"])
-                                    await self.broadcast_message(pkt)
-                                    self.round_task.cancel()
-                                    await self.round_task
-                                    self.round_task = asyncio.create_task(self.round_calculator())
-                                    while self.miners:
-                                        if self.miners[0][1] < len(Chain.instance.chain):
-                                            self.miners.pop(0)
-                                        else:
-                                            break
-                                    new_miners_list = self.get_current_miners_list()
-                                    if self.node_id in new_miners_list:
-                                        await self.update_role(True)
+                                pkt={
+                                    "type":"new_block",
+                                    "id":str(uuid.uuid4()),
+                                    "block":newBlock.to_dict()
+                                }
+
+                                self.seen_message_ids.add(pkt["id"])
+                                await self.broadcast_message(pkt)
+                                self.round_task.cancel()
+                                await self.round_task
+                                self.round_task = asyncio.create_task(self.round_calculator())
+
+                                while self.miners:
+                                    if self.miners[0][1] < len(Chain.instance.chain):
+                                        self.miners.pop(0)
                                     else:
-                                        await self.update_role(False)
+                                        break
+
+                                new_miners_list = self.get_current_miners_list()
+                                if self.node_id in new_miners_list:
+                                    await self.update_role(True)
                                 else:
-                                    print("\n Invalid Block \n")
+                                    await self.update_role(False)
+
         except asyncio.CancelledError:
             print("Miner task stopped cleanly")
             raise
@@ -1026,7 +1040,7 @@ class Peer:
             Chain.instance.chain[0].miner_node_id = self.node_id
             Chain.instance.chain[0].miner_public_key = self.wallet.public_key
             Chain.instance.chain[0].miners_list = [self.node_id]
-            self.sign_block(Chain.instance.chain[0], self.wallet.private_key)
+            self.sign_block(Chain.instance.chain[0])
             self.admin_id = self.node_id
             await self.update_role(True)
 

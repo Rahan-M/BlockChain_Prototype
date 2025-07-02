@@ -2,16 +2,28 @@ from flask import Flask, Response
 from collections import OrderedDict
 import json
 from blochain_structures import Chain, txs_to_json_digestable_form
-
+from flask_cors import CORS
 
 def create_flask_app(peer):
     app = Flask(__name__)
+    CORS(app)
+    
+    @app.route("/")
+    def say_hello():
+        return "<h1>Hello</h1>"
 
     @app.route("/status", methods=["GET"])
     def get_status():
         chain_list = []
         for block in Chain.instance.chain:
-            chain_list.append(block.to_dict())
+            chain_list.append({
+                "id": block.id,
+                "prevHash": block.prevHash,
+                "transactions": txs_to_json_digestable_form(block.transactions),
+                "ts": block.ts,
+                "nonce": block.nonce,
+                "hash": block.hash
+            })
         outbound_peers_list = []
         for outbound_peer in peer.outbound_peers:
             outbound_peers_list.append({
@@ -32,6 +44,7 @@ def create_flask_app(peer):
             ])),
             mimetype='application/json'
         )
+
     
     return app
     

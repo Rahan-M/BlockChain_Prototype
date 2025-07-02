@@ -11,7 +11,14 @@ def create_flask_app(peer):
     def get_status():
         chain_list = []
         for block in Chain.instance.chain:
-            chain_list.append(block.to_dict())
+            chain_list.append({
+                "id": block.id,
+                "prevHash": block.prevHash,
+                "transactions": txs_to_json_digestable_form(block.transactions),
+                "ts": block.ts,
+                "nonce": block.nonce,
+                "hash": block.hash
+            })
         outbound_peers_list = []
         for outbound_peer in peer.outbound_peers:
             outbound_peers_list.append({

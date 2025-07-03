@@ -410,7 +410,7 @@ class Peer:
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if(amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool))):
+            if(amount>Chain.instance.calc_balance(transaction.sender, self.mem_pool)):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 

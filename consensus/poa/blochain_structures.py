@@ -143,33 +143,23 @@ class Block:
             return False
 
 def valid_chain_length(i):
-    valid_chain_len=i # because we use zero indexing4
+    valid_chain_len=i # because we use zero indexing
 
-    if valid_chain_len>=50:
-        valid_chain_len-=10
-    elif valid_chain_len>=25:
-        valid_chain_len-=5
-    elif valid_chain_len>=10:
-        valid_chain_len-=3
-    elif valid_chain_len>=5:
-        valid_chain_len-=2
-    return valid_chain_len  
+    return valid_chain_len
 
 def calc_balance_block_list(block_list:List[Block], publicKey, i):
     bal=0
     valid_chain_len=valid_chain_length(i)
 
     for i in range(valid_chain_len):
-        if block_list[i].slash_creator and block_list[i].creator==publicKey:
-            bal-=block_list[i].staked_amt
-        if not block_list[i].is_valid:
-            continue
-        
         for transaction in (block_list[i]).transactions:
-            if transaction.sender==publicKey:   
-                bal-=transaction.amount
+            if transaction.sender==publicKey:
+                if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                    bal-=transaction.payload[-1]
+                else:
+                    bal-=transaction.payload
             elif transaction.receiver==publicKey:
-                bal+=transaction.amount
+                bal+=transaction.payload
                 
         if block_list[i].miner_public_key==publicKey:
             bal+=6 #Miner reward
@@ -335,7 +325,7 @@ def isvalidChain(blockList:List[Block]):
             if not transaction.is_valid_signature():
                 return False
 
-            if(calc_balance_block_list(blockList, transaction.sender, i)<transaction.amount):
+            if(calc_balance_block_list(blockList, transaction.sender, i) < transaction.amount):
                 return False
                
         if (blockList[i].prevHash!=blockList[i-1].hash):

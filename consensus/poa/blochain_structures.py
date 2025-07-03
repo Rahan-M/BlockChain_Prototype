@@ -6,33 +6,33 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 import binascii
 
+GAS_PRICE = 0.001 # coin per gas unit
 
 class Transaction:
-    def __init__(self, amount: float, sender: str, receiver: str, id=None, ts=None):
+    def __init__(self, payload, sender: str, receiver: str, id=None, ts=None):
         self.id=id or str(uuid.uuid4())
-        self.amount: float=amount
+        self.payload=payload # amount or [code, amount] or [contract id, function_name, arguments, state, amount]
         self.sender: str=sender   # Public Key
-        self.receiver: str=receiver   # Public Key
+        self.receiver: str=receiver   # Public Key or "deploy" or "invoke"
         self.sign: bytes=None
         self.ts=ts or datetime.now().timestamp()
-
 
     def to_dict(self):
         dict={
             "id":self.id,
-            "amount":self.amount,
+            "payload":self.payload,
             "sender":self.sender,
             "receiver":self.receiver,
-            "ts":self.ts
+            "timestamp":self.ts,
         }
         return dict
     
     def __eq__(self, other):
         return(
             self.id==other.id and
-            self.amount==other.amount and
             self.sender==other.sender and
-            self.receiver==other.receiver
+            self.receiver==other.receiver and
+            self.ts==other.ts
         )
     
     def __hash__(self):
@@ -54,12 +54,15 @@ class Transaction:
             public_key.verify(
                 self.sign,
                 message,
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
                 hashes.SHA256()
             )
             return True
         except Exception as e:
-            print(f"Invalid block signature: {e}")
+            print(f"Invalid transaction signature: {e}")
             return False
     
 def txs_to_json_digestable_form(transactions: List[Transaction]):
@@ -143,33 +146,23 @@ class Block:
             return False
 
 def valid_chain_length(i):
-    valid_chain_len=i # because we use zero indexing4
+    valid_chain_len=i # because we use zero indexing
 
-    if valid_chain_len>=50:
-        valid_chain_len-=10
-    elif valid_chain_len>=25:
-        valid_chain_len-=5
-    elif valid_chain_len>=10:
-        valid_chain_len-=3
-    elif valid_chain_len>=5:
-        valid_chain_len-=2
-    return valid_chain_len  
+    return valid_chain_len
 
 def calc_balance_block_list(block_list:List[Block], publicKey, i):
     bal=0
     valid_chain_len=valid_chain_length(i)
 
     for i in range(valid_chain_len):
-        if block_list[i].slash_creator and block_list[i].creator==publicKey:
-            bal-=block_list[i].staked_amt
-        if not block_list[i].is_valid:
-            continue
-        
         for transaction in (block_list[i]).transactions:
-            if transaction.sender==publicKey:   
-                bal-=transaction.amount
+            if transaction.sender==publicKey:
+                if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                    bal-=transaction.payload[-1]
+                else:
+                    bal-=transaction.payload
             elif transaction.receiver==publicKey:
-                bal+=transaction.amount
+                bal+=transaction.payload
                 
         if block_list[i].miner_public_key==publicKey:
             bal+=6 #Miner reward
@@ -275,10 +268,13 @@ class Chain:
 
         for i in range(valid_chain_len):
             for transaction in (Chain.instance.chain[i]).transactions:
-                if transaction.sender==publicKey:   
-                    bal-=transaction.amount
+                if transaction.sender==publicKey:
+                    if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                        bal-=transaction.payload[-1]
+                    else:
+                        bal-=transaction.payload
                 elif transaction.receiver==publicKey:
-                    bal+=transaction.amount
+                    bal+=transaction.payload
             if Chain.instance.chain[i].miner_public_key==publicKey:
                 bal+=6 #Miner reward
         
@@ -289,7 +285,10 @@ class Chain:
         if pending_transactions:
             for transaction in pending_transactions:
                 if transaction.sender==publicKey:
-                    bal-=transaction.amount
+                    if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                        bal-=transaction.payload[-1]
+                    else:
+                        bal-=transaction.payload
         return bal
 
 class Wallet:
@@ -329,7 +328,12 @@ def isvalidChain(blockList:List[Block]):
             if not transaction.is_valid_signature():
                 return False
 
-            if(calc_balance_block_list(blockList, transaction.sender, i)<transaction.amount):
+            amount = 0
+            if(transaction.receiver == "deploy" or transaction.receiver == "invoke"):
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
                 return False
                
         if (blockList[i].prevHash!=blockList[i-1].hash):

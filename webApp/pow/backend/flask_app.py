@@ -1,8 +1,8 @@
 from flask import Flask, Response
+from flask_cors import CORS
 from collections import OrderedDict
 import json
-from blochain_structures import Chain, txs_to_json_digestable_form
-from flask_cors import CORS
+from blochain_structures import Chain, Wallet, txs_to_json_digestable_form
 
 def create_flask_app(peer):
     app = Flask(__name__)
@@ -11,7 +11,18 @@ def create_flask_app(peer):
     @app.route("/")
     def say_hello():
         return "<h1>Hello</h1>"
-
+   
+    @app.route("/create_keys", methods=["GET"])
+    def get_status():
+        wallet=Wallet()
+        return Response(
+            json.dumps(OrderedDict([
+                ("sk", wallet.private_key_pem),
+                ("vk",wallet.public_key)
+            ])),
+            mimetype='application/json'
+        )
+    
     @app.route("/status", methods=["GET"])
     def get_status():
         chain_list = []
@@ -47,6 +58,7 @@ def create_flask_app(peer):
 
     
     return app
-    
-def run_flask_app(app, port):
-    app.run(host="0.0.0.0", port=port + 20)
+
+app=create_flask_app()
+app.run(host="0.0.0.0", port=5020)
+

@@ -29,12 +29,13 @@ function App() {
 
   const displayKeys=()=>{
     return(
-      <div className="keys">
+      <div className="keys text-white w-[80vw] bg-primary p-10 rounded-2xl">
         <div className="vk">
-          {vk}
+          Verifying Key = {vk}
         </div>
+        <br/><br/><br/>
         <div className="sk">
-          {sk}
+          Secret Key = {sk}
         </div>
       </div>
     )

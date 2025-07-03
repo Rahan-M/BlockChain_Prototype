@@ -718,8 +718,7 @@ class Peer:
                             for hash in list(self.file_hashes.keys()):
                                 if newBlock.cid_exists_in_block(hash):
                                     self.file_hashes.pop(hash, None)
-                                    
-                            
+                                                               
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace
@@ -749,10 +748,6 @@ class Peer:
             self.chain=Chain(publicKey=self.wallet.public_key)
 
         # Create flask app
-        flask_app = create_flask_app(self)
-        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
-        flask_thread.start()
-        inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
 
@@ -761,8 +756,6 @@ class Peer:
 
         self.init_repo()
         self.configure_ports()
-
-        await inp_task
 
         disc_task.cancel()
         consensus_task.cancel()

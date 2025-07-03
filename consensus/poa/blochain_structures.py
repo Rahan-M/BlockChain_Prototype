@@ -54,12 +54,15 @@ class Transaction:
             public_key.verify(
                 self.sign,
                 message,
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
                 hashes.SHA256()
             )
             return True
         except Exception as e:
-            print(f"Invalid block signature: {e}")
+            print(f"Invalid transaction signature: {e}")
             return False
     
 def txs_to_json_digestable_form(transactions: List[Transaction]):
@@ -325,7 +328,12 @@ def isvalidChain(blockList:List[Block]):
             if not transaction.is_valid_signature():
                 return False
 
-            if(calc_balance_block_list(blockList, transaction.sender, i) < transaction.amount):
+            amount = 0
+            if(transaction.receiver == "deploy" or transaction.receiver == "invoke"):
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
                 return False
                
         if (blockList[i].prevHash!=blockList[i-1].hash):

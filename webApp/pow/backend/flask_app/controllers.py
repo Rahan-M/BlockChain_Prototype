@@ -1,39 +1,30 @@
+# flask_app/controllers.py
 from flask import request, jsonify
-from p2p import Peer
 import asyncio
 
-running_peer_tasks={}
-async def _start_peer_in_background(host, port, name, miner):
-    peer_instance = Peer(host, port, name, miner)
-    try:
-        task = asyncio.create_task(peer_instance.start())
-        running_peer_tasks[name]["task"] = task # Store the task
-        await task # This will keep this async function running until the peer stops
-    except asyncio.CancelledError:
-        print(f"Peer task for '{name}' was cancelled.")
-        peer_instance.stop() # Signal the peer to stop its internal loop
-    except Exception as e:
-        print(f"Error running peer '{name}': {e}")
-    finally:
-        if name in running_peer_tasks:
-            del running_peer_tasks[name] # Clean up
-        print(f"Peer '{name}' background task finished/cleaned up.")
+# Import running_peer_tasks and _start_peer_in_background from the application's __init__.py
+from .__init__ import running_peer_tasks, _start_peer_in_background
+
+# Assuming Blueprint is correctly imported and defined in routes.py
+# If you define bp directly here, make sure to import it correctly in routes.py
+# from flask import Blueprint
+# bp = Blueprint('main', __name__) # If you put blueprint creation here
+
+# However, based on your routes.py, the blueprint 'chain_bp' is defined there.
+# This file defines the *logic* for the routes, not the blueprint itself.
 
 async def start_new_blockchain():
-    if(request.is_json):
+    if request.is_json:
         data = request.get_json()
-        # Or simply: data = request.json
         name = data.get('name')
         port = data.get('port')
         host = data.get('host')
         miner = data.get('miner')
 
-        if name in running_peer_tasks and running_peer_tasks[name]["task"] and not running_peer_tasks[name]["task"].done():
+        if name in running_peer_tasks and running_peer_tasks[name].get("task") and not running_peer_tasks[name]["task"].done():
             return jsonify({"error": f"Peer '{name}' is already running."}, 409)
 
-
-        # Create the background task for the peer.
-        # We don't await it here, so the API call returns immediately.
+        # Use the _start_peer_in_background function imported from __init__.py
         asyncio.create_task(_start_peer_in_background(host, port, name, miner))
 
         return jsonify({"message": f"Peer '{name}' is being started in the background on {host}:{port}"})

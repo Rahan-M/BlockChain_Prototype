@@ -5,8 +5,8 @@ import os, subprocess
 from typing import Set, Dict, List, Tuple
 from blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from ipfs import addToIpfs, download_ipfs_file_subprocess
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes, serialization
+from ecdsa import VerifyingKey, BadSignatureError
+
 from pathlib import Path
 
 MAX_CONNECTIONS = 8
@@ -92,6 +92,8 @@ class Peer:
             there is no other such block currently being executed
         """
         self.mine_task=None
+        self.disc_task=None
+        self.consensus_task=None
 
     async def send_peer_info(self, websocket):
         """
@@ -233,41 +235,39 @@ class Peer:
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
+            if(tx['amount']<=0):
+                print("\nInvalid Transaction, amount<=0\n")
+                return
+            
             transaction: Transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return
             
             sign_bytes=base64.b64decode(msg["sign"])
-            #b64decode 
-            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool))):
+            #b64decode turns bytes into a string
+            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool), list(self.current_stakes))):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
             try:
-                public_key=serialization.load_pem_public_key(tx['sender'].encode())
+                public_key=VerifyingKey.from_pem(msg['sender_pem'].encode())
                 public_key.verify(
                     sign_bytes,
-                    tx_str.encode(),
-                    padding.PSS(
-                        mgf=padding.MGF1(hashes.SHA256()),
-                        salt_length=padding.PSS.MAX_LENGTH
-                    ),
-                    hashes.SHA256()
+                    tx_str.encode()
                 )
-            except:
+            except BadSignatureError as e:
                 print("Invalid Signature")
                 return
-
+            
             transaction.sign=sign_bytes
-
+            
             print("\nValid Transaction")
-            print(f"\n{msg["type"]}: {msg["transaction"]}")
+            print(f"\n{msg['type']}: {msg['transaction']}")
             print("\n")
 
-            async with self.mem_pool_condition:
+            async with self.mem_pool_lock:
                 self.mem_pool.add(transaction)
-                # self.mem_pool_condition.notify_all()
             await self.broadcast_message(msg)
 
         elif t=="new_block":
@@ -392,17 +392,14 @@ class Peer:
         """
             Function to create and broadcast transactions
         """
-        transaction=Transaction(amt, self.wallet.public_key, receiver_public_key)
+        transaction=Transaction(amt, self.wallet.public_key_pem, receiver_public_key)
         transaction_str=str(transaction)
         
         signature=self.wallet.private_key.sign(
             transaction_str.encode(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
         )
+
+        transaction.sign=signature
 
         signature_b64=base64.b64encode(signature).decode()
         # b64encode returns bytes, Decode converts bytes to string
@@ -412,18 +409,16 @@ class Peer:
             "id":str(uuid.uuid4()),
             "transaction":transaction_str,
             "sign":signature_b64,
-            "sender_pem":self.wallet.public_key # Already available as a pem string as defined in constructor
+            "sender_pem":self.wallet.public_key_pem # Already available as a pem string as defined in constructor
         }
         
         self.seen_message_ids.add(pkt["id"])
         if Chain.instance.transaction_exists_in_chain(transaction):
             return
         
-        async with self.mem_pool_condition:
+        async with self.mem_pool_lock:
                 self.mem_pool.add(transaction)
-                # self.mem_pool_condition.notify_all()
 
-        transaction.sign=signature
         print("Transaction Created", transaction)
         print("\n")
         await self.broadcast_message(pkt)
@@ -747,8 +742,8 @@ class Peer:
             self.chain=Chain(publicKey=self.wallet.public_key)
 
         # Create flask app
-        consensus_task=asyncio.create_task(self.find_longest_chain())
-        disc_task=asyncio.create_task(self.discover_peers())
+        self.consensus_task=asyncio.create_task(self.find_longest_chain())
+        self.disc_task=asyncio.create_task(self.discover_peers())
 
         if self.miner:
             self.mine_task=asyncio.create_task(self.mine_blocks())
@@ -756,13 +751,17 @@ class Peer:
         self.init_repo()
         self.configure_ports()
 
-        disc_task.cancel()
-        consensus_task.cancel()
+    async def stop(self):
+        if self.disc_task:
+            self.disc_task.cancel()
+
+        if self.consensus_task:
+            self.consensus_task.cancel()
 
         if self.daemon_process:
             self.stop_daemon()
 
-        if self.miner:
+        if self.mine_task:
             self.mine_task.cancel()
             
 def strtobool(v):

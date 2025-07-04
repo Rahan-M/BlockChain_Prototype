@@ -13,7 +13,10 @@ async def _start_peer_in_background(host, port, name, miner):
     Internal coroutine to start a peer and manage its lifecycle.
     This runs as an asyncio Task.
     """
-    peer_instance = Peer(host, port, name, miner)
+    miner_bool=False
+    if(miner=="True"):
+        miner_bool=True
+    peer_instance = Peer(host, port, name, miner_bool)
     # Store the peer_instance directly, not just its task.
     # This might be useful if you later need to access the Peer object itself
     # (e.g., to query its state) from outside its task.

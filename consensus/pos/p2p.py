@@ -301,7 +301,6 @@ class Peer:
 
             async with self.mem_pool_lock:
                 self.mem_pool.add(transaction)
-                # self.mem_pool_lock.notify_all()
             await self.broadcast_message(msg)
 
         elif t=="stake_announcement":

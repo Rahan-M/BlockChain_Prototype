@@ -1,6 +1,7 @@
 # flask_app/controllers.py
 from flask import request, jsonify
 import asyncio
+from ecdsa import SECP256k1, SigningKey
 
 # Import running_peer_tasks and _start_peer_in_background from the application's __init__.py
 from .__init__ import running_peer_tasks, _start_peer_in_background
@@ -30,3 +31,14 @@ async def start_new_blockchain():
         return jsonify({"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
         return jsonify({"error": "Request must be JSON"}, 400)
+    
+async def create_keys():
+    private_key = SigningKey.generate(curve=SECP256k1)
+        
+    private_key_pem = private_key.to_pem().decode()
+
+    public_key = private_key.get_verifying_key()
+
+    public_key_pem = public_key.to_pem().decode()
+
+    return jsonify({"message": "Success", "vk":public_key_pem, "sk": private_key_pem})

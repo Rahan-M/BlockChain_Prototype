@@ -9,7 +9,7 @@ function App() {
 
   const getKeys=async ()=>{
     try{
-      const res=await axios.get("http://localhost:5020/create_keys");
+      const res=await axios.get("http://0.0.0.0:8000/api/chain/create_keys");
       setSk(res.data.sk);
       setVk(res.data.vk);
       setLoggedIn(true);

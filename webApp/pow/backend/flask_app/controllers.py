@@ -1,5 +1,5 @@
-from flask import render_template, request, redirect, url_for, flash, jsonify
-from ..p2p import Peer
+from flask import request, jsonify
+from p2p import Peer
 import asyncio
 
 running_peer_tasks={}
@@ -20,7 +20,7 @@ async def _start_peer_in_background(host, port, name, miner):
         print(f"Peer '{name}' background task finished/cleaned up.")
 
 async def start_new_blockchain():
-    if(request.method=='POST' and request.is_json):
+    if(request.is_json):
         data = request.get_json()
         # Or simply: data = request.json
         name = data.get('name')

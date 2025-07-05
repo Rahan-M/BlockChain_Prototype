@@ -76,6 +76,7 @@ class Block:
         self.id=id or str(uuid.uuid4())
         self.creator: str=""
         self.staked_amt=0
+        self.files: Dict[str: str] = {}
         
         self.stakers:List[Stake]=[]  # needs to be replaced everywhere with stakes
         self.seed:str=""
@@ -91,7 +92,8 @@ class Block:
             "transactions":txs_to_json_digestable_form(self.transactions),
             "ts":self.ts,
             "creator":self.creator,
-            "staked_amt":self.staked_amt
+            "staked_amt":self.staked_amt,
+            "files":self.files
         }
     
     def to_dict_with_stakers(self):
@@ -141,6 +143,12 @@ class Block:
     def transaction_exists_in_block(self, transaction: Transaction):
         for i in range(len(self.transactions)):
             if self.transactions[i]==transaction:
+                return True
+        return False
+    
+    def cid_exists_in_block(self, cid: str):
+        for file_hash in list(self.files.keys()):
+            if file_hash==cid:
                 return True
         return False
     
@@ -238,13 +246,19 @@ class Chain:
                 return True
         
         return False
-                
+
+    def cid_exists_in_chain(self, cid: str):
+        for block in reversed(self.chain):
+            if block.cid_exists_in_block(cid):
+                return True
+        
+        return False        
+    
     def isValidBlock(self, block: Block):
         if self.lastBlock.hash!=block.prevHash:
             print("Hash Problem")
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
-        
         for transaction in block.transactions:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")

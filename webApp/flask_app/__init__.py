@@ -2,7 +2,7 @@
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import asyncio, os
-from blockchain.p2p import Peer
+from blockchain.pow.p2p import Peer
 
 # --- Global State and Peer Management ---
 # This dictionary will hold references to running peer tasks

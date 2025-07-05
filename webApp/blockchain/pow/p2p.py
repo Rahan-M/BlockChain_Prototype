@@ -3,8 +3,8 @@ import argparse, json, uuid, base64
 import socket
 import os, subprocess
 from typing import Set, Dict, List, Tuple
-from blockchain.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
-from blockchain.ipfs import addToIpfs, download_ipfs_file_subprocess
+from blockchain.pow.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
+from blockchain.pow.ipfs import addToIpfs, download_ipfs_file_subprocess
 from ecdsa import VerifyingKey, BadSignatureError
 
 from pathlib import Path

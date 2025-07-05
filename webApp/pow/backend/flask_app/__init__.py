@@ -91,5 +91,6 @@ def create_app(config_class=None):
     # Import and register blueprints INSIDE the factory function
     from .routes import chain_bp
     app.register_blueprint(chain_bp, url_prefix='/api/chain')
+ 
 
     return app

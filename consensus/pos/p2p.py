@@ -288,6 +288,8 @@ class Peer:
             async with self.file_hashes_lock:
                 self.file_hashes[cid]=desc
 
+            await self.broadcast_message(msg)
+
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)

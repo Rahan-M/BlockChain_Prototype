@@ -1,12 +1,14 @@
 import asyncio, websockets, traceback
 import argparse, json, uuid, base64
+import threading, socket
+import os, subprocess
 from typing import Set, Dict, List, Tuple
-import threading
-import socket
 from blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
+from ipfs import addToIpfs, download_ipfs_file_subprocess
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
+from pathlib import Path
 
 MAX_CONNECTIONS = 8
 
@@ -27,9 +29,17 @@ def normalize_endpoint(ep):
 class Peer:
     def __init__(self, host, port, name, miner:bool):
         self.host = host
-        self.port = port
         self.name = name
         self.miner=miner
+
+        self.port = port
+        self.ipfs_port = port + 50  # API port
+        self.gateway_port = port + 81  # Gateway port
+        self.swarm_tcp = port + 2
+        self.swarm_udp = port + 3
+        self.repo_path = Path.home() / f".ipfs_{port}"
+        self.env = os.environ.copy()
+        self.env["IPFS_PATH"] = str(self.repo_path)
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -63,6 +73,10 @@ class Peer:
         """
 
         self.mem_pool: Set[Transaction]=set()
+
+        self.file_hashes: Dict[str, str]={}
+        self.file_hashes_lock= asyncio.Lock()
+        self.daemon_process=None
 
         self.name_to_public_key_dict: Dict[str, str]={}
         
@@ -137,6 +151,8 @@ class Peer:
 
         
         newBlock=Block(new_block_prevHash, transactions, new_block_ts, new_block_nonce, new_block_id)   
+        newBlock.files=block_dict["files"]
+
         return newBlock
 
     async def handle_messages(self, websocket, msg):
@@ -209,6 +225,12 @@ class Peer:
             }
             await websocket.send(json.dumps(pkt))
 
+        elif t=="file":
+            cid=msg["cid"]
+            desc=msg["desc"]
+            async with self.file_hashes_lock:
+                self.file_hashes[cid]=desc
+
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
@@ -268,12 +290,19 @@ class Peer:
                 for transaction in list(self.mem_pool):
                     if newBlock.transaction_exists_in_block(transaction):
                         self.mem_pool.discard(transaction)
+
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if newBlock.cid_exists_in_block(hash):
+                        self.file_hashes.pop(hash, None)
                         
             if self.miner:
                 self.mine_task=asyncio.create_task(self.mine_blocks())
             await self.broadcast_message(msg)
 
         elif t=="chain_request":
+            if not self.chain:
+                return
             pkt={
                 "type":"chain",
                 "id":str(uuid.uuid4()),
@@ -309,6 +338,11 @@ class Peer:
                 for transaction in list(self.mem_pool):
                     if Chain.instance.transaction_exists_in_chain(transaction):
                         self.mem_pool.discard(transaction)
+
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if(Chain.instance.cid_exists_in_chain(hash)):
+                        self.file_hashes.pop(hash, None)
 
     async def handle_connections(self, websocket):
         """
@@ -402,7 +436,7 @@ class Peer:
         """
         while True:
             print("Block Chain Menu\n***************")
-            print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Quit")
+            print("1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Send Files\n6) Download Files\n7) Quit\n")
 
             ch= await asyncio._get_running_loop().run_in_executor(
                 None, input, "Enter Your Choice: "
@@ -448,9 +482,81 @@ class Peer:
                 for transaction in list(self.mem_pool):
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
+
             elif ch==5:
+                desc= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter description of file: "
+                )
+                path= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter path of file: "
+                )
+                pkt=await self.uploadFile(desc, path)
+                await self.broadcast_message(pkt)
+
+            elif ch==6:
+                cid= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter cid of file: "
+                )
+                path= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter path to download the file: "
+                )
+                download_ipfs_file_subprocess(cid, path)
+
+            elif ch==7:
                 print("Quitting...")
                 break
+
+    async def uploadFile(self, desc: str, path:str):
+        file_path=Path(path)
+        if(not file_path.is_file()):
+            print("\nFile doesn't exist\n")
+            return
+
+        if not self.daemon_process: 
+            self.start_daemon()
+        
+        cid, name = await asyncio.to_thread(addToIpfs, path)
+        if(not(cid and name)):
+            return
+        
+        print(f"\nNew File Created : {cid}\n")
+        pkt={
+            "type":"file",
+            "id":str(uuid.uuid4()),
+            "desc":desc,
+            "cid":cid
+        }
+        
+        self.seen_message_ids.add(pkt["id"])
+        async with self.file_hashes_lock:
+            self.file_hashes[cid]=desc
+        return pkt
+
+    def init_repo(self):
+        """
+            Creates a ipfs repo of name ending in ipfs_port_no eg ipfs_5000 
+        """
+        if not self.repo_path.exists():
+            subprocess.run(["ipfs", "init"], env=self.env, check=True)
+            print("\nIPFS repo created\n")
+
+    def configure_ports(self):
+        subprocess.run(["ipfs", "config", "Addresses.API", f"/ip4/127.0.0.1/tcp/{self.ipfs_port}"], env=self.env, check=True)
+        subprocess.run(["ipfs", "config", "Addresses.Gateway", f"/ip4/127.0.0.1/tcp/{self.gateway_port}"], env=self.env, check=True)
+        subprocess.run([
+            "ipfs", "config", "Addresses.Swarm", "--json",
+            f'["/ip4/127.0.0.1/tcp/{self.swarm_tcp}", "/ip4/127.0.0.1/udp/{self.swarm_udp}/quic"]'
+        ], env=self.env, check=True)
+        print("\nConfigured Ports\n")
+
+    def start_daemon(self):
+        self.daemon_process= subprocess.Popen(["ipfs", "daemon"], env=self.env)
+        print("\nIPFS Daemon Started\n")
+
+    def stop_daemon(self):
+        if self.daemon_process:
+            self.daemon_process.terminate()
+            self.daemon_process.wait()
 
     async def connect_to_peer(self, host, port):
         """
@@ -584,9 +690,11 @@ class Peer:
 
                     if(len(transaction_list)>0):
                         newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
+                        newBlock.files=self.file_hashes.copy()
+
                         await asyncio.to_thread(Chain.instance.mine, newBlock)
                         newBlock.miner=self.wallet.public_key
-                        
+
                         if Chain.instance.isValidBlock(newBlock):
                             Chain.instance.chain.append(newBlock)
                             print("\nBlock Appended \n")
@@ -601,9 +709,16 @@ class Peer:
                         else:
                             print("\n Invalid Block \n")
 
-                        for transaction in list(self.mem_pool):
-                            if newBlock.transaction_exists_in_block(transaction):
-                                self.mem_pool.discard(transaction)
+                        async with self.mem_pool_condition:
+                            for transaction in list(self.mem_pool):
+                                if newBlock.transaction_exists_in_block(transaction):
+                                    self.mem_pool.discard(transaction)
+                        
+                        async with self.file_hashes_lock:
+                            for hash in list(self.file_hashes.keys()):
+                                if newBlock.cid_exists_in_block(hash):
+                                    self.file_hashes.pop(hash, None)
+                                    
                             
     async def find_longest_chain(self):
         """
@@ -644,10 +759,16 @@ class Peer:
         if self.miner:
             self.mine_task=asyncio.create_task(self.mine_blocks())
 
+        self.init_repo()
+        self.configure_ports()
+
         await inp_task
 
         disc_task.cancel()
         consensus_task.cancel()
+
+        if self.daemon_process:
+            self.stop_daemon()
 
         if self.miner:
             self.mine_task.cancel()

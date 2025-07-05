@@ -1,5 +1,5 @@
-import json, hashlib, uuid, base64, binascii
-from typing import List
+import json, hashlib, uuid, base64
+from typing import List, Dict
 from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -39,7 +39,7 @@ class Transaction:
 
     def __str__(self):
         return json.dumps(self.to_dict())
-        
+    
 def txs_to_json_digestable_form(transactions: List[Transaction]):
     l=[]
     for i in range(len(transactions)):
@@ -60,6 +60,7 @@ class Block:
         self.id=id or str(uuid.uuid4())
         
         self.miner: str=None
+        self.files: Dict[str: str] = {}
 
     def to_dict(self):
         return {
@@ -67,7 +68,8 @@ class Block:
             "prevHash":self.prevHash,
             "transactions":txs_to_json_digestable_form(self.transactions),
             "ts":self.ts,
-            "nonce":self.nonce
+            "nonce":self.nonce,
+            "files":self.files
         }
 
     def __str__(self):
@@ -81,6 +83,12 @@ class Block:
     def transaction_exists_in_block(self, transaction: Transaction):
         for i in range(len(self.transactions)):
             if self.transactions[i]==transaction:
+                return True
+        return False
+
+    def cid_exists_in_block(self, cid: str):
+        for file_hash in list(self.files.keys()):
+            if file_hash==cid:
                 return True
         return False
 
@@ -181,6 +189,13 @@ class Chain:
     def transaction_exists_in_chain(self, transaction: Transaction):
         for block in reversed(self.chain):
             if block.transaction_exists_in_block(transaction):
+                return True
+        
+        return False
+
+    def cid_exists_in_chain(self, cid: str):
+        for block in reversed(self.chain):
+            if block.cid_exists_in_block(cid):
                 return True
         
         return False

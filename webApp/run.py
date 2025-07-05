@@ -1,11 +1,11 @@
 # run.py
 import asyncio, signal, argparse
-import sys
+import sys, os
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
 # Import your app factory and the shutdown_all_peers function
-from flask_app import create_app, shutdown_all_peers
+from flask_app import create_app #, shutdown_all_peers
 from config import DevelopmentConfig # Import the desired configuration
 
 async def main():
@@ -58,20 +58,20 @@ async def main():
     finally:
         # 7. After Hypercorn has stopped, initiate graceful shutdown of your peers
         print("Hypercorn server has finished. Initiating graceful peer shutdown.")
-        await shutdown_all_peers()
+        # await shutdown_all_peers()
         print("Application fully shut down.")
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+# Path to the React build directory relative to Flask app.py
+# Assuming 'frontend/build' is where your React app gets built
+REACT_BUILD_DIR = os.path.join(BASE_DIR, 'flask_app', 'frontend', 'dist')
 
 if __name__ == "__main__":
     # Ensure this is the main entry point to run the asyncio loop
     # asyncio.run() handles creating and closing the event loop for you.
+    if not os.path.exists(REACT_BUILD_DIR):
+        print(f"Error: React build directory not found at '{REACT_BUILD_DIR}'.")
+        print("Please run 'npm install' and 'npm run build' in the 'frontend' directory first.")
+        exit(1)
     asyncio.run(main())
 
-# Do NOT call app.run() here if you are using async functions.
-# Instead, you will run this file using an ASGI server from the terminal.
-
-# Example of how you would run it from the terminal:
-# For development with auto-reloading:
-# hypercorn run:app --bind 0.0.0.0:8093 --reload
-
-# For production (using gunicorn with uvicorn worker):
-# gunicorn run:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8093

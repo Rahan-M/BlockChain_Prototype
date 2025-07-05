@@ -1,6 +1,5 @@
 # run.py
-import asyncio
-import signal
+import asyncio, signal, argparse
 import sys
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
@@ -10,12 +9,17 @@ from flask_app import create_app, shutdown_all_peers
 from config import DevelopmentConfig # Import the desired configuration
 
 async def main():
+    parser=argparse.ArgumentParser(description="Handshaker")
+    parser.add_argument("--port", type=int, required=True)
+    
+    args=parser.parse_args()
+
     # 1. Create your Flask application instance using the factory
     app = create_app(DevelopmentConfig)
 
     # 2. Configure Hypercorn
     hypercorn_config = Config()
-    hypercorn_config.bind = ["0.0.0.0:8000"] # Listen on all interfaces on port 8000
+    hypercorn_config.bind = [f"0.0.0.0:{args.port}"] # Listen on all interfaces on specified port
     hypercorn_config.accesslog = "-"          # Log access to stdout
     hypercorn_config.errorlog = "-"           # Log errors to stderr
     hypercorn_config.loglevel = "info"        # Set logging level

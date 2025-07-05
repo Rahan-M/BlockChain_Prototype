@@ -2,7 +2,7 @@
 from flask import Flask
 from flask_cors import CORS
 import asyncio
-from p2p import Peer # Assuming p2p.py is in your project root or installed
+from blockchain.p2p import Peer
 
 # --- Global State and Peer Management ---
 # This dictionary will hold references to running peer tasks

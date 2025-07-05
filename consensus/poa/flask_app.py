@@ -28,6 +28,10 @@ def create_flask_app(peer):
                 "addr": outbound_peer[0],
                 "port": outbound_peer[1]
             })
+        files = {}
+        for block in Chain.instance.chain:
+            if block.files:
+                files.update(block.files)
         return Response(
             json.dumps(OrderedDict([
                 ("name", peer.name),
@@ -47,6 +51,7 @@ def create_flask_app(peer):
                 ("mempool", txs_to_json_digestable_form(list(peer.mem_pool))),
                 ("chain", chain_list),
                 ("contracts", peer.contractsDB.contracts),
+                ("files", files),
             ])),
             mimetype='application/json'
         )

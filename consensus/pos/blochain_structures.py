@@ -3,14 +3,15 @@ from typing import List,Dict
 from datetime import datetime
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
 
+GAS_PRICE = 0.001 # coin per gas unit
 MAX_OUTPUT=2**256
 
 class Transaction:
-    def __init__(self, amount: float, sender: str, receiver: str, id=None, ts=None):
+    def __init__(self, payload, sender: str, receiver: str, id=None, ts=None):
         self.id=id or str(uuid.uuid4())
-        self.amount: float=amount
+        self.payload=payload # amount or [code, amount] or [contract id, function_name, arguments, state, amount]
         self.sender: str=sender   # Public Key
-        self.receiver: str=receiver   # Public Key
+        self.receiver: str=receiver   # Public Key or "deploy" or "invoke"
 
         self.sign: bytes=None
         self.ts=ts or datetime.now().timestamp()
@@ -18,7 +19,7 @@ class Transaction:
     def to_dict(self):
         dict={
             "id":self.id,
-            "amount":self.amount,
+            "payload":self.payload,
             "sender":self.sender,
             "receiver":self.receiver,
             "ts":self.ts
@@ -28,9 +29,9 @@ class Transaction:
     def __eq__(self, other):
         return(
             self.id==other.id and
-            self.amount==other.amount and
             self.sender==other.sender and
-            self.receiver==other.receiver
+            self.receiver==other.receiver and
+            self.ts==other.ts
         )
     
     def __hash__(self):
@@ -176,10 +177,13 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i):
             continue
         
         for transaction in (block_list[i]).transactions:
-            if transaction.sender==publicKey:   
-                bal-=transaction.amount
+            if transaction.sender==publicKey:
+                if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                    bal-=transaction.payload[-1]
+                else:
+                    bal-=transaction.payload
             elif transaction.receiver==publicKey:
-                bal+=transaction.amount
+                bal+=transaction.payload
         if block_list[i].creator==publicKey:
             bal+=6 #Miner reward
     
@@ -283,10 +287,13 @@ class Chain:
                 continue
             
             for transaction in (Chain.instance.chain[i]).transactions:
-                if transaction.sender==publicKey:   
-                    bal-=transaction.amount
+                if transaction.sender==publicKey:
+                    if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                        bal-=transaction.payload[-1]
+                    else:
+                        bal-=transaction.payload
                 elif transaction.receiver==publicKey:
-                    bal+=transaction.amount
+                    bal+=transaction.payload
             if Chain.instance.chain[i].creator==publicKey:
                 bal+=6 #Miner reward
 
@@ -295,7 +302,10 @@ class Chain:
                 currBlock=Chain.instance.chain[i]
                 for transaction in currBlock.transactions:
                     if transaction.sender==publicKey:
-                        bal-=transaction.amount
+                        if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                            bal-=transaction.payload[-1]
+                        else:
+                            bal-=transaction.payload
         
         if current_stakes:
             for stake in current_stakes:
@@ -309,7 +319,10 @@ class Chain:
         if pending_transactions:
             for transaction in pending_transactions:
                 if transaction.sender==publicKey:
-                    bal-=transaction.amount
+                    if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                        bal-=transaction.payload[-1]
+                    else:
+                        bal-=transaction.payload
         return bal
 
     def epoch_seed(self):
@@ -387,7 +400,12 @@ def isvalidChain(blockList:List[Block]):
                 print("\nInvalid signature on transaction\n")
                 return False
 
-            if(calc_balance_block_list(blockList, transaction.sender, i)<transaction.amount):
+            amount = 0
+            if(transaction.receiver == "deploy" or transaction.receiver == "invoke"):
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
                 return False
         
         if(calc_balance_block_list(blockList, blockList[i].creator, i)<0):

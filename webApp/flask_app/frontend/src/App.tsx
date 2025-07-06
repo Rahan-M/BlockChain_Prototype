@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Navbar from "./Components/Navbar";
-import axios from "axios";
+// import axios from "axios";
 
 function App() {
   const [showStartMenu, setShowStartMenu]=useState(false);
@@ -41,7 +41,7 @@ function App() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="border-2 border-gray-500 px-4 py-2 w-[70vw] md:w-96 mb-5"
+                  className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96 mb-5"
                   />
               </div>
               <div className="linkInp flex flex-col items-start mb-5"> 
@@ -52,7 +52,7 @@ function App() {
                   type="text"
                   value={port}
                   onChange={(e) => setPort(e.target.value)}
-                  className="border-2 border-gray-500 px-4 py-2 w-[70vw] md:w-96"
+                  className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96"
                   />
               </div>
             </div>
@@ -90,7 +90,7 @@ function App() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="border-2 border-gray-500 px-4 py-2 w-[70vw] md:w-96 mb-5"
+                  className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96 mb-5"
                   />
               </div>
               <div className="linkInp flex flex-col items-start mb-5"> 
@@ -101,7 +101,7 @@ function App() {
                   type="text"
                   value={port}
                   onChange={(e) => setPort(e.target.value)}
-                  className="border-2 border-gray-500 px-4 py-2 w-[70vw] md:w-96"
+                  className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
                   />
               </div>
               <div className="linkInp flex flex-col items-start mb-5"> 
@@ -112,7 +112,7 @@ function App() {
                   type="text"
                   value={host}
                   onChange={(e) => setHost(e.target.value)}
-                  className="border-2 border-gray-500 px-4 py-2 w-[70vw] md:w-96"
+                  className="border-2 bg-white border-gray-500 px-4 py-2 w-[70vw] md:w-96"
                   />
               </div>
               <div className="linkInp flex flex-col items-start mb-5"> 
@@ -123,7 +123,7 @@ function App() {
                   type="text"
                   value={bootStrapPort}
                   onChange={(e) => setBootStrapPort(e.target.value)}
-                  className="border-2 border-gray-500 px-4 py-2 w-[70vw] md:w-96"
+                  className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96"
                   />
               </div>
             </div>
@@ -146,15 +146,15 @@ function App() {
     <>
       <Navbar/>
       <div className="bg-secondary h-[90vh] w-full flex flex-col justify-center items-center">
-      <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowStartMenu(true)}}>
+      <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3 w-[80vw] md:w-[15vw]" onClick={()=>{setShowStartMenu(true)}}>
         Start Block Chain
       </button>
-      <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowConnectMenu(true)}}>
+      <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3 w-[80vw] md:w-[15vw]" onClick={()=>{setShowConnectMenu(true)}}>
         Connect To Block Chain
       </button>
+      </div>
       {startMenu()}
       {connectMenu()}
-      </div>
       </>
   )
 }

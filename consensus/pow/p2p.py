@@ -790,9 +790,7 @@ class Peer:
         """
         while True:
             await asyncio.sleep(30)
-            async with self.mem_pool_condition: # Works the same as lock
-                # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
-                # We check the about condition in lambda every time we get notified after a new transaction has been added
+            async with self.mem_pool_condition:
                 if(len(self.mem_pool)>0):
                     transaction_list=[]
                     for transaction in self.mem_pool:
@@ -813,6 +811,16 @@ class Peer:
                         if Chain.instance.isValidBlock(newBlock):
                             Chain.instance.chain.append(newBlock)
                             print("\nBlock Appended \n")
+                            
+                            async with self.file_hashes_lock:
+                                for hash in list(self.file_hashes.keys()):
+                                    if newBlock.cid_exists_in_block(hash):
+                                        self.file_hashes.pop(hash, None)
+
+                            for transaction in self.mem_pool:
+                                if newBlock.transaction_exists_in_block(transaction):
+                                    self.mem_pool.remove(transaction)
+                                        
                             pkt={
                                 "type":"new_block",
                                 "id":str(uuid.uuid4()),
@@ -823,16 +831,6 @@ class Peer:
                             await self.broadcast_message(pkt)
                         else:
                             print("\n Invalid Block \n")
-
-                        async with self.mem_pool_condition:
-                            for transaction in self.mem_pool:
-                                if newBlock.transaction_exists_in_block(transaction):
-                                    self.mem_pool.remove(transaction)
-                        
-                        async with self.file_hashes_lock:
-                            for hash in list(self.file_hashes.keys()):
-                                if newBlock.cid_exists_in_block(hash):
-                                    self.file_hashes.pop(hash, None)
                                     
     def calculate_contract_id(self, sender, timestamp):
         data = f"{sender}:{timestamp}"

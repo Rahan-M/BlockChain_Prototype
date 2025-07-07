@@ -184,6 +184,30 @@ class Peer:
 
         return newBlock
 
+    def valid_deploy_transaction(self, payload):
+        contract_code = payload[0]
+        gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
+        amount = gas_used * GAS_PRICE
+        if amount != payload[-1]:
+            return False
+        return True
+
+    def valid_invoke_transaction(self, payload):
+        contract_id = payload[0]
+        func_name = payload[1]
+        args = payload[2]
+        response = self.run_contract([contract_id, func_name, args])
+        if(response["error"] != None):
+            return False
+        state = response["state"]
+        gas_used = response["gas_used"]
+        amount = gas_used * GAS_PRICE
+        if state != payload[3]:
+            return False
+        if amount != payload[-1]:
+            return False
+        return True
+
     async def handle_messages(self, websocket, msg):
         """
             This is a function to handle messages as the name suggests
@@ -273,6 +297,13 @@ class Peer:
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode
 
+            if transaction.receiver == "deploy":
+                if not self.valid_deploy_transaction(transaction.payload):
+                    return
+            if transaction.receiver == "invoke":
+                if not self.valid_invoke_transaction(transaction.payload):
+                    return
+
             amount = 0
             if transaction.receiver == "deploy" or transaction.receiver == "invoke":
                 amount = transaction.payload[-1]
@@ -316,10 +347,22 @@ class Peer:
                 print("\nInvalid Block\n")
                 return
             
-            self.deploy_and_run_contracts(newBlock.transactions)
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "invoke":
+                    if not self.valid_invoke_transaction(transaction.payload):
+                        return
+                if transaction.receiver == "deploy":
+                    if not self.valid_deploy_transaction(transaction.payload):
+                        return
+
             newBlock.miner=msg["miner"]
             Chain.instance.chain.append(newBlock)
             print("\n\n Block Appended \n\n")
+
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "deploy":
+                    self.deploy_contract(transaction)
+
             if self.miner and self.mine_task and not self.mine_task.done():
                 self.mine_task.cancel()
                 print("New Block received Cancelled Mining...")
@@ -534,12 +577,11 @@ class Peer:
                         args.append(parsed_arg)
                         arg_number += 1
 
-                    state = self.get_contract_state(contract_id)
-
                     response = self.run_contract([contract_id, func_name, args])
                     if(response["error"] != None):
                         print("Error: ", response["error"])
                         continue
+                    state = response["state"]
                     gas_used = response["gas_used"]
                     amount = gas_used * GAS_PRICE
 
@@ -768,21 +810,6 @@ class Peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
 
-    def deploy_and_run_contracts(self, transaction_list):
-        for transaction in transaction_list:
-            if transaction.receiver == "deploy":
-                sender = transaction.sender
-                timestamp = transaction.ts
-                code = transaction.payload[0]
-                self.deploy_contract(sender, timestamp, code)
-            if transaction.receiver == "invoke":
-                payload = transaction.payload
-                response = self.run_contract(payload)
-                state = response["state"]
-                transaction.payload[3] = state
-                msg = response["msg"]
-                print(msg)
-
     async def mine_blocks(self):
         """
             We mine blocks whenever there are greater than or equal to three
@@ -803,7 +830,6 @@ class Peer:
                     if(len(transaction_list)>0):
                         newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
                         newBlock.files=self.file_hashes.copy()
-                        self.deploy_and_run_contracts(transaction_list)
 
                         await asyncio.to_thread(Chain.instance.mine, newBlock)
                         newBlock.miner=self.wallet.public_key
@@ -811,6 +837,10 @@ class Peer:
                         if Chain.instance.isValidBlock(newBlock):
                             Chain.instance.chain.append(newBlock)
                             print("\nBlock Appended \n")
+
+                            for transaction in newBlock.transactions:
+                                if transaction.receiver == "deploy":
+                                    self.deploy_contract(transaction)
                             
                             async with self.file_hashes_lock:
                                 for hash in list(self.file_hashes.keys()):
@@ -837,7 +867,10 @@ class Peer:
         hash_object = hashlib.sha256(data.encode('utf-8'))
         return hash_object.hexdigest()
         
-    def deploy_contract(self, sender, timestamp, code):
+    def deploy_contract(self, transaction):
+        sender = transaction.sender
+        timestamp = transaction.ts
+        code = transaction.payload[0]
         contract_id = self.calculate_contract_id(sender, timestamp)
         self.contractsDB.store_contract(contract_id, code)
         print("Contract deployed with id: ", contract_id)

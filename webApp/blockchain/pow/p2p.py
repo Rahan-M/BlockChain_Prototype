@@ -106,7 +106,7 @@ class Peer:
                 "host":self.host,
                 "port":self.port,
                 "name":self.name,
-                "public_key":self.wallet.public_key
+                "public_key":self.wallet.public_key_pem
                 }
         }
 
@@ -120,7 +120,7 @@ class Peer:
         """
         peers=[{"host":h, "port":p, "name":n, "public_key":s}
                for (h, p), (n,s) in self.known_peers.items()]
-        peers.append({"host":self.host, "port":self.port, "name":self.name, "public_key":self.wallet.public_key})
+        peers.append({"host":self.host, "port":self.port, "name":self.name, "public_key":self.wallet.public_key_pem})
         pkt={
             "type":"known_peers",
             "id":str(uuid.uuid4()),
@@ -351,7 +351,7 @@ class Peer:
         """
         peer_addr=(websocket.remote_address[0], websocket.remote_address[1])
         self.server_connections.add(websocket)
-
+        
         print(f"Inbound Connection from {peer_addr[0]}:{peer_addr[1]}")
         
         try:
@@ -459,12 +459,12 @@ class Peer:
                     print("Amount must be a number")
                     continue
                 
-                if amt<=Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)):
+                if amt<=Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool)):
                     await self.create_and_broadcast_tx(receiver_public_key, amt)
                 else:
                     print("Insufficient Account Balance")
             elif ch==2:
-                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key, list(self.mem_pool)))
+                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool)))
             elif ch==3:
                 i=0
                 # We print all the blocks
@@ -582,7 +582,7 @@ class Peer:
                         "host":self.host,
                         "port":self.port,
                         "name":self.name,
-                        "public_key":self.wallet.public_key
+                        "public_key":self.wallet.public_key_pem
                     }
                 }
 
@@ -687,7 +687,7 @@ class Peer:
                         newBlock.files=self.file_hashes.copy()
 
                         await asyncio.to_thread(Chain.instance.mine, newBlock)
-                        newBlock.miner=self.wallet.public_key
+                        newBlock.miner=self.wallet.public_key_pem
 
                         if Chain.instance.isValidBlock(newBlock):
                             Chain.instance.chain.append(newBlock)
@@ -696,7 +696,7 @@ class Peer:
                                 "type":"new_block",
                                 "id":str(uuid.uuid4()),
                                 "block":newBlock.to_dict(),
-                                "miner":self.wallet.public_key
+                                "miner":self.wallet.public_key_pem
                             }
                             self.seen_message_ids.add(pkt["id"])
                             await self.broadcast_message(pkt)
@@ -730,7 +730,20 @@ class Peer:
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         # We start the server
-        await websockets.serve(self.handle_connections, self.host, self.port)
+        print("\nHit here1\n")
+        try:
+            await websockets.serve(self.handle_connections, self.host, self.port)
+        except: # Catches all BaseException descendants
+            import sys
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print(f"An unexpected error occurred!")
+            print(f"Type: {exc_type.__name__}")
+            print(f"Value: {exc_value}")
+            print(f"Traceback object: {exc_traceback}")
+            # You can also use traceback.print_exc() for a more standard traceback output
+            import traceback
+            traceback.print_exc()
+
         # We await the setting up of the server and the handle connections funciton,
         # This returns a websocket server object eventually
 
@@ -739,7 +752,7 @@ class Peer:
             normalized_bootstrap_host, normalized_bootstrap_port = normalize_endpoint((bootstrap_host, bootstrap_port))
             asyncio.create_task(self.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port))
         else:
-            self.chain=Chain(publicKey=self.wallet.public_key)
+            self.chain=Chain(publicKey=self.wallet.public_key_pem)
 
         # Create flask app
         self.consensus_task=asyncio.create_task(self.find_longest_chain())
@@ -750,8 +763,10 @@ class Peer:
 
         self.init_repo()
         self.configure_ports()
+        
+        await self.consensus_task
 
-    async def stop(self):
+    def stop(self):
         if self.disc_task:
             self.disc_task.cancel()
 
@@ -763,7 +778,11 @@ class Peer:
 
         if self.mine_task:
             self.mine_task.cancel()
-            
+
+    async def printSomething(self):
+        print("\nYO\n")
+
+
 def strtobool(v):
     if isinstance(v, bool):
         return v

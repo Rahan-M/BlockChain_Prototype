@@ -5,7 +5,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
 # Import your app factory and the shutdown_all_peers function
-from flask_app import create_app #, shutdown_all_peers
+from flask_app.app import create_app , shutdown_peer
 from config import DevelopmentConfig # Import the desired configuration
 
 async def main():
@@ -54,11 +54,12 @@ async def main():
     except asyncio.CancelledError:
         print("Hypercorn server task was cancelled.")
     except Exception as e:
-        print(f"An unexpected error occurred in Hypercorn serve: {e}")
+        print(f"An unexpected error occurred in Hypercorn server: {e}")
     finally:
         # 7. After Hypercorn has stopped, initiate graceful shutdown of your peers
+        
         print("Hypercorn server has finished. Initiating graceful peer shutdown.")
-        # await shutdown_all_peers()
+        await shutdown_peer()
         print("Application fully shut down.")
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))

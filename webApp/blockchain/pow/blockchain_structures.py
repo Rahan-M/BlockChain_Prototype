@@ -200,12 +200,12 @@ class Chain:
         valid_chain_len=valid_chain_length(len(self.chain))
 
         for i in range(valid_chain_len):
-            for transaction in (Chain.instance.chain[i]).transactions:
+            for transaction in (self.chain[i]).transactions:
                 if transaction.sender==publicKey:   
                     bal-=transaction.amount
                 elif transaction.receiver==publicKey:
                     bal+=transaction.amount
-            if Chain.instance.chain[i].miner==publicKey:
+            if self.chain[i].miner==publicKey:
                 bal+=6 #Miner reward
         
         # Since these transactions are not part of the chain we don't add

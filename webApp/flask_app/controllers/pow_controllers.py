@@ -28,6 +28,32 @@ async def start_new_blockchain():
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
+    
+async def connect_to_blockchain():
+    from ..app import peer_instance
+    if request.is_json:
+        data = request.get_json()
+        name = data.get('name')
+        port = int(data.get('port'))
+        host = data.get('host')
+        miner = data.get('miner')
+        bootstrap_port = int(data.get('bootstrap_port'))
+        bootstrap_host = data.get('bootstrap_host')
+
+
+        if peer_instance:
+            return jsonify({"error": f"One peer is already running. Stop it to run another one"}, 409)
+        
+        miner_bool=p2p.strtobool(miner)
+        # Use the _start_peer_in_background function imported from __init__.py
+        # I'm storing this in this variable because gemini hypothesized that will stop the
+        # the spontaneous cancelling of the node
+        thread=threading.Thread(target=_start_peer_in_background,args=(host, port, name, miner_bool, bootstrap_host, bootstrap_port))
+        thread.daemon=True
+        thread.start()
+        return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
+    else:
+        return jsonify({"success":False, "error": "Request must be JSON"})
 
 def account_balance():
     from ..app import peer_instance

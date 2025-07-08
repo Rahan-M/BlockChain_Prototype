@@ -8,8 +8,12 @@ chain_bp = Blueprint('chain_bp', __name__, template_folder='templates', static_f
 #     return await controllers.start_new_blockchain()
 
 @chain_bp.route('/create', methods=['POST'])
-async def create_keys():
+async def start_bc():
     return await pow_controllers.start_new_blockchain()
+
+@chain_bp.route('/connect', methods=['POST'])
+async def connect_to_bc():
+    return await pow_controllers.connect_to_blockchain()
 
 @chain_bp.route('/balance', methods=['GET'])
 async def find_balance():

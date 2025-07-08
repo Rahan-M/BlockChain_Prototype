@@ -799,7 +799,7 @@ class Peer:
                     amount = gas_used * GAS_PRICE
                     payload = [contract_code, amount]
 
-                    if amount<=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool, list(self.current_stakes)):
+                    if amount<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
                         await self.create_and_broadcast_tx(rec, payload)
                     else:
                         print("Insufficient Account Balance")
@@ -839,7 +839,7 @@ class Peer:
 
                     payload = [contract_id, func_name, args, state, amount]
 
-                    if amount<=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool, list(self.current_stakes)):
+                    if amount<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
                         await self.create_and_broadcast_tx(rec, payload)
                     else:
                         print("Insufficient Account Balance")
@@ -861,7 +861,7 @@ class Peer:
                     if(amt<=0):
                         print("\nAmount must be positive\n")
 
-                    if amt<=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool, list(self.current_stakes)):
+                    if amt<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
                         await self.create_and_broadcast_tx(receiver_public_key, amt)
                     else:
                         print("Insufficient Account Balance")

@@ -1,15 +1,23 @@
 import asyncio, websockets, traceback, hashlib
 import argparse, json, uuid, base64
-import threading, socket
+import threading, socket, os, subprocess
 from datetime import datetime, timedelta
 from typing import Set, Dict, List, Tuple, Any
 from blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
+from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
+from smart_contract.contracts_db import SmartContractDatabase
+from smart_contract.secure_executor import SecureContractExecutor
 from flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey, BadSignatureError
+import tempfile
+from pathlib import Path
+import ast
 
 MAX_CONNECTIONS = 8
 MAX_OUTPUT=2**256
 EPOCH_TIME=60
+GAS_PRICE = 0.001 # coin per gas unit
+BASE_DEPLOY_COST = 5
 
 class VrfThresholdException(Exception):
     pass
@@ -28,12 +36,41 @@ def normalize_endpoint(ep):
     host, port = ep
     return (socket.gethostbyname(host), int(port))
 
+def get_contract_code_from_notepad():
+    # Create a temporary file with a .py extension
+    with tempfile.NamedTemporaryFile(suffix=".py", delete=False, mode='w+', encoding='utf-8') as tmp_file:
+        temp_filename = tmp_file.name
+        tmp_file.write("# Write your smart contract function here.\n")
+        tmp_file.write("def contract_logic(parameter1, parameter2, parameter3, state):\n")
+        tmp_file.write("    # your code here\n")
+        tmp_file.write("    return state, 'some message'\n")
+    
+    # Open it in Notepad (waits until closed)
+    subprocess.call(["notepad.exe", temp_filename])
+
+    # Read the edited code
+    with open(temp_filename, 'r', encoding='utf-8') as f:
+        contract_code = f.read()
+
+    # Optional: remove the temp file
+    os.remove(temp_filename)
+
+    return contract_code
+
 class Peer:
     def __init__(self, host, port, name, staker:bool):
         self.host = host
-        self.port = port
         self.name = name
         self.staker=staker
+
+        self.port = port
+        self.ipfs_port = port + 50  # API port
+        self.gateway_port = port + 81  # Gateway port
+        self.swarm_tcp = port + 2
+        self.swarm_udp = port + 3
+        self.repo_path = Path.home() / f".ipfs_{port}"
+        self.env = os.environ.copy()
+        self.env["IPFS_PATH"] = str(self.repo_path)
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -68,9 +105,13 @@ class Peer:
 
         
         self.last_epoch_end_ts=datetime.now()
-        self.mem_pool: Set[Transaction]=set()
+        self.mem_pool: List[Transaction]=list()
         self.mem_pool_lock=asyncio.Lock() 
         
+        self.file_hashes: Dict[str, str]={}
+        self.file_hashes_lock=asyncio.Lock()
+        self.daemon_process=None
+
         self.current_stakes: set[Stake]=set() # Public key is stored as pem string
         self.current_stakers:Dict[str, int]={}
         self.curr_stakers_condition=asyncio.Condition() 
@@ -80,6 +121,7 @@ class Peer:
         self.wallet=Wallet()
         self.chain: Chain=None
 
+        self.contractsDB = SmartContractDatabase()
 
         self.create_block_condition=asyncio.Condition()
         """
@@ -136,7 +178,7 @@ class Peer:
 
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
-            transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["ts"])
+            transaction=Transaction(transaction_dict["payload"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["ts"])
             if(transaction.sender!="Genesis"):
                 transaction.sign=base64.b64decode(transaction_dict["sign"])
             transactions.append(transaction)
@@ -148,6 +190,9 @@ class Peer:
         staked_amt=block_dict.get("staked_amt")
         if(staked_amt):
             newBlock.staked_amt=staked_amt
+
+        if(block_dict.get("files")):
+            newBlock.files=block_dict["files"]
 
         creator=block_dict.get("creator")
         if(creator):
@@ -194,6 +239,30 @@ class Peer:
         sign_bytes=base64.b64decode(sign)        
         stake.sign=sign_bytes
         return stake
+
+    def valid_deploy_transaction(self, payload):
+        contract_code = payload[0]
+        gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
+        amount = gas_used * GAS_PRICE
+        if amount != payload[-1]:
+            return False
+        return True
+
+    def valid_invoke_transaction(self, payload):
+        contract_id = payload[0]
+        func_name = payload[1]
+        args = payload[2]
+        response = self.run_contract([contract_id, func_name, args])
+        if(response["error"] != None):
+            return False
+        state = response["state"]
+        gas_used = response["gas_used"]
+        amount = gas_used * GAS_PRICE
+        if state != payload[3]:
+            return False
+        if amount != payload[-1]:
+            return False
+        return True
 
     async def handle_messages(self, websocket, msg):
         """
@@ -265,21 +334,42 @@ class Peer:
             }
             await websocket.send(json.dumps(pkt))
 
+        elif t=="file":
+            cid=msg["cid"]
+            desc=msg["desc"]
+            async with self.file_hashes_lock:
+                self.file_hashes[cid]=desc
+
+            await self.broadcast_message(msg)
+
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
-            if(tx['amount']<=0):
+            amount = 0
+            if tx['receiver'] == "deploy" or tx['receiver'] == "invoke":
+                amount = tx['payload'][-1]
+            else:
+                amount = tx['payload']
+            if(amount <= 0):
                 print("\nInvalid Transaction, amount<=0\n")
                 return
             
-            transaction: Transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
+            transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return
             
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode turns bytes into a string
-            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool), list(self.current_stakes))):
+
+            if transaction.receiver == "deploy":
+                if not self.valid_deploy_transaction(transaction.payload):
+                    return
+            if transaction.receiver == "invoke":
+                if not self.valid_invoke_transaction(transaction.payload):
+                    return
+                
+            if(amount > Chain.instance.calc_balance(transaction.sender, self.mem_pool, list(self.current_stakes))):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
@@ -300,7 +390,7 @@ class Peer:
             print("\n")
 
             async with self.mem_pool_lock:
-                self.mem_pool.add(transaction)
+                self.mem_pool.append(transaction)
             await self.broadcast_message(msg)
 
         elif t=="stake_announcement":
@@ -330,7 +420,7 @@ class Peer:
                     print("\nWrong signature\n")
                     return
 
-                if(stake.amt>Chain.instance.calc_balance(stake.staker, list(self.mem_pool), list(self.current_stakes))):
+                if(stake.amt>Chain.instance.calc_balance(stake.staker, self.mem_pool, list(self.current_stakes))):
                     print("\nInvalid stake, staked more than available\n")
                     return
 
@@ -404,19 +494,41 @@ class Peer:
                 return
             
             for transaction in newBlock.transactions:
-                if transaction.amount>Chain.instance.calc_balance(publicKey=transaction.sender,current_stakes=newBlock.stakers):
+                amount = 0
+                if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                    amount = transaction.payload[-1]
+                else:
+                    amount = transaction.payload
+                if amount>Chain.instance.calc_balance(publicKey=transaction.sender,current_stakes=newBlock.stakers):
                     print("\nInvalid Transactions, stake should be slashed\n")
                     return
+                
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "invoke":
+                    if not self.valid_invoke_transaction(transaction.payload):
+                        return
+                if transaction.receiver == "deploy":
+                    if not self.valid_deploy_transaction(transaction.payload):
+                        return
 
             newBlock.creator=msg["block"]["creator"]
             Chain.instance.chain.append(newBlock)
             print("\n\n Block Appended \n\n")
             self.last_epoch_end_ts=datetime.now()
 
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "deploy":
+                    self.deploy_contract(transaction)
+
             async with self.mem_pool_lock:
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     if newBlock.transaction_exists_in_block(transaction):
-                        self.mem_pool.discard(transaction)
+                        self.mem_pool.remove(transaction)
+            
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if newBlock.cid_exists_in_block(hash):
+                        self.file_hashes.pop(hash, None)
             
             self.staked_amt=0
             async with self.curr_stakers_condition:
@@ -515,9 +627,14 @@ class Peer:
                     print("\nCurrent Chain Longer than received chain\n")
 
             async with self.mem_pool_lock:
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     if Chain.instance.transaction_exists_in_chain(transaction):
-                        self.mem_pool.discard(transaction)
+                        self.mem_pool.remove(transaction)
+            
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if(Chain.instance.cid_exists_in_chain(hash)):
+                        self.file_hashes.pop(hash, None)
 
     async def verify_and_slash(self, block1:Block, block2:Block, pos:int, block_list:List[Block]):
         vk=VerifyingKey.from_pem(block1.creator)
@@ -605,11 +722,11 @@ class Peer:
                 await ws.close()
                 await ws.wait_closed()
 
-    async def create_and_broadcast_tx(self, receiver_public_key, amt):
+    async def create_and_broadcast_tx(self, receiver_public_key, payload):
         """
             Function to create and broadcast transactions
         """
-        transaction=Transaction(amt, self.wallet.public_key_pem, receiver_public_key)
+        transaction=Transaction(payload, self.wallet.public_key_pem, receiver_public_key)
         transaction_str=str(transaction)
         
         signature=self.wallet.private_key.sign(
@@ -634,11 +751,18 @@ class Peer:
             return
         
         async with self.mem_pool_lock:
-                self.mem_pool.add(transaction)
+                self.mem_pool.append(transaction)
 
         print("Transaction Created", transaction)
         print("\n")
         await self.broadcast_message(pkt)
+
+    def get_contract_state(self, contract_id):
+        for block in reversed(Chain.instance.chain):
+            for transaction in reversed(block.transactions):
+                if transaction.receiver == "invoke" and transaction.payload[0] == contract_id:
+                    return transaction.payload[3]
+        return {}
 
     async def user_input_handler(self):
         """
@@ -648,9 +772,9 @@ class Peer:
         while True:
             print("Block Chain Menu\n***************")
             if(self.staker):
-                print("0) Quit\n1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Print Current Stakers\n6) Time since last epoch\n7) Stake\n")
+                print("0) Quit\n1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Print Current Stakers\n6) Time since last epoch\n7) Send Files\n8) Download Files\n9) Stake\n")
             else:
-                print("0) Quit\n1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\5) Print Current Stakers\n6) Time since last epoch\n")
+                print("0) Quit\n1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\5) Print Current Stakers\n6) Time since last epoch\n7) Send Files\n8) Download Files\n")
 
             ch= await asyncio._get_running_loop().run_in_executor(
                 None, input, "Enter Your Choice: "
@@ -661,35 +785,88 @@ class Peer:
                 print("\nPlease enter a valid number!!!\n")
 
             if ch==1:
-                rec= await asyncio._get_running_loop().run_in_executor(
+                rec = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Receiver's Name: "
                 )
 
-                amt= await asyncio._get_running_loop().run_in_executor(
-                    None, input, "\nEnter Amount to send: "
-                )
-                
-                receiver_public_key=self.name_to_public_key_dict.get(rec.lower().strip())
-                if(receiver_public_key==None):
-                    print("No such person available in directory...")
-                    continue
-                
-                try:
-                    amt=float(amt)
-                except ValueError:
-                    print("Amount must be a number")
-                    continue
-                
-                if(amt<=0):
-                    print("\nAmount must be positive\n")
+                if rec == "deploy":
+                    contract_code = get_contract_code_from_notepad()
+                    if not contract_code:
+                        print("Contract code field is empty")
+                        continue
+                    gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
+                    amount = gas_used * GAS_PRICE
+                    payload = [contract_code, amount]
 
-                if amt<=Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool), list(self.current_stakes)):
-                    await self.create_and_broadcast_tx(receiver_public_key, amt)
+                    if amount<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
+                        await self.create_and_broadcast_tx(rec, payload)
+                    else:
+                        print("Insufficient Account Balance")
+                elif rec == "invoke":
+                    contract_id = await asyncio._get_running_loop().run_in_executor(
+                        None, input, "\nEnter Contract Id: "
+                    )
+                    if contract_id not in self.contractsDB.contracts:
+                        print("No such contract found...")
+                        continue
+
+                    func_name = await asyncio._get_running_loop().run_in_executor(
+                        None, input, "\nEnter Function Name: "
+                    )
+
+                    args = []
+                    loop = asyncio.get_running_loop()
+                    arg_number = 1
+                    while True:
+                        arg = await loop.run_in_executor(None, input, f"Enter argument {arg_number} (or \\q to finish): ")
+                        if arg.strip() == "\\q":
+                            break
+                        try:
+                            parsed_arg = ast.literal_eval(arg)
+                        except Exception:
+                            parsed_arg = arg
+                        args.append(parsed_arg)
+                        arg_number += 1
+
+                    response = self.run_contract([contract_id, func_name, args])
+                    if(response["error"] != None):
+                        print("Error: ", response["error"])
+                        continue
+                    state = response["state"]
+                    gas_used = response["gas_used"]
+                    amount = gas_used * GAS_PRICE
+
+                    payload = [contract_id, func_name, args, state, amount]
+
+                    if amount<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
+                        await self.create_and_broadcast_tx(rec, payload)
+                    else:
+                        print("Insufficient Account Balance")
                 else:
-                    print("Insufficient Account Balance")
+                    amt= await asyncio._get_running_loop().run_in_executor(
+                        None, input, "\nEnter Amount to send: "
+                    )
+                    receiver_public_key = self.name_to_public_key_dict.get(rec.lower().strip())
+                    if(receiver_public_key==None):
+                        print("No such person available in directory...")
+                        continue
+                    
+                    try:
+                        amt=float(amt)
+                    except ValueError:
+                        print("Amount must be a number")
+                        continue
+
+                    if(amt<=0):
+                        print("\nAmount must be positive\n")
+
+                    if amt<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
+                        await self.create_and_broadcast_tx(receiver_public_key, amt)
+                    else:
+                        print("Insufficient Account Balance")
             
             elif ch==2:
-                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool), list(self.current_stakes)))
+                print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)))
 
             elif ch==3:
                 i=0
@@ -703,7 +880,7 @@ class Peer:
 
             elif ch==4:
                 i=0
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
 
@@ -718,6 +895,25 @@ class Peer:
                 print(f"\n{(datetime.now()-self.last_epoch_end_ts).seconds}\n")
 
             elif ch==7:
+                desc= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter description of file: "
+                )
+                path= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter path of file: "
+                )
+                pkt=await self.uploadFile(desc, path)
+                await self.broadcast_message(pkt)
+
+            elif ch==8:
+                cid= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter cid of file: "
+                )
+                path= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter path to download the file: "
+                )
+                download_ipfs_file_subprocess(cid, path)
+
+            elif ch==9:
                 if(not self.staker):
                     continue
 
@@ -744,7 +940,7 @@ class Peer:
                 
                 try:
                     amt=int(amt)
-                    if(amt>Chain.instance.calc_balance(self.wallet.public_key_pem, list(self.mem_pool), list(self.current_stakes))):
+                    if(amt>Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes))):
                         print("\nInsufficient bank balance\n")
                         continue
 
@@ -762,6 +958,58 @@ class Peer:
             elif ch==0:
                 print("Quitting...")
                 break
+    
+    async def uploadFile(self, desc: str, path:str):
+        file_path=Path(path)
+        if(not file_path.is_file()):
+            print("\nFile doesn't exist\n")
+            return
+
+        if not self.daemon_process: 
+            self.start_daemon()
+        
+        cid, name = await asyncio.to_thread(addToIpfs, path)
+        if(not(cid and name)):
+            return
+        
+        print(f"\nNew File Created : {cid}\n")
+        pkt={
+            "type":"file",
+            "id":str(uuid.uuid4()),
+            "desc":desc,
+            "cid":cid
+        }
+        
+        self.seen_message_ids.add(pkt["id"])
+        async with self.file_hashes_lock:
+            self.file_hashes[cid]=desc
+        return pkt
+
+    def init_repo(self):
+        """
+            Creates a ipfs repo of name ending in ipfs_port_no eg ipfs_5000 
+        """
+        if not self.repo_path.exists():
+            subprocess.run(["ipfs", "init"], env=self.env, check=True)
+            print("\nIPFS repo created\n")
+
+    def configure_ports(self):
+        subprocess.run(["ipfs", "config", "Addresses.API", f"/ip4/127.0.0.1/tcp/{self.ipfs_port}"], env=self.env, check=True)
+        subprocess.run(["ipfs", "config", "Addresses.Gateway", f"/ip4/127.0.0.1/tcp/{self.gateway_port}"], env=self.env, check=True)
+        subprocess.run([
+            "ipfs", "config", "Addresses.Swarm", "--json",
+            f'["/ip4/127.0.0.1/tcp/{self.swarm_tcp}", "/ip4/127.0.0.1/udp/{self.swarm_udp}/quic"]'
+        ], env=self.env, check=True)
+        print("\nConfigured Ports\n")
+
+    def start_daemon(self):
+        self.daemon_process= subprocess.Popen(["ipfs", "daemon"], env=self.env)
+        print("\nIPFS Daemon Started\n")
+
+    def stop_daemon(self):
+        if self.daemon_process:
+            self.daemon_process.terminate()
+            self.daemon_process.wait()
 
     async def connect_to_peer(self, host, port):
         """
@@ -925,7 +1173,7 @@ class Peer:
             self.staked_amt=0
             return
         
-        transactions_in_mem_pool=list(self.mem_pool)
+        transactions_in_mem_pool=self.mem_pool
         pending_transactions=[]
         for transaction in transactions_in_mem_pool:
             if(not Chain.instance.transaction_exists_in_chain(transaction)):
@@ -958,6 +1206,7 @@ class Peer:
             #The following code is for the winner
             print("\nYou won\n")
             newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
+            newBlock.files=self.file_hashes.copy()
             newBlock.seed=seed
             newBlock.vrf_proof=vrf_proof
             Chain.instance.chain.append(newBlock)
@@ -968,6 +1217,11 @@ class Peer:
 
             self.last_epoch_end_ts=datetime.now()
             print("Block Appended")
+
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "deploy":
+                    self.deploy_contract(transaction)
+
             newBlock.stakers=list(self.current_stakes)
             # print(f"\n{newBlock.to_dict_with_stakers()}\n")
 
@@ -995,10 +1249,15 @@ class Peer:
         self.last_epoch_end_ts=datetime.now()
 
         async with self.mem_pool_lock:
-            for transaction in list(self.mem_pool):
+            for transaction in self.mem_pool:
                 if newBlock.transaction_exists_in_block(transaction):
-                    self.mem_pool.discard(transaction)
-                      
+                    self.mem_pool.remove(transaction)
+
+        async with self.file_hashes_lock:
+            for hash in list(self.file_hashes.keys()):
+                if newBlock.cid_exists_in_block(hash):
+                    self.file_hashes.pop(hash, None)
+                                                       
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace
@@ -1013,6 +1272,31 @@ class Peer:
             await self.broadcast_message(pkt)
             print("\nSent out chain requests...")
             await asyncio.sleep(60)
+
+    def calculate_contract_id(self, sender, timestamp):
+        data = f"{sender}:{timestamp}"
+        hash_object = hashlib.sha256(data.encode('utf-8'))
+        return hash_object.hexdigest()
+        
+    def deploy_contract(self, transaction):
+        sender = transaction.sender
+        timestamp = transaction.ts
+        code = transaction.payload[0]
+        contract_id = self.calculate_contract_id(sender, timestamp)
+        self.contractsDB.store_contract(contract_id, code)
+        print("Contract deployed with id: ", contract_id)
+
+    def run_contract(self, payload):
+        contract_id, func_name, args = payload[0], payload[1], payload[2]
+        code = self.contractsDB.get_contract(contract_id)
+        if code is None:
+            raise Exception(f"Contract '{contract_id}' not found.")
+
+        state = self.get_contract_state(contract_id)
+        executor = SecureContractExecutor(code)
+        response = executor.run(func_name, args, state)
+
+        return response
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         # We start the server

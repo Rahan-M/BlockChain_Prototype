@@ -5,8 +5,9 @@ import copy
 import threading
 import socket
 from blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
-from contracts_db import SmartContractDatabase
-from secure_executor import SecureContractExecutor
+from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
+from smart_contract.contracts_db import SmartContractDatabase
+from smart_contract.secure_executor import SecureContractExecutor
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -17,6 +18,7 @@ import tempfile
 import subprocess
 import hashlib
 import ast
+from pathlib import Path
 
 MAX_CONNECTIONS = 8
 GAS_PRICE = 0.001 # coin per gas unit
@@ -63,6 +65,14 @@ class Peer:
         self.port = port
         self.name = name
 
+        self.ipfs_port = port + 50  # API port
+        self.gateway_port = port + 81  # Gateway port
+        self.swarm_tcp = port + 2
+        self.swarm_udp = port + 3
+        self.repo_path = Path.home() / f".ipfs_{port}"
+        self.env = os.environ.copy()
+        self.env["IPFS_PATH"] = str(self.repo_path)
+
         self.miner = False
         self.miner_task = None
         self.round = 0
@@ -106,6 +116,8 @@ class Peer:
         """
 
         self.mem_pool: List[Transaction]=list()
+        self.file_hashes: Dict[str, str]={}
+        self.file_hashes_lock=asyncio.Lock()
 
         self.name_to_public_key_dict: Dict[str, str]={}
         self.node_id_to_name_dict: Dict[str, str]={}
@@ -124,6 +136,8 @@ class Peer:
             async with self.mem_pool_condition is executed only if
             there is no other such block currently being executed
         """
+
+        self.daemon_process=None
 
     def get_peer_info_message(self):
         """
@@ -208,6 +222,7 @@ class Peer:
         newBlock.miner_node_id = new_block_miner_node_id
         newBlock.miner_public_key = new_block_miner_public_key
         newBlock.miners_list = new_block_miners_list
+        newBlock.files=block_dict["files"]
         newBlock.signature = new_block_signature
         return newBlock
 
@@ -270,6 +285,30 @@ class Peer:
                     print("Miner shifted")
         except asyncio.CancelledError:
             print("Round calculator task stopped cleanly")
+
+    def valid_deploy_transaction(self, payload):
+        contract_code = payload[0]
+        gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
+        amount = gas_used * GAS_PRICE
+        if amount != payload[-1]:
+            return False
+        return True
+
+    def valid_invoke_transaction(self, payload):
+        contract_id = payload[0]
+        func_name = payload[1]
+        args = payload[2]
+        response = self.run_contract([contract_id, func_name, args])
+        if(response["error"] != None):
+            return False
+        state = response["state"]
+        gas_used = response["gas_used"]
+        amount = gas_used * GAS_PRICE
+        if state != payload[3]:
+            return False
+        if amount != payload[-1]:
+            return False
+        return True
 
     async def handle_messages(self, websocket, msg):
         """
@@ -376,6 +415,14 @@ class Peer:
             }
             await self.send_message(websocket, pkt, True)
 
+        elif t=="file":
+            cid=msg["cid"]
+            desc=msg["desc"]
+            async with self.file_hashes_lock:
+                self.file_hashes[cid]=desc
+                
+            await self.broadcast_message(msg)
+
         elif t=="network_details_request":
             pkt={
                 "type": "network_details",
@@ -404,6 +451,13 @@ class Peer:
             
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode turns bytes into a string
+
+            if transaction.receiver == "deploy":
+                if not self.valid_deploy_transaction(transaction.payload):
+                    return
+            if transaction.receiver == "invoke":
+                if not self.valid_invoke_transaction(transaction.payload):
+                    return
 
             amount = 0
             if transaction.receiver == "deploy" or transaction.receiver == "invoke":
@@ -451,14 +505,30 @@ class Peer:
                 print("\nInvalid Block\n")
                 return
             
-            self.deploy_and_run_contracts(newBlock.transactions)
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "invoke":
+                    if not self.valid_invoke_transaction(transaction.payload):
+                        return
+                if transaction.receiver == "deploy":
+                    if not self.valid_deploy_transaction(transaction.payload):
+                        return
+                    
             Chain.instance.chain.append(newBlock)
             print("\n\n Block Appended \n\n")
+
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "deploy":
+                    self.deploy_contract(transaction)
             
             async with self.mem_pool_condition:
                 for transaction in self.mem_pool:
                     if newBlock.transaction_exists_in_block(transaction):
                         self.mem_pool.remove(transaction)
+                        
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if newBlock.cid_exists_in_block(hash):
+                        self.file_hashes.pop(hash, None)
 
             await self.broadcast_message(msg)
             self.round_task.cancel()
@@ -514,6 +584,11 @@ class Peer:
                 for transaction in list(self.mem_pool):
                     if Chain.instance.transaction_exists_in_chain(transaction):
                         self.mem_pool.discard(transaction)
+
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if(Chain.instance.cid_exists_in_chain(hash)):
+                        self.file_hashes.pop(hash, None)
 
     async def handle_connections(self, websocket):
         """
@@ -615,10 +690,10 @@ class Peer:
         """
         while True:
             print("Block Chain Menu\n***************")
-            menu = "1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n"
+            menu = "1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Send Files\n6) Download Files\n"
             if self.node_id == self.admin_id:
-                menu = menu + "5) View Miners\n6) Add Miner\n7) Remove Miner\n"
-            menu = menu + "8) Quit"
+                menu = menu + "7) View Miners\n8) Add Miner\n9) Remove Miner\n"
+            menu = menu + "0) Quit"
             print(menu)
 
             ch= await asyncio._get_running_loop().run_in_executor(
@@ -672,12 +747,11 @@ class Peer:
                         args.append(parsed_arg)
                         arg_number += 1
 
-                    state = self.get_contract_state(contract_id)
-
                     response = self.run_contract([contract_id, func_name, args])
                     if(response["error"] != None):
                         print("Error: ", response["error"])
                         continue
+                    state = response["state"]
                     gas_used = response["gas_used"]
                     amount = gas_used * GAS_PRICE
 
@@ -720,7 +794,28 @@ class Peer:
                 for transaction in self.mem_pool:
                     print(f"transaction{i}: {transaction}\n\n")
                     i+=1
+
             elif ch==5:
+                desc= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter description of file: "
+                )
+                path= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter path of file: "
+                )
+                pkt= await self.uploadFile(desc, path)
+                if(pkt):
+                    await self.broadcast_message(pkt)
+
+            elif ch==6:
+                cid= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter cid of file: "
+                )
+                path= await asyncio._get_running_loop().run_in_executor(
+                    None, input, "\nEnter path to download the file: "
+                )
+                download_ipfs_file_subprocess(cid, path)
+
+            elif ch==7:
                 miner_names = list()
                 for miner in Chain.instance.chain[-1].miners_list:
                     miner_names.append(self.node_id_to_name_dict[miner])
@@ -732,7 +827,7 @@ class Peer:
                         miner_names.append(self.node_id_to_name_dict[miner])
                     print(f"Miners to be activated from block {miner_item[1]}")
                     print(miner_names)
-            elif ch==6:
+            elif ch==8:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
@@ -753,7 +848,7 @@ class Peer:
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already in miners list")
-            elif ch==7:
+            elif ch==9:
                 miner_name = await asyncio._get_running_loop().run_in_executor(
                     None, input, "\nEnter Miner's Name: "
                 )
@@ -774,7 +869,7 @@ class Peer:
                     await self.broadcast_miners_list(miners_list, len(Chain.instance.chain) + 3)
                 else:
                     print(f"{miner_name} is already not in miners list")
-            elif ch==8:
+            elif ch==0:
                 print("Quitting...")
                 break
 
@@ -891,6 +986,58 @@ class Peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
 
+    async def uploadFile(self, desc: str, path:str):
+        file_path=Path(path)
+        if(not file_path.is_file()):
+            print("\nFile doesn't exist\n")
+            return
+
+        if not self.daemon_process: 
+            self.start_daemon()
+        
+        cid, name = await asyncio.to_thread(addToIpfs, path)
+        if(not(cid and name)):
+            return
+        
+        print(f"\nNew File Created : {cid}\n")
+        pkt={
+            "type":"file",
+            "id":str(uuid.uuid4()),
+            "desc":desc,
+            "cid":cid
+        }
+        
+        self.seen_message_ids.add(pkt["id"])
+        async with self.file_hashes_lock:
+            self.file_hashes[cid]=desc
+        return pkt
+
+    def init_repo(self):
+        """
+            Creates a ipfs repo of name ending in ipfs_port_no eg ipfs_5000 
+        """
+        if not self.repo_path.exists():
+            subprocess.run(["ipfs", "init"], env=self.env, check=True)
+            print("\nIPFS repo created\n")
+
+    def configure_ports(self):
+        subprocess.run(["ipfs", "config", "Addresses.API", f"/ip4/127.0.0.1/tcp/{self.ipfs_port}"], env=self.env, check=True)
+        subprocess.run(["ipfs", "config", "Addresses.Gateway", f"/ip4/127.0.0.1/tcp/{self.gateway_port}"], env=self.env, check=True)
+        subprocess.run([
+            "ipfs", "config", "Addresses.Swarm", "--json",
+            f'["/ip4/127.0.0.1/tcp/{self.swarm_tcp}", "/ip4/127.0.0.1/udp/{self.swarm_udp}/quic"]'
+        ], env=self.env, check=True)
+        print("\nConfigured Ports\n")
+
+    def start_daemon(self):
+        self.daemon_process= subprocess.Popen(["ipfs", "daemon"], env=self.env)
+        print("\nIPFS Daemon Started\n")
+
+    def stop_daemon(self):
+        if self.daemon_process:
+            self.daemon_process.terminate()
+            self.daemon_process.wait()
+
     def sign_block(self, block: Block):
         message = block.get_message_to_sign()
         signature = self.wallet.private_key.sign(
@@ -899,21 +1046,6 @@ class Peer:
             hashes.SHA256()
         )
         block.signature = signature.hex()  # Store as hex string for transport
-
-    def deploy_and_run_contracts(self, transaction_list):
-        for transaction in transaction_list:
-            if transaction.receiver == "deploy":
-                sender = transaction.sender
-                timestamp = transaction.ts
-                code = transaction.payload[0]
-                self.deploy_contract(sender, timestamp, code)
-            if transaction.receiver == "invoke":
-                payload = transaction.payload
-                response = self.run_contract(payload)
-                state = response["state"]
-                transaction.payload[3] = state
-                msg = response["msg"]
-                print(msg)
 
     async def mine_blocks(self):
         try:
@@ -945,7 +1077,7 @@ class Peer:
                                 newBlock.miner_node_id = self.node_id
                                 newBlock.miner_public_key = self.wallet.public_key
                                 newBlock.miners_list = miners_list
-                                self.deploy_and_run_contracts(transaction_list)
+                                newBlock.files=self.file_hashes.copy()
                                 self.sign_block(newBlock)
 
                                 reqd_miner_pulic_key = self.wallet.public_key
@@ -956,9 +1088,18 @@ class Peer:
                                 Chain.instance.chain.append(newBlock)
                                 print("\nBlock Appended \n")
 
+                                for transaction in newBlock.transactions:
+                                    if transaction.receiver == "deploy":
+                                        self.deploy_contract(transaction)
+
                                 for transaction in self.mem_pool:
                                     if newBlock.transaction_exists_in_block(transaction):
-                                        self.mem_pool.remove(transaction)     
+                                        self.mem_pool.remove(transaction)
+
+                                async with self.file_hashes_lock:
+                                    for hash in list(self.file_hashes.keys()):
+                                        if newBlock.cid_exists_in_block(hash):
+                                            self.file_hashes.pop(hash, None)
 
                                 pkt={
                                     "type":"new_block",
@@ -1009,9 +1150,13 @@ class Peer:
         hash_object = hashlib.sha256(data.encode('utf-8'))
         return hash_object.hexdigest()
         
-    def deploy_contract(self, sender, timestamp, code):
+    def deploy_contract(self, transaction):
+        sender = transaction.sender
+        timestamp = transaction.ts
+        code = transaction.payload[0]
         contract_id = self.calculate_contract_id(sender, timestamp)
         self.contractsDB.store_contract(contract_id, code)
+        print("Contract deployed with id: ", contract_id)
 
     def run_contract(self, payload):
         contract_id, func_name, args = payload[0], payload[1], payload[2]
@@ -1054,12 +1199,19 @@ class Peer:
         sampler_task = asyncio.create_task(self.gossip_peer_sampler())
         self.round_task = asyncio.create_task(self.round_calculator())
 
+        self.init_repo()
+        self.configure_ports()
+
         await inp_task
 
         consensus_task.cancel()
         disc_task.cancel()
         sampler_task.cancel()
         self.round_task.cancel()
+
+        if self.daemon_process:
+            self.stop_daemon()
+
         await self.update_role(False)
 
             

@@ -1,5 +1,5 @@
 import json, hashlib, uuid, base64
-from typing import List
+from typing import List, Dict
 from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -84,6 +84,7 @@ class Block:
         self.miner_public_key= None
         self.signature = None # This will hold the digital signature from the miner
         self.miners_list = None # List of miner nodes
+        self.files: Dict[str: str] = {}
 
     def to_dict(self):
         return {
@@ -95,6 +96,7 @@ class Block:
             "miner_public_key":self.miner_public_key,
             "miners_list":self.miners_list,
             "signature":self.signature,
+            "files":self.files
         }
 
     def __str__(self):
@@ -111,6 +113,12 @@ class Block:
                 return True
         return False
     
+    def cid_exists_in_block(self, cid: str):
+        for file_hash in list(self.files.keys()):
+            if file_hash==cid:
+                return True
+        return False
+    
     def get_message_to_sign(self):
         return json.dumps({
             "id": self.id,
@@ -120,6 +128,7 @@ class Block:
             "miner_node_id": self.miner_node_id,
             "miner_public_key": self.miner_public_key,
             "miners_list": self.miners_list,
+            "files":self.files
         }, sort_keys=True).encode()
     
     def is_valid_signature(self):
@@ -215,6 +224,13 @@ class Chain:
             return
         
         Chain.instance.chain=blockList.copy()
+
+    def cid_exists_in_chain(self, cid: str):
+        for block in reversed(self.chain):
+            if block.cid_exists_in_block(cid):
+                return True
+        
+        return False
 
     def transaction_exists_in_chain(self, transaction: Transaction):
         for block in reversed(self.chain):

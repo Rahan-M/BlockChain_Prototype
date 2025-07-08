@@ -240,6 +240,30 @@ class Peer:
         stake.sign=sign_bytes
         return stake
 
+    def valid_deploy_transaction(self, payload):
+        contract_code = payload[0]
+        gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
+        amount = gas_used * GAS_PRICE
+        if amount != payload[-1]:
+            return False
+        return True
+
+    def valid_invoke_transaction(self, payload):
+        contract_id = payload[0]
+        func_name = payload[1]
+        args = payload[2]
+        response = self.run_contract([contract_id, func_name, args])
+        if(response["error"] != None):
+            return False
+        state = response["state"]
+        gas_used = response["gas_used"]
+        amount = gas_used * GAS_PRICE
+        if state != payload[3]:
+            return False
+        if amount != payload[-1]:
+            return False
+        return True
+
     async def handle_messages(self, websocket, msg):
         """
             This is a function to handle messages as the name suggests
@@ -337,6 +361,14 @@ class Peer:
             
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode turns bytes into a string
+
+            if transaction.receiver == "deploy":
+                if not self.valid_deploy_transaction(transaction.payload):
+                    return
+            if transaction.receiver == "invoke":
+                if not self.valid_invoke_transaction(transaction.payload):
+                    return
+                
             if(amount > Chain.instance.calc_balance(transaction.sender, self.mem_pool, list(self.current_stakes))):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
@@ -407,7 +439,6 @@ class Peer:
                 print("\nInvalid Block\n")
                 return
             
-            self.deploy_and_run_contracts(newBlock.transactions)
             vk=VerifyingKey.from_pem(msg["block"]["creator"])
             vrf_proof=base64.b64decode(msg["vrf_proof"])
             sign=base64.b64decode(msg.get("sign"))
@@ -472,11 +503,23 @@ class Peer:
                 if amount>Chain.instance.calc_balance(publicKey=transaction.sender,current_stakes=newBlock.stakers):
                     print("\nInvalid Transactions, stake should be slashed\n")
                     return
+                
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "invoke":
+                    if not self.valid_invoke_transaction(transaction.payload):
+                        return
+                if transaction.receiver == "deploy":
+                    if not self.valid_deploy_transaction(transaction.payload):
+                        return
 
             newBlock.creator=msg["block"]["creator"]
             Chain.instance.chain.append(newBlock)
             print("\n\n Block Appended \n\n")
             self.last_epoch_end_ts=datetime.now()
+
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "deploy":
+                    self.deploy_contract(transaction)
 
             async with self.mem_pool_lock:
                 for transaction in self.mem_pool:
@@ -786,12 +829,11 @@ class Peer:
                         args.append(parsed_arg)
                         arg_number += 1
 
-                    state = self.get_contract_state(contract_id)
-
                     response = self.run_contract([contract_id, func_name, args])
                     if(response["error"] != None):
                         print("Error: ", response["error"])
                         continue
+                    state = response["state"]
                     gas_used = response["gas_used"]
                     amount = gas_used * GAS_PRICE
 
@@ -1120,21 +1162,6 @@ class Peer:
                 self.current_stakers.clear()
                 self.current_stakes.clear()
 
-    def deploy_and_run_contracts(self, transaction_list):
-        for transaction in transaction_list:
-            if transaction.receiver == "deploy":
-                sender = transaction.sender
-                timestamp = transaction.ts
-                code = transaction.payload[0]
-                self.deploy_contract(sender, timestamp, code)
-            if transaction.receiver == "invoke":
-                payload = transaction.payload
-                response = self.run_contract(payload)
-                state = response["state"]
-                transaction.payload[3] = state
-                msg = response["msg"]
-                print(msg)
-
     async def create_blocks(self, time):
         if(not self.staker):
             print(self.staker)
@@ -1181,7 +1208,6 @@ class Peer:
             print("\nYou won\n")
             newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
             newBlock.files=self.file_hashes.copy()
-            self.deploy_and_run_contracts(pending_transactions)
             newBlock.seed=seed
             newBlock.vrf_proof=vrf_proof
             Chain.instance.chain.append(newBlock)
@@ -1192,6 +1218,11 @@ class Peer:
 
             self.last_epoch_end_ts=datetime.now()
             print("Block Appended")
+
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "deploy":
+                    self.deploy_contract(transaction)
+
             newBlock.stakers=list(self.current_stakes)
             # print(f"\n{newBlock.to_dict_with_stakers()}\n")
 
@@ -1248,9 +1279,13 @@ class Peer:
         hash_object = hashlib.sha256(data.encode('utf-8'))
         return hash_object.hexdigest()
         
-    def deploy_contract(self, sender, timestamp, code):
+    def deploy_contract(self, transaction):
+        sender = transaction.sender
+        timestamp = transaction.ts
+        code = transaction.payload[0]
         contract_id = self.calculate_contract_id(sender, timestamp)
         self.contractsDB.store_contract(contract_id, code)
+        print("Contract deployed with id: ", contract_id)
 
     def run_contract(self, payload):
         contract_id, func_name, args = payload[0], payload[1], payload[2]

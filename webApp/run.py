@@ -59,7 +59,7 @@ async def main():
         # 7. After Hypercorn has stopped, initiate graceful shutdown of your peers
         
         print("Hypercorn server has finished. Initiating graceful peer shutdown.")
-        await shutdown_peer()
+        shutdown_peer()
         print("Application fully shut down.")
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))

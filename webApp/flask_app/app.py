@@ -3,11 +3,10 @@ from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 import asyncio, os
 from blockchain.pow import p2p
-import threading
 peer_instance: p2p.Peer=None
 peer_task=None
 
-def _start_peer_in_background(host, port, name, miner, bootstrap_host=None, boostrap_port=None):
+def  _start_peer_in_background(host, port, name, miner, bootstrap_host=None, boostrap_port=None):
     """
     Internal coroutine to start a peer and manage its lifecycle.
     This runs as an asyncio Task.
@@ -24,9 +23,7 @@ def _start_peer_in_background(host, port, name, miner, bootstrap_host=None, boos
         print(f"Peer task for '{name}' was cancelled. Stopping peer instance gracefully.")
         # Ensure peer_instance.stop() is an awaitable if it performs async operations
         # If it's synchronous, just call it: peer_instance.stop()
-        if asyncio.iscoroutinefunction(peer_instance.stop):
-            peer_instance.stop()
-        else:
+        if(peer_instance):
             peer_instance.stop()
 
     except Exception as e:
@@ -36,21 +33,27 @@ def _start_peer_in_background(host, port, name, miner, bootstrap_host=None, boos
         peer_instance=None
         print(f"Peer '{name}' background task finished/cleaned up.")
 
-async def shutdown_peer():
+def shutdown_peer():
+    global peer_instance
     """
     Gracefully shuts down all active peer tasks.
     This coroutine will be called during Hypercorn's graceful shutdown.
     """
     if not peer_instance:
-        print("No peer tasks to shut down.")
+        return jsonify({"success":True, "msg":"No Peer Running"})
         return
 
     print("Initiating graceful shutdown of all active peer tasks...")
 
     try:
-        peer_instance.stop()
+        if(peer_instance):
+            peer_instance.stop()
+        return jsonify({"success":True, "msg":"Peer succesfully shut down"})
     except Exception as e:
         print(f"Error during peer shutdown process: {e}")
+        return jsonify({"success":False, "msg":"Some error occured during shut down"})
+    finally:
+        peer_instance=None
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # Path to the React build directory relative to Flask app.py
@@ -79,6 +82,10 @@ def create_app(config_class=None):
             return send_from_directory(app.static_folder, path)
         else:
             return send_from_directory(app.static_folder, 'index.html')
+
+    @app.route('/api/stop', methods=['GET'])
+    def shut_curr_peer():
+        return shutdown_peer()
 
     # Import and register blueprints INSIDE the factory function
     from .routes.pow_routes import chain_bp

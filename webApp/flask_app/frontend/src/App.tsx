@@ -1,6 +1,8 @@
 import { useState } from "react";
-import Navbar from "./Components/Navbar";
-// import axios from "axios";
+import axios from "axios";
+import { useAuth } from "./contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { useSnackbar } from "notistack";
 
 function App() {
   const [showStartMenu, setShowStartMenu]=useState(false);
@@ -8,18 +10,29 @@ function App() {
   const [name, setName]=useState("");
   const [port, setPort]=useState("");
   const [host, setHost]=useState("");
+  const [consensus, setConsensus]=useState("pow");
   const [bootStrapPort, setBootStrapPort]=useState("");
-  // const getKeys=async ()=>{
-  //   try{
-  //     const res=await axios.get("/api/chain/create_keys");
-  //     setSk(res.data.sk);
-  //     setVk(res.data.vk);
-  //     setLoggedIn(true);
-  //   }
-  //   catch{
+  const {login}=useAuth()
+  const navigate=useNavigate()
+  const {enqueueSnackbar}=useSnackbar()
 
-  //   }
-  // }
+  const handleStart=async ()=>{
+    console.log(consensus)
+    const res=await axios.post(`/api/${consensus}/create`, {
+      "name":name,
+      "host":host,
+      "port":port,
+      "miner":true
+    })
+    login(consensus)
+    if(res.data.success){
+      enqueueSnackbar("Chain Started", {variant:'success'})
+      navigate('/run')
+    }else{
+      enqueueSnackbar(res.data.error, {variant:'error'})
+    }
+    setShowStartMenu(false)
+  }
 
   const startMenu=()=>{
     if(!showStartMenu)
@@ -44,7 +57,18 @@ function App() {
                   className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96 mb-5"
                   />
               </div>
-              <div className="linkInp flex flex-col items-start mb-5"> 
+              <div className="hostInp flex flex-col items-start mb-5"> 
+                <label htmlFor="" className="name font-orbitron">
+                  Enter the host to run node :
+                </label>
+                <input
+                  type="text"
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96"
+                  />
+              </div>
+              <div className="portInp flex flex-col items-start mb-5"> 
                 <label htmlFor="" className="name font-orbitron">
                   Enter the port to run node :
                 </label>
@@ -55,9 +79,19 @@ function App() {
                   className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96"
                   />
               </div>
+              <div className="linkInp flex flex-col items-start mb-5"> 
+                <label htmlFor="options" className="name font-orbitron">
+                  Choose the consensus mechanism
+                </label>
+                <select name="options" className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96" onChange={(e)=>setConsensus(e.target.value)}>
+                  <option value="pow">Proof Of Work (pow)</option>
+                  <option value="poa">Proof Of Stake (poa)</option>
+                  <option value="pos">Proof Of Authority (pos)</option>
+                </select>
+              </div>
             </div>
             <div className="buttons flex justify-around">
-              <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3">
+              <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={handleStart}>
                 Start Block Chain
               </button>
               <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowStartMenu(false)}}>
@@ -144,7 +178,6 @@ function App() {
 
   return (
     <>
-      <Navbar/>
       <div className="bg-secondary h-[90vh] w-full flex flex-col justify-center items-center">
       <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3 w-[80vw] md:w-[15vw]" onClick={()=>{setShowStartMenu(true)}}>
         Start Block Chain

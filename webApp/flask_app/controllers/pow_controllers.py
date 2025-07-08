@@ -11,7 +11,7 @@ async def start_new_blockchain():
     if request.is_json:
         data = request.get_json()
         name = data.get('name')
-        port = data.get('port')
+        port = int(data.get('port'))
         host = data.get('host')
         miner = data.get('miner')
 
@@ -25,24 +25,24 @@ async def start_new_blockchain():
         thread=threading.Thread(target=_start_peer_in_background,args=(host, port, name, miner_bool))
         thread.daemon=True
         thread.start()
-        return jsonify({"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
+        return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
-        return jsonify({"error": "Request must be JSON"}, 400)
+        return jsonify({"success":False, "error": "Request must be JSON"})
 
 def account_balance():
     from ..app import peer_instance
     if not peer_instance:
-        return jsonify({"error": "No node is running"}, 409)
+        return jsonify({"success":False, "error": "No node is running"}, 409)
     
     if not peer_instance.chain:
-        return jsonify({"error": "Chain hasn't been initialized"}, 409)
+        return jsonify({"success":False, "error": "Chain hasn't been initialized"}, 409)
     
     try:
         print()
         amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
-        return jsonify({"message":"succesful request", "account_balance": amt})
+        return jsonify({"success":True, "message":"succesful request", "account_balance": amt})
     except:
-        return jsonify({"error": "error while fetching accoutn balance"}, 409)
+        return jsonify({"success":False, "error": "error while fetching accoutn balance"}, 409)
 
 def get_status():
         from ..app import peer_instance

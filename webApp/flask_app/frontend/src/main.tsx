@@ -2,6 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import Run from './Pages/Run.tsx'
+import RootLayout from './layouts/RootLayout.tsx'
 import {AuthProvider} from './contexts/AuthContext.tsx'
 import {createBrowserRouter, RouterProvider} from 'react-router-dom'
 
@@ -16,9 +18,10 @@ const NotFound = () => (
 const router = createBrowserRouter([
   {
       path: "/",
-      // element: <RootLayout />,
+      element: <RootLayout />,
       children: [
           { index: true, element: <App /> },
+          { path: '/run', element: <Run /> },
           { path: "*", element: <NotFound /> }
       ],
   },

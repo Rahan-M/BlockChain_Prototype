@@ -94,6 +94,7 @@ class Peer:
         self.mine_task=None
         self.disc_task=None
         self.consensus_task=None
+        self.server=None
 
     async def send_peer_info(self, websocket):
         """
@@ -732,7 +733,8 @@ class Peer:
         # We start the server
         print("\nHit here1\n")
         try:
-            await websockets.serve(self.handle_connections, self.host, self.port)
+            self.server=await websockets.serve(self.handle_connections, self.host, self.port)
+            print(self.server)
         except: # Catches all BaseException descendants
             import sys
             exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -765,6 +767,12 @@ class Peer:
         self.configure_ports()
         
         await self.consensus_task
+        asyncio.create_task(self.close_server())
+
+    async def close_server(self):
+        if(self.server and self.server!=None):
+            print("\nHey\n")
+            await self.server.close()
 
     def stop(self):
         if self.disc_task:
@@ -779,9 +787,12 @@ class Peer:
         if self.mine_task:
             self.mine_task.cancel()
 
+        if self.server:
+            print(f"\nServer : {self.server}\n")
+
+
     async def printSomething(self):
         print("\nYO\n")
-
 
 def strtobool(v):
     if isinstance(v, bool):

@@ -4,9 +4,9 @@ import threading, socket, os, subprocess
 from datetime import datetime, timedelta
 from typing import Set, Dict, List, Tuple, Any
 from blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
-from ipfs import addToIpfs, download_ipfs_file_subprocess
-from contracts_db import SmartContractDatabase
-from secure_executor import SecureContractExecutor
+from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
+from smart_contract.contracts_db import SmartContractDatabase
+from smart_contract.secure_executor import SecureContractExecutor
 from flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey, BadSignatureError
 import tempfile

@@ -48,10 +48,14 @@ async def connect_to_blockchain():
         # Use the _start_peer_in_background function imported from __init__.py
         # I'm storing this in this variable because gemini hypothesized that will stop the
         # the spontaneous cancelling of the node
-        thread=threading.Thread(target=_start_peer_in_background,args=(host, port, name, miner_bool, bootstrap_host, bootstrap_port))
-        thread.daemon=True
-        thread.start()
-        return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
+        try:
+            thread=threading.Thread(target=_start_peer_in_background,args=(host, port, name, miner_bool, bootstrap_host, bootstrap_port))
+            thread.daemon=True
+            thread.start()
+            return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
+        except:
+            return jsonify({"success":False ,"message": f"Some Error Occured While Starting Peer"})
+
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
 

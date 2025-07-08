@@ -10,19 +10,39 @@ function App() {
   const [name, setName]=useState("");
   const [port, setPort]=useState("");
   const [host, setHost]=useState("");
+  const [miner, setMiner]=useState('true');
   const [consensus, setConsensus]=useState("pow");
+  const [bootStrapHost, setBootStrapHost]=useState("");
   const [bootStrapPort, setBootStrapPort]=useState("");
   const {login}=useAuth()
   const navigate=useNavigate()
   const {enqueueSnackbar}=useSnackbar()
 
   const handleStart=async ()=>{
-    console.log(consensus)
     const res=await axios.post(`/api/${consensus}/create`, {
       "name":name,
       "host":host,
       "port":port,
       "miner":true
+    })
+    login(consensus)
+    if(res.data.success){
+      enqueueSnackbar("Chain Started", {variant:'success'})
+      navigate('/run')
+    }else{
+      enqueueSnackbar(res.data.error, {variant:'error'})
+    }
+    setShowStartMenu(false)
+  }
+
+  const handleConnect=async ()=>{
+    const res=await axios.post(`/api/${consensus}/connect`, {
+      "name":name,
+      "host":host,
+      "port":port,
+      "miner":miner,
+      "bootstrap_host":bootStrapHost,
+      "bootstrap_port":bootStrapPort,
     })
     login(consensus)
     if(res.data.success){
@@ -127,6 +147,17 @@ function App() {
                   className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96 mb-5"
                   />
               </div>
+              <div className="hostInp flex flex-col items-start mb-5"> 
+                <label htmlFor="" className="name font-orbitron">
+                  Enter the host to run node :
+                </label>
+                <input
+                  type="text"
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96"
+                  />
+              </div>
               <div className="linkInp flex flex-col items-start mb-5"> 
                 <label htmlFor="" className="name font-orbitron">
                   Enter the port to run node :
@@ -139,13 +170,23 @@ function App() {
                   />
               </div>
               <div className="linkInp flex flex-col items-start mb-5"> 
+                <label htmlFor="options" className="name font-orbitron">
+                  Choose the consensus mechanism
+                </label>
+                <select name="options" className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96" onChange={(e)=>setConsensus(e.target.value)}>
+                  <option value="pow">Proof Of Work (pow)</option>
+                  <option value="poa">Proof Of Stake (poa)</option>
+                  <option value="pos">Proof Of Authority (pos)</option>
+                </select>
+              </div>
+              <div className="linkInp flex flex-col items-start mb-5"> 
                 <label htmlFor="" className="name font-orbitron">
                   Enter hostname of bootstrap node :
                 </label>
                 <input
                   type="text"
-                  value={host}
-                  onChange={(e) => setHost(e.target.value)}
+                  value={bootStrapHost}
+                  onChange={(e) => setBootStrapHost(e.target.value)}
                   className="border-2 bg-white border-gray-500 px-4 py-2 w-[70vw] md:w-96"
                   />
               </div>
@@ -160,9 +201,24 @@ function App() {
                   className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96"
                   />
               </div>
+              {consensus=='pow' && 
+              <div>
+                <div className="Miner-Question">Do you want to mine blocks?</div>
+                <div className="radButtons flex justify-between">
+                  <div className="trueOpt flex items-center gap-2">
+                    <label htmlFor="true-miner">Yes</label>
+                    <input type="radio" id="true-miner" name="miner" value='true' onChange={()=>setMiner("true")}/>
+                  </div>
+                  <div className="falseOpt flex items-center gap-2">
+                    <label htmlFor="false-miner">No</label>
+                    <input type="radio" id="false-miner" name="miner" value='false' onChange={()=>setMiner("false")}/>
+                  </div>
+                </div>
+              </div>
+              }
             </div>
             <div className="buttons flex justify-around">
-              <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3">
+              <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={handleConnect}>
                 Start Block Chain
               </button>
               <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowConnectMenu(false)}}>

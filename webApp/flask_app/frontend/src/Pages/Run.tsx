@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { IoIosArrowBack } from "react-icons/io";
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
@@ -42,22 +43,42 @@ const Run = () => {
         }else{
             enqueueSnackbar("Couldn't fetch account balance", {variant:'error'})
         }
+        
     }
-
+    
     const accBalance=()=>{
-        if(accBal==-1)
+        const icon=document.getElementById('arrowIcon')
+        const rotationClass='rotate-[-90deg]'
+        if(accBal==-1){
+            if(icon?.classList.contains(rotationClass))
+                icon.classList.remove(rotationClass)
             return null
+        }
+        
+        if(icon && !icon.classList.contains(rotationClass))
+            icon.classList.add('rotate-[-90deg]');
+
         return(
             <div className='border-2 p-5 border-primary flex flex-col'>
-                {accBal}
+                Account Balance {accBal}
             </div>
         )
     }
 
     const commonMenu=()=>{
         return(
-            <div className="menu flex justify-center items-center h-[90vh] bg-secondary">
-                <div className="accBal bg-primary text-white p-5 rounded-xl" onClick={findAccBal}>1. Find Account Balance</div>
+            <div className="menu flex flex-col justify-center items-center h-[90vh] bg-secondary">
+                <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl" onClick={()=>{
+                    if(accBal==-1)
+                        findAccBal()
+                    else 
+                        setAccBalance(-1)
+                }}>
+                    <div className='mr-2' >
+                        1. Find Account Balance    
+                    </div>
+                    <IoIosArrowBack id='arrowIcon' />
+                </div>
                 {accBalance()}
             </div>
         )

@@ -74,28 +74,45 @@ def account_balance():
     except:
         return jsonify({"success":False, "error": "error while fetching accoutn balance"}, 409)
 
+# def get_status():
+#         from ..app import peer_instance
+#         chain_list = []
+#         for block in peer_instance.chain.chain:
+#             chain_list.append(block.to_dict())
+#         outbound_peers_list = []
+#         for outbound_peer in peer_instance.outbound_peers:
+#             outbound_peers_list.append({
+#                 "addr": outbound_peer[0],
+#                 "port": outbound_peer[1]
+#             })
+#         return Response(
+#             json.dumps(OrderedDict([
+#                 ("name", peer_instance.name),
+#                 ("host", peer_instance.host),
+#                 ("port", peer_instance.port),
+#                 ("known_peers", list(map(lambda x: peer_instance.known_peers[x][0]+":"+x[0]+":"+str(x[1])+":"+peer_instance.known_peers[x][1], peer_instance.known_peers.keys()))),
+#                 ("outbound_peers", outbound_peers_list),
+#                 ("client_connections", list(ws.remote_address[1] for ws in peer_instance.client_connections)),
+#                 ("server_connections", list(ws.remote_address[1] for ws in peer_instance.server_connections)),
+#                 ("mempool", blockchain_structures.txs_to_json_digestable_form(list(peer_instance.mem_pool))),
+#                 ("chain", chain_list)
+#             ])),
+#             mimetype='application/json'
+
+#         )
 def get_status():
-        from ..app import peer_instance
-        chain_list = []
-        for block in peer_instance.chain.chain:
-            chain_list.append(block.to_dict())
-        outbound_peers_list = []
-        for outbound_peer in peer_instance.outbound_peers:
-            outbound_peers_list.append({
-                "addr": outbound_peer[0],
-                "port": outbound_peer[1]
-            })
-        return Response(
-            json.dumps(OrderedDict([
-                ("name", peer_instance.name),
-                ("host", peer_instance.host),
-                ("port", peer_instance.port),
-                ("known_peers", list(map(lambda x: peer_instance.known_peers[x][0]+":"+x[0]+":"+str(x[1])+":"+peer_instance.known_peers[x][1], peer_instance.known_peers.keys()))),
-                ("outbound_peers", outbound_peers_list),
-                ("client_connections", list(ws.remote_address[1] for ws in peer_instance.client_connections)),
-                ("server_connections", list(ws.remote_address[1] for ws in peer_instance.server_connections)),
-                ("mempool", blockchain_structures.txs_to_json_digestable_form(list(peer_instance.mem_pool))),
-                ("chain", chain_list)
-            ])),
-            mimetype='application/json'
-        )
+    from ..app import peer_instance
+    amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
+
+    return Response(
+        json.dumps(OrderedDict([
+            ("success", True),
+            ("name", peer_instance.name),
+            ("host", peer_instance.host),
+            ("port", peer_instance.port),
+            ("account_balance", amt),
+            ("public_key",peer_instance.wallet.public_key_pem),
+            ("private_key",peer_instance.wallet.private_key_pem)
+        ])),
+        mimetype='application/json'
+    )

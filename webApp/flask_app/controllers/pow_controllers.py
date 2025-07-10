@@ -123,6 +123,12 @@ def get_chain():
 
     chain_list = []
     for block in chain:
+        file_list = []
+        for cid, desc in block.files.items():
+            file_list.append({
+                "cid": cid,
+                "desc": desc,
+            })
         chain_list.append({
             "id": block.id,
             "prevHash": block.prevHash,
@@ -131,7 +137,7 @@ def get_chain():
             "nonce": block.nonce,
             "hash": block.hash,
             "miner": block.miner,
-            "files": block.files,
+            "files": file_list,
         })
 
     return jsonify({"success":True, "message":"succesful request", "chain": chain_list})

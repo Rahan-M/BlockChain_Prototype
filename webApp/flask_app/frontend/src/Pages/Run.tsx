@@ -39,7 +39,7 @@ const Run = () => {
             enqueueSnackbar("Create/Connect First", {variant:'warning'})
             navigate('/')
         }  
-        fetchData()
+        // fetchData()
         // if(consensus=="pow"){
         //     setShowPowMenu(true);
         //     setShowPosMenu(false);

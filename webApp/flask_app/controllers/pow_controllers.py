@@ -116,3 +116,43 @@ def get_status():
         ])),
         mimetype='application/json'
     )
+
+def get_chain():
+    from ..app import peer_instance
+    chain = peer_instance.chain.chain
+
+    chain_list = []
+    for block in chain:
+        chain_list.append({
+            "id": block.id,
+            "prevHash": block.prevHash,
+            "transactions": blockchain_structures.txs_to_json_digestable_form(block.transactions),
+            "ts": block.ts,
+            "nonce": block.nonce,
+            "hash": block.hash,
+            "miner": block.miner,
+            "files": block.files,
+        })
+
+    return jsonify({"success":True, "message":"succesful request", "chain": chain_list})
+
+def get_pending_transactions():
+    from ..app import peer_instance
+
+    pending_transactions = blockchain_structures.txs_to_json_digestable_form(list(peer_instance.mem_pool))
+
+    return jsonify({"success":True, "message":"succesful request", "pending_transactions": pending_transactions})
+
+def get_known_peers():
+    from ..app import peer_instance
+
+    known_peers_list = []
+    for peer in peer_instance.known_peers.keys():
+        known_peers_list.append({
+            "name": peer_instance.known_peers[peer][0],
+            "host": peer[0],
+            "port": peer[1],
+            "public_key": peer_instance.known_peers[peer][1],
+        })
+
+    return jsonify({"success":True, "message":"succesful request", "known_peers": known_peers_list})

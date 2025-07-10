@@ -22,3 +22,15 @@ async def find_balance():
 @chain_bp.route('/status', methods=['GET'])
 def return_status():
     return pow_controllers.get_status()
+
+@chain_bp.route('/chain', methods=['GET'])
+def view_chain():
+    return pow_controllers.get_chain()
+
+@chain_bp.route('/pending', methods=['GET'])
+def view_pending_transactions():
+    return pow_controllers.get_pending_transactions()
+
+@chain_bp.route('/peers', methods=['GET'])
+def view_known_peers():
+    return pow_controllers.get_known_peers()

@@ -33,12 +33,13 @@ const Run = () => {
         setSk(res.data.private_key)
         setVk(res.data.public_key)
     }
+
     useEffect(() => {
         if(!isRunning){
             enqueueSnackbar("Create/Connect First", {variant:'warning'})
             navigate('/')
         }  
-        // fetchData()
+        fetchData()
         // if(consensus=="pow"){
         //     setShowPowMenu(true);
         //     setShowPosMenu(false);

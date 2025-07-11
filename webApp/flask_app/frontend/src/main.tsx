@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import Run from './Pages/Run.tsx'
 import Chain from './Pages/Chain.tsx'
+import Mempool from './Pages/Mempool.tsx'
 import RootLayout from './layouts/RootLayout.tsx'
 import {AuthProvider} from './contexts/AuthContext.tsx'
 import {createBrowserRouter, RouterProvider} from 'react-router-dom'
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
           { index: true, element: <App /> },
           { path: '/run', element: <Run /> },
           { path: '/chain', element: <Chain /> },
+          { path: '/pending', element: <Mempool /> },
           { path: "*", element: <NotFound /> }
       ],
   },

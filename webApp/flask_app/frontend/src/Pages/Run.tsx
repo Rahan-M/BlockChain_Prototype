@@ -108,6 +108,10 @@ const Run = () => {
         navigate('/chain');
     }
     
+    const viewPendingTransactionsPage = () => {
+        navigate('/pending');
+    }
+    
     return (
         <div className='flex bg-secondary justify-around'>
             <div className='options w-full'>
@@ -137,7 +141,7 @@ const Run = () => {
                 <div className='cursor-pointer bg-primary p-3 w-[7vw] text-center text-white rounded-xl' onClick={viewChainPage}>
                     View Chain
                 </div>
-                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl'>
+                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewPendingTransactionsPage}>
                     View Pending Transactions
                 </div>
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl'>

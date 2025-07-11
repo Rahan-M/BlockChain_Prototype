@@ -112,6 +112,10 @@ const Run = () => {
         navigate('/pending');
     }
     
+    const viewKnownPeersPage = () => {
+        navigate('/peers');
+    }
+    
     return (
         <div className='flex bg-secondary justify-around'>
             <div className='options w-full'>
@@ -144,7 +148,7 @@ const Run = () => {
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewPendingTransactionsPage}>
                     View Pending Transactions
                 </div>
-                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl'>
+                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewKnownPeersPage}>
                     View Known Peers
                 </div>
             </div>

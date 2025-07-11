@@ -1,22 +1,51 @@
 import { useEffect, useState } from 'react'
-import { IoIosArrowBack } from "react-icons/io";
 import { IoReloadSharp } from "react-icons/io5";
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
 import axios from 'axios'
 
+interface Peer {
+    name: string;
+    host: string;
+    port: number;
+    public_key: string;
+}
+interface PeerArray {
+    peers:Peer[];
+}
+
 const Run = () => {
-    const {isRunning, loadingAuth}=useAuth()
+    const {isRunning, loadingAuth}=useAuth();
     // const [showPowMenu, setShowPowMenu]=useState(false)
     // const [showPosMenu, setShowPosMenu]=useState(false)
     // const [showPoaMenu, setShowPoaMenu]=useState(false)
-    const [name, setName]=useState("")
-    const [port, setPort]=useState(-1)
-    const [host, setHost]=useState("")
-    const [vk, setVk]=useState("")
-    const [sk, setSk]=useState("")
-    const [accBal, setAccBalance]=useState(-1)
+    const [name, setName]=useState("");
+    const [port, setPort]=useState(-1);
+    const [host, setHost]=useState("");
+    const [vk, setVk]=useState("");
+    const [sk, setSk]=useState("");
+    const [accBal, setAccBalance]=useState(-1);
+    const [showTxMenu1, setShowTxMenu1]=useState(false);
+    const [showTxMenu2, setShowTxMenu2]=useState(false);
+    
+    const fakeData=[
+        {
+            name:"Jefin",
+            host:"localhost",
+            port:5000,
+            public_key:"rand"
+        },
+        {
+            name:"Elias",
+            host:"localhost",
+            port:6000,
+            public_key:"rand"
+        }
+    ];
+
+    const [peers, setPeers]=useState<Peer[]>(fakeData);
+    const [pubKey, setPubKey]=useState("");
 
     const navigate=useNavigate()
     const {enqueueSnackbar}=useSnackbar()
@@ -34,11 +63,24 @@ const Run = () => {
         setVk(res.data.public_key)
     }
 
+    const fetchPeers = async () => {
+        try {
+            const res = await axios.get("/api/pow/peers")
+            if (!res.data.success) {
+                return;
+            }
+
+            setPeers(res.data.known_peers);
+        } catch (err) {
+            enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
+        }
+    }
+
     useEffect(() => {
-        if(!isRunning){
-            enqueueSnackbar("Create/Connect First", {variant:'warning'})
-            navigate('/')
-        }  
+        // if(!isRunning){
+        //     enqueueSnackbar("Create/Connect First", {variant:'warning'})
+        //     navigate('/')
+        // }  
         // fetchData()
         // if(consensus=="pow"){
         //     setShowPowMenu(true);
@@ -57,50 +99,85 @@ const Run = () => {
         // }
     }, [loadingAuth])
 
-    const findAccBal=async ()=>{
-        const res=await axios.get(`/api/pow/balance`);
-        if(res.data.success){
-            setAccBalance(res.data.account_balance)
-        }else{
-            enqueueSnackbar("Couldn't fetch account balance", {variant:'error'})
-        }
-        
-    }
-    
-    const accBalance=()=>{
-        const icon=document.getElementById('arrowIcon')
-        const rotationClass='rotate-[-90deg]'
-        if(accBal==-1){
-            if(icon?.classList.contains(rotationClass))
-                icon.classList.remove(rotationClass)
-            return null
-        }
-        
-        if(icon && !icon.classList.contains(rotationClass))
-            icon.classList.add('rotate-[-90deg]');
+    const addTransaction=()=>{
+        setShowTxMenu1(false);
+        setShowTxMenu2(false);
+    }   
 
+    const txMenu1=()=>{
+        if(!showTxMenu1)
+            return null;
+        fetchPeers();
+        if(!peers)
+            return null
+        
+        setPubKey(peers[0].public_key);
         return(
-            <div className='border-2 p-5 border-primary flex flex-col'>
-                Account Balance {accBal}
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                    Choose Whom to Send To
+                </div>
+                <div className="content p-5 flex flex-col items-center">
+                    <select name="peers" id="peer_opts" className='border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96' onChange={(e)=>{setPubKey(e.target.value)}}>
+                        {peers.map((peer)=>(
+                            <option value={peer.public_key}>{peer.name}</option>
+                        ))}
+                    </select>
+                    <div className="buttons flex justify-around">
+                        <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
+                            Add Transaction
+                        </button>
+                        <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowTxMenu1(false)}}>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
             </div>
+            </div>  
+        )
+    }
+
+    const txMenu2=()=>{
+        if(!showTxMenu2)
+            return null;
+    
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                Fill These
+                </div>
+                <div className="content p-5">
+                    <div className="buttons flex justify-around">
+                        <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{console.log("yo")}}>
+                            Add Transaction
+                        </button>
+                        <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowTxMenu2(false)}}>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+            </div>  
         )
     }
 
     const commonMenu=()=>{
         return(
-                <div className="menu flex flex-col justify-center items-center h-[90vh]">
-                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl" onClick={()=>{
-                        if(accBal==-1)
-                            findAccBal()
-                        else 
-                        setAccBalance(-1)
-                    }}>
-                        <div className='mr-2' >
-                            1. Find Account Balance    
+                <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
+                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                        <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu1(true)}>
+                            1. Add Transaction via saved name
                         </div>
-                        <IoIosArrowBack />
                     </div>
-                    {accBalance()}
+                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                        <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
+                            2. Add Transaction via public address
+                        </div>
+                    </div>
+                    {txMenu1()}
+                    {txMenu2()}
                 </div>
         )
     }

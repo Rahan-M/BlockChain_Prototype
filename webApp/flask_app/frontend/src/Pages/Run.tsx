@@ -11,9 +11,6 @@ interface Peer {
     port: number;
     public_key: string;
 }
-interface PeerArray {
-    peers:Peer[];
-}
 
 const Run = () => {
     const {isRunning, loadingAuth}=useAuth();
@@ -77,10 +74,10 @@ const Run = () => {
     }
 
     useEffect(() => {
-        // if(!isRunning){
-        //     enqueueSnackbar("Create/Connect First", {variant:'warning'})
-        //     navigate('/')
-        // }  
+        if(!isRunning){
+            enqueueSnackbar("Create/Connect First", {variant:'warning'})
+            navigate('/')
+        }  
         // fetchData()
         // if(consensus=="pow"){
         //     setShowPowMenu(true);
@@ -112,6 +109,7 @@ const Run = () => {
             return null
         
         setPubKey(peers[0].public_key);
+        console.log(pubKey)
         return(
             <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
             <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">

@@ -59,6 +59,22 @@ async def connect_to_blockchain():
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
 
+async def add_transaction():
+    from ..app import peer_instance
+    if(not request.is_json):
+        return jsonify({"success":False, "error": "Request must be JSON"})
+
+    data=request.get_json()
+    public_key=data.get('public_key')
+    amt=data.get('amt')
+
+    if(not (public_key and amt)):
+        return jsonify({"success":False, "error": "Public Key or Amount Not Found"})
+
+    await peer_instance.create_and_broadcast_tx(public_key, amt)
+    return jsonify({"success":True, "message": "Transaction Added"})
+    
+
 def account_balance():
     from ..app import peer_instance
     if not peer_instance:
@@ -72,34 +88,10 @@ def account_balance():
         amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
         return jsonify({"success":True, "message":"succesful request", "account_balance": amt})
     except:
-        return jsonify({"success":False, "error": "error while fetching accoutn balance"}, 409)
+        return jsonify({"success":False, "error": "error while fetching account balance"}, 409)
 
-# def get_status():
-#         from ..app import peer_instance
-#         chain_list = []
-#         for block in peer_instance.chain.chain:
-#             chain_list.append(block.to_dict())
-#         outbound_peers_list = []
-#         for outbound_peer in peer_instance.outbound_peers:
-#             outbound_peers_list.append({
-#                 "addr": outbound_peer[0],
-#                 "port": outbound_peer[1]
-#             })
-#         return Response(
-#             json.dumps(OrderedDict([
-#                 ("name", peer_instance.name),
-#                 ("host", peer_instance.host),
-#                 ("port", peer_instance.port),
-#                 ("known_peers", list(map(lambda x: peer_instance.known_peers[x][0]+":"+x[0]+":"+str(x[1])+":"+peer_instance.known_peers[x][1], peer_instance.known_peers.keys()))),
-#                 ("outbound_peers", outbound_peers_list),
-#                 ("client_connections", list(ws.remote_address[1] for ws in peer_instance.client_connections)),
-#                 ("server_connections", list(ws.remote_address[1] for ws in peer_instance.server_connections)),
-#                 ("mempool", blockchain_structures.txs_to_json_digestable_form(list(peer_instance.mem_pool))),
-#                 ("chain", chain_list)
-#             ])),
-#             mimetype='application/json'
 
-#         )
+
 def get_status():
     from ..app import peer_instance
     amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))

@@ -267,7 +267,7 @@ class Peer:
             print(f"\n{msg['type']}: {msg['transaction']}")
             print("\n")
 
-            async with self.mem_pool_lock:
+            async with self.mem_pool_condition:
                 self.mem_pool.add(transaction)
             await self.broadcast_message(msg)
 
@@ -417,7 +417,7 @@ class Peer:
         if Chain.instance.transaction_exists_in_chain(transaction):
             return
         
-        async with self.mem_pool_lock:
+        async with self.mem_pool_condition:
                 self.mem_pool.add(transaction)
 
         print("Transaction Created", transaction)

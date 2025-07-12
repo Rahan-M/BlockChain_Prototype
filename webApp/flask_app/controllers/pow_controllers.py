@@ -2,6 +2,7 @@ from flask import request, jsonify, Response
 import json, asyncio
 from collections import OrderedDict
 from blockchain.pow import p2p, blockchain_structures
+from ecdsa import VerifyingKey, MalformedPointError, curves
 
 from ..app import _start_peer_in_background
 import threading
@@ -70,6 +71,17 @@ async def add_transaction():
 
     if(not (public_key and amt)):
         return jsonify({"success":False, "error": "Public Key or Amount Not Found"})
+    
+    curve=curves.SECP256k1
+    
+    try:
+        vk=VerifyingKey.from_pem(public_key)
+        if(vk.curve!=curve):
+            return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
+    
+    except (MalformedPointError, ValueError, Exception) as e:
+        return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
+
 
     await peer_instance.create_and_broadcast_tx(public_key, amt)
     return jsonify({"success":True, "message": "Transaction Added"})

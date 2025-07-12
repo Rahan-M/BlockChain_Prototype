@@ -247,7 +247,7 @@ class Peer:
             
             sign_bytes=base64.b64decode(msg["sign"])
             #b64decode turns bytes into a string
-            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool), list(self.current_stakes))):
+            if(transaction.amount>Chain.instance.calc_balance(transaction.sender, list(self.mem_pool))):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 

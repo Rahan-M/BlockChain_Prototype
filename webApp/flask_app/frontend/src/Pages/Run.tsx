@@ -25,28 +25,13 @@ const Run = () => {
     const [accBal, setAccBalance]=useState(-1);
     const [showTxMenu1, setShowTxMenu1]=useState(false);
     const [showTxMenu2, setShowTxMenu2]=useState(false);
-    
-    const fakeData=[
-        {
-            name:"Jefin",
-            host:"localhost",
-            port:5000,
-            public_key:"rand"
-        },
-        {
-            name:"Elias",
-            host:"localhost",
-            port:6000,
-            public_key:"rand"
-        }
-    ];
-
-    const [peers, setPeers]=useState<Peer[]>(fakeData);
+    const [peers, setPeers]=useState<Peer[]>();
     const [pubKey, setPubKey]=useState("");
-
+    const [amt, setAmt]=useState(-1);
+    
     const navigate=useNavigate()
     const {enqueueSnackbar}=useSnackbar()
-
+    
     const fetchData=async()=>{
         const res=await axios.get("/api/pow/status")
         if(!res.data.success)
@@ -64,10 +49,16 @@ const Run = () => {
         try {
             const res = await axios.get("/api/pow/peers")
             if (!res.data.success) {
+                enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
                 return;
             }
 
             setPeers(res.data.known_peers);
+            if(!peers){
+                enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
+                return;
+            }
+            setPubKey(peers[0].public_key)
         } catch (err) {
             enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
         }
@@ -96,9 +87,17 @@ const Run = () => {
         // }
     }, [loadingAuth])
 
-    const addTransaction=()=>{
+    const addTransaction= async()=>{
         setShowTxMenu1(false);
         setShowTxMenu2(false);
+        const res=await axios.post('/api/pow/transaction',{
+            "public_key":pubKey,
+            "amt":amt
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to add transaction", {variant:'error'});
+        }
+        enqueueSnackbar("Added transaction succesfully", {variant:'success'});
     }   
 
     const txMenu1=()=>{
@@ -108,28 +107,36 @@ const Run = () => {
         if(!peers)
             return null
         
-        setPubKey(peers[0].public_key);
-        console.log(pubKey)
         return(
             <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
             <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
                 <div className="bg-primary text-white text-center rounded-t-xl p-5">
                     Choose Whom to Send To
                 </div>
-                <div className="content p-5 flex flex-col items-center">
+                <div className="content p-5 flex flex-col gap-5 items-center">
                     <select name="peers" id="peer_opts" className='border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96' onChange={(e)=>{setPubKey(e.target.value)}}>
                         {peers.map((peer)=>(
-                            <option value={peer.public_key}>{peer.name}</option>
+                            <option key={peer.name} value={peer.public_key}>{peer.name}</option>
                         ))}
                     </select>
-                    <div className="buttons flex justify-around">
-                        <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
-                            Add Transaction
-                        </button>
-                        <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowTxMenu1(false)}}>
-                            Cancel
-                        </button>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                        Enter the amount to send :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setAmt(Number(e.target.value))}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
                     </div>
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
+                        Add Transaction
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowTxMenu1(false)}}>
+                        Cancel
+                    </button>
                 </div>
             </div>
             </div>  
@@ -144,17 +151,37 @@ const Run = () => {
             <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
             <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
                 <div className="bg-primary text-white text-center rounded-t-xl p-5">
-                Fill These
+                    Fill These
                 </div>
                 <div className="content p-5">
-                    <div className="buttons flex justify-around">
-                        <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{console.log("yo")}}>
-                            Add Transaction
-                        </button>
-                        <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowTxMenu2(false)}}>
-                            Cancel
-                        </button>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter Public Key :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setPubKey(e.target.value)}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
                     </div>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter the amount to send :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setAmt(Number(e.target.value))}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{console.log("yo")}}>
+                        Add Transaction
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowTxMenu2(false)}}>
+                        Cancel
+                    </button>
                 </div>
             </div>
             </div>  

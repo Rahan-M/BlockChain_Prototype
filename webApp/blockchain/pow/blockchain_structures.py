@@ -91,16 +91,14 @@ class Block:
 
 
 def valid_chain_length(i):
-    valid_chain_len=i # because we use zero indexing4
-
-    if valid_chain_len>=50:
-        valid_chain_len-=10
-    elif valid_chain_len>=25:
-        valid_chain_len-=5
-    elif valid_chain_len>=10:
-        valid_chain_len-=3
-    elif valid_chain_len>=5:
-        valid_chain_len-=2
+    valid_chain_len=i # because we use zero indexing
+    # We must be careful in how we choose which blocks are valid, since a block that was valid in before a new block is added shouldn't then become of undecided nature
+    # i.e for exapmple when length is 9 say the first 7 blocks are considered valid then when length becomes 10, it shouldn't become 5 or something like that
+    # For larger chains of length greater than 250 we assume blocks of depth greater than 50 is valid
+    if(valid_chain_len<250):
+        valid_chain_len=valid_chain_len-(valid_chain_len//5)
+    else:
+        valid_chain_len-=50
     return valid_chain_len 
 
 class Chain:

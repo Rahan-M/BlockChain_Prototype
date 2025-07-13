@@ -25,7 +25,7 @@ const Run = () => {
     const [accBal, setAccBalance]=useState(-1);
     const [showTxMenu1, setShowTxMenu1]=useState(false);
     const [showTxMenu2, setShowTxMenu2]=useState(false);
-    const [peers, setPeers]=useState<Peer[]>();
+    const [peers, setPeers]=useState<Peer[]>([]);
     const [pubKey, setPubKey]=useState("");
     const [amt, setAmt]=useState(-1);
     
@@ -45,24 +45,7 @@ const Run = () => {
         setVk(res.data.public_key)
     }
 
-    const fetchPeers = async () => {
-        try {
-            const res = await axios.get("/api/pow/peers")
-            if (!res.data.success) {
-                enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
-                return;
-            }
 
-            setPeers(res.data.known_peers);
-            if(!peers){
-                enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
-                return;
-            }
-            setPubKey(peers[0].public_key)
-        } catch (err) {
-            enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
-        }
-    }
 
     useEffect(() => {
         if(!isRunning){
@@ -85,7 +68,7 @@ const Run = () => {
         //     setShowPosMenu(false);
         //     setShowPowMenu(false);
         // }
-    }, [loadingAuth])
+    }, [isRunning, loadingAuth])
 
     const addTransaction= async()=>{
         setShowTxMenu1(false);
@@ -100,10 +83,41 @@ const Run = () => {
         enqueueSnackbar("Added transaction succesfully", {variant:'success'});
     }   
 
+    const fetchPeers = async () => {
+        try {
+            const res = await axios.get("/api/pow/peers");
+            if (!res.data.success) {
+                enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
+                return;
+            }
+            // Ensure data.known_peers is an array, default to empty if not
+            const fetchedPeers = Array.isArray(res.data.known_peers) ? res.data.known_peers : [];
+            setPeers(fetchedPeers);
+
+            // Only set initial pubKey if peers were successfully fetched and exist
+            if (fetchedPeers.length > 0) {
+                setPubKey(fetchedPeers[0].public_key);
+            } else {
+                // Handle case where no peers are fetched (e.g., clear pubKey)
+                setPubKey('');
+                enqueueSnackbar("No known peers found.", { variant: "info" });
+            }
+
+        } catch (err) {
+            enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
+            console.error("Error fetching peers:", err); // Log the actual error
+        }
+    };
+
+    useEffect(() => {
+        if ((showTxMenu1 || showTxMenu2)) {
+            fetchPeers();
+        }
+    }, [showTxMenu1]); 
+
     const txMenu1=()=>{
         if(!showTxMenu1)
             return null;
-        fetchPeers();
         if(!peers)
             return null
         
@@ -147,6 +161,8 @@ const Run = () => {
         if(!showTxMenu2)
             return null;
     
+        if(!peers)
+            return null;
         return(
             <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
             <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
@@ -160,7 +176,17 @@ const Run = () => {
                         </label>
                         <input
                         type="text"
-                        onChange={(e) => setPubKey(e.target.value)}
+                        onChange={(e)=>{
+                            let tempKey=`${e.target.value}\n`;  
+                            const length=tempKey.length
+                            if(length>50){
+                                tempKey=tempKey.substring(0,26)+'\n'+tempKey.substring(27, length-26)+'\n'+tempKey.substring(length-25);
+                            }
+                            enqueueSnackbar("Not a valid public address", {variant:'error'});
+                            // This is because the backend expects a newline charachter at 3 points in the public key.
+                            // The library we are using (ecdsa) will otherwise see this as an invalid key
+                            setPubKey(tempKey)
+                        }}
                         className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
                         />
                     </div>
@@ -176,7 +202,7 @@ const Run = () => {
                     </div>
                 </div>
                 <div className="buttons flex justify-around">
-                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{console.log("yo")}}>
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
                         Add Transaction
                     </button>
                     <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowTxMenu2(false)}}>

@@ -8,7 +8,7 @@ from blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
-from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
+from storage.storage_manager import save_node_id, load_node_id, save_key, load_key, save_chain, load_chain, save_peers, load_peers
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -81,7 +81,10 @@ class Peer:
 
         self.admin_id = None
 
-        self.node_id = str(uuid.uuid4())
+        self.load_node_id_from_disk()
+        if not self.node_id:
+            self.node_id = str(uuid.uuid4())
+            self.save_node_id_to_disk()
 
         self.miners: List[list]= list() # List of [miners_list, activation_block]
 
@@ -144,6 +147,17 @@ class Peer:
         """
 
         self.daemon_process=None
+
+    def save_node_id_to_disk(self):
+        node_id = self.node_id
+        save_node_id(node_id)
+
+    def load_node_id_from_disk(self):
+        node_id = load_node_id()
+        if not node_id:
+            self.node_id = None
+            return
+        self.node_id = node_id
 
     def save_key_to_disk(self):
         key = self.wallet.private_key_pem

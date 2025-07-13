@@ -115,7 +115,8 @@ class Peer:
         if not self.wallet:
             self.wallet=Wallet()
             self.save_key_to_disk()
-        self.chain: Chain=None
+        
+        self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
 
         self.contractsDB = SmartContractDatabase()
 
@@ -139,6 +140,23 @@ class Peer:
             self.wallet = None
             return
         self.wallet = Wallet(key)
+
+    def load_chain_from_disk(self):
+        block_dict_list = load_chain()
+        if not block_dict_list:
+            self.chain = None
+            return
+        block_list: List[Block]=[]
+
+        for block_dict in block_dict_list:
+            block=self.block_dict_to_block(block_dict)
+            block_list.append(block)
+
+        self.chain=Chain(blockList=block_list)
+
+    def save_chain_to_disk(self):
+        chain = Chain.instance.to_block_dict_list()
+        save_chain(chain)
 
     def save_known_peers_to_disk(self):
         content = {}
@@ -417,6 +435,7 @@ class Peer:
             if self.miner:
                 self.mine_task=asyncio.create_task(self.mine_blocks())
             await self.broadcast_message(msg)
+            self.save_chain_to_disk()
 
         elif t=="chain_request":
             if not self.chain:
@@ -444,11 +463,13 @@ class Peer:
             #If chain doesn't already exist we assign this as the chain
             if not Chain.instance:
                 self.chain=Chain(blockList=block_list)
+                self.save_chain_to_disk()
                 return            
 
             elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
                 print("\nCurrent chain replaced by longer chain")
+                self.save_chain_to_disk()
             
             else:
                 print("\nCurrent Chain Longer than received chain")
@@ -896,6 +917,7 @@ class Peer:
                             }
                             self.seen_message_ids.add(pkt["id"])
                             await self.broadcast_message(pkt)
+                            self.save_chain_to_disk()
                         else:
                             print("\n Invalid Block \n")
                                     

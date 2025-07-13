@@ -7,6 +7,7 @@ from blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
+from storage.storage_manager import save_keys, load_keys, save_chain, load_chain, save_peers, load_peers
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -78,7 +79,9 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        self.known_peers : Dict[Tuple[str, int], Tuple[str, str]]={} # (host, port):(name, public key)
+        self.load_known_peers_from_disk()
+        if not self.known_peers:
+            self.known_peers : Dict[Tuple[str, int], Tuple[str, str]]={} # (host, port):(name, public key)
         """
             We store all the peers we know here, we compare this with outbound peers in dicover_peers
             to find to which nodes we have not yet made a connection
@@ -122,6 +125,21 @@ class Peer:
             there is no other such block currently being executed
         """
         self.mine_task=None
+
+    def save_known_peers_to_disk(self):
+        content = {}
+        for key, value in self.known_peers.items():
+            content[json.dumps(key)] = list(value)
+        save_peers(content)
+
+    def load_known_peers_from_disk(self):
+        content = load_peers()
+        if not content:
+            self.known_peers = None
+            return
+        self.known_peers = {}
+        for key, value in content:
+            self.known_peers[tuple(ast.literal_eval(key))] = tuple(value)
 
     async def send_peer_info(self, websocket):
         """
@@ -253,6 +271,7 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
+                self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
                 if t == 'peer_info':
@@ -265,13 +284,17 @@ class Peer:
         elif t=="known_peers":
             # print("Received Known Peers")
             peers=msg["peers"]
+            new_peer_found = False
             for peer in peers:
                 normalized_self=normalize_endpoint((self.host, self.port))
                 normalized_endpoint = normalize_endpoint((peer["host"], peer["port"]))
                 if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self:
                     print(f"Discovered peer {peer["name"]} at {peer["host"]}:{peer["port"]}")
+                    new_peer_found = True
                     self.known_peers[normalized_endpoint]=(peer["name"], peer["public_key"])
                     self.name_to_public_key_dict[peer["name"].lower()]=peer["public_key"]
+            if new_peer_found:
+                self.save_known_peers_to_disk()
             pkt={
                 "type":"chain_request",
                 "id":str(uuid.uuid4())

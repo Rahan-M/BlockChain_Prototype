@@ -7,7 +7,7 @@ from blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
-from storage.storage_manager import save_keys, load_keys, save_chain, load_chain, save_peers, load_peers
+from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
 from flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -111,7 +111,10 @@ class Peer:
 
         self.name_to_public_key_dict: Dict[str, str]={}
         
-        self.wallet=Wallet()
+        self.load_key_from_disk()
+        if not self.wallet:
+            self.wallet=Wallet()
+            self.save_key_to_disk()
         self.chain: Chain=None
 
         self.contractsDB = SmartContractDatabase()
@@ -125,6 +128,17 @@ class Peer:
             there is no other such block currently being executed
         """
         self.mine_task=None
+
+    def save_key_to_disk(self):
+        key = self.wallet.private_key_pem
+        save_key(key)
+
+    def load_key_from_disk(self):
+        key = load_key()
+        if not key:
+            self.wallet = None
+            return
+        self.wallet = Wallet(key)
 
     def save_known_peers_to_disk(self):
         content = {}

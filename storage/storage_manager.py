@@ -9,20 +9,19 @@ PEERS_FILE = os.path.join(STORAGE_DIR, "peers.json")
 
 # === Keys ===
 
-def save_keys(private_key_pem, public_key_pem):
+def save_key(private_key_pem):
     with open(KEYS_FILE, 'w') as f:
         json.dump({
-            "private_key_pem": private_key_pem,
-            "public_key_pem": public_key_pem
+            "private_key_pem": private_key_pem
         }, f, indent=4)
 
 
-def load_keys():
+def load_key():
     if not os.path.exists(KEYS_FILE):
-        return None, None
+        return None
     with open(KEYS_FILE, 'r') as f:
         data = json.load(f)
-        return data.get("private_key_pem"), data.get("public_key_pem")
+        return data.get("private_key_pem")
 
 
 # === Chain ===

@@ -2,10 +2,26 @@ import os
 import json
 
 STORAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+NODE_ID_FILE = os.path.join(STORAGE_DIR, "node_id.json")
 KEYS_FILE = os.path.join(STORAGE_DIR, "keys.json")
 CHAIN_FILE = os.path.join(STORAGE_DIR, "chain.json")
 PEERS_FILE = os.path.join(STORAGE_DIR, "peers.json")
 
+
+# == node id ===
+
+def save_node_id(node_id):
+    with open(NODE_ID_FILE, 'w') as f:
+        json.dump({
+            "node_id": node_id
+        }, f, indent=4)
+
+def load_node_id():
+    if not os.path.exists(NODE_ID_FILE):
+        return None
+    with open(NODE_ID_FILE, 'r') as f:
+        data = json.load(f)
+        return data.get("node_id")
 
 # === Keys ===
 

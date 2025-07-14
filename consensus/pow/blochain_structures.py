@@ -263,12 +263,19 @@ class Chain:
 
 class Wallet:
 
-    def __init__(self):
-        self.private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
-        )
+    def __init__(self, private_key_pem: str = None):
+        if not private_key_pem:
+            self.private_key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=2048,
+                backend=default_backend()
+            )
+        else:
+            self.private_key = serialization.load_pem_private_key(
+                private_key_pem.encode(),
+                password=None,
+                backend=default_backend()
+            )
         
         self.private_key_pem = self.private_key.private_bytes(
             encoding=serialization.Encoding.PEM,

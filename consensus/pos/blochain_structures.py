@@ -341,9 +341,12 @@ class Chain:
         return -1
 
 class Wallet:
-    def __init__(self):
-        self.private_key = SigningKey.generate(curve=SECP256k1)
-        
+    def __init__(self, private_key_pem: str = None):
+        if not private_key_pem:
+            self.private_key = SigningKey.generate(curve=SECP256k1)
+        else:
+            self.private_key = SigningKey.from_pem(private_key_pem)
+            
         self.private_key_pem = self.private_key.to_pem().decode()
 
         self.public_key = self.private_key.get_verifying_key()

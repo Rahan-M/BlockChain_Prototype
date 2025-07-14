@@ -7,6 +7,7 @@ from blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvali
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
+from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
 from flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey, BadSignatureError
 import tempfile
@@ -81,7 +82,9 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        self.known_peers : Dict[Tuple[str, int], Tuple[str, str]]={} # (host, port):(name, public key)
+        self.load_known_peers_from_disk()
+        if not self.known_peers:
+            self.known_peers : Dict[Tuple[str, int], Tuple[str, str]]={} # (host, port):(name, public key)
         """
             We store all the peers we know here, we compare this with outbound peers in dicover_peers
             to find to which nodes we have not yet made a connection
@@ -118,8 +121,12 @@ class Peer:
         
         self.name_to_public_key_dict: Dict[str, str]={}
         
-        self.wallet=Wallet()
-        self.chain: Chain=None
+        self.load_key_from_disk()
+        if not self.wallet:
+            self.wallet=Wallet()
+            self.save_key_to_disk()
+        
+        self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
 
         self.contractsDB = SmartContractDatabase()
 
@@ -128,6 +135,49 @@ class Peer:
             Starts a timer for the creation of next block
         """
         self.mine_task=None
+
+    def save_key_to_disk(self):
+        key = self.wallet.private_key_pem
+        save_key(key)
+
+    def load_key_from_disk(self):
+        key = load_key()
+        if not key:
+            self.wallet = None
+            return
+        self.wallet = Wallet(key)
+
+    def load_chain_from_disk(self):
+        block_dict_list = load_chain()
+        if not block_dict_list:
+            self.chain = None
+            return
+        block_list: List[Block]=[]
+
+        for block_dict in block_dict_list:
+            block=self.block_dict_to_block(block_dict)
+            block_list.append(block)
+
+        self.chain=Chain(blockList=block_list)
+
+    def save_chain_to_disk(self):
+        chain = Chain.instance.to_block_dict_list()
+        save_chain(chain)
+
+    def save_known_peers_to_disk(self):
+        content = {}
+        for key, value in self.known_peers.items():
+            content[json.dumps(key)] = list(value)
+        save_peers(content)
+
+    def load_known_peers_from_disk(self):
+        content = load_peers()
+        if not content:
+            self.known_peers = None
+            return
+        self.known_peers = {}
+        for key, value in content:
+            self.known_peers[tuple(ast.literal_eval(key))] = tuple(value)
 
     async def send_peer_info(self, websocket):
         """
@@ -309,6 +359,7 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
                 self.known_peers[normalized_endpoint]=(data['name'], data['public_key'])
+                self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data['name'].lower()]=data['public_key']
                 print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
                 if t == 'peer_info':
@@ -321,13 +372,17 @@ class Peer:
         elif t=="known_peers":
             # print("Received Known Peers")
             peers=msg["peers"]
+            new_peer_found = False
             for peer in peers:
                 normalized_self=normalize_endpoint((self.host, self.port))
                 normalized_endpoint = normalize_endpoint((peer['host'], peer['port']))
                 if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self:
                     print(f"Discovered peer {peer['name']} at {peer['host']}:{peer['port']}")
+                    new_peer_found = True
                     self.known_peers[normalized_endpoint]=(peer['name'], peer['public_key'])
                     self.name_to_public_key_dict[peer['name'].lower()]=peer['public_key']
+            if new_peer_found:
+                self.save_known_peers_to_disk()
             pkt={
                 "type":"chain_request",
                 "id":str(uuid.uuid4())
@@ -536,6 +591,7 @@ class Peer:
                 self.current_stakes.clear()
 
             await self.broadcast_message(msg)
+            self.save_chain_to_disk()
 
         elif t=="slash_announcement":
             block1_dict=msg.get("evidence1")
@@ -604,6 +660,7 @@ class Peer:
             #If chain doesn't already exist we assign this as the chain
             if not self.chain:
                 self.chain=Chain(blockList=block_list)
+                self.save_chain_to_disk()
                 
             else:
                 pos=Chain.instance.checkEquivalence(block_list)
@@ -616,12 +673,14 @@ class Peer:
                         l2=len(block_list)
                         if(l2>l1):
                             Chain.instance.rewrite(block_list)
+                            self.save_chain_to_disk()
                     else:# Malicious fork
                         await self.verify_and_slash(block1, block2, pos, block_list)
                         
                 elif(weight_of_chain(Chain.instance.chain)<weight_of_chain(block_list)):
                     Chain.instance.rewrite(block_list)
                     print("\nCurrent chain replaced by longer chain\n")
+                    self.save_chain_to_disk()
                 
                 else:
                     print("\nCurrent Chain Longer than received chain\n")
@@ -1246,6 +1305,7 @@ class Peer:
 
             self.seen_message_ids.add(pkt["id"])
             await self.broadcast_message(pkt)
+            self.save_chain_to_disk()
         self.last_epoch_end_ts=datetime.now()
 
         async with self.mem_pool_lock:

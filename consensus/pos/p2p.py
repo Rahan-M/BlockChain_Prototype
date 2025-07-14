@@ -3,12 +3,12 @@ import argparse, json, uuid, base64
 import threading, socket, os, subprocess
 from datetime import datetime, timedelta
 from typing import Set, Dict, List, Tuple, Any
-from blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
+from consensus.pos.blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
 from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
-from flask_app import create_flask_app, run_flask_app
+from consensus.pos.flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey, BadSignatureError
 import tempfile
 from pathlib import Path
@@ -1388,43 +1388,3 @@ class Peer:
         reset_task.cancel()
         disc_task.cancel()
         consensus_task.cancel()
-          
-def strtobool(v):
-    if isinstance(v, bool):
-        return v
-
-    if v.lower() in ("true", "yes", "1", "t"):
-        return True
-
-    elif v.lower() in ("false", "no", "0", "f"):
-        return False
-
-    raise argparse.ArgumentTypeError("Boolean Value Expected")    
-
-def main():
-    parser=argparse.ArgumentParser(description="Handshaker")
-    parser.add_argument("--host", default="localhost")
-    parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--name", default=None)
-    parser.add_argument("--staker",type=strtobool, default=True)
-    parser.add_argument("--connect", default=None)
-
-    args=parser.parse_args()
-    bootstrap_host, bootstrap_port=None, None
-
-    if args.connect:
-        try:
-            bootstrap_host, bootstrap_port=args.connect.split(":")
-            bootstrap_port=int(bootstrap_port)
-        except ValueError:
-            print("Invalid Bootstrap Format. Use host:port")
-            return
-    peer=Peer(args.host, args.port, args.name, args.staker)
-
-    try:
-        asyncio.run(peer.start(bootstrap_host, bootstrap_port))
-    except KeyboardInterrupt:
-        print("\nShutting Down...")
-
-if __name__=="__main__":
-    main()

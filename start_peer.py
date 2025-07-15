@@ -8,6 +8,8 @@ def start_peer():
     port = int(input("Enter Port: "))
     name = input("Enter Name: ")
     consensus = input("Enter Consensus[poa/pos/pow] (default : pow): ")
+    activate_disk_load = input("Do you like to load saved data if any(y/n): ")
+    activate_disk_save = input("Do you like to continuously backup data to disk(y/n): ")
     action = input("Enter 'create' to create a network and 'connect' to connect to a network (default: create): ")
     bootstrap_host = None
     bootstrap_port = None
@@ -16,7 +18,7 @@ def start_peer():
         bootstrap_port = int(input("Enter port to connect: "))
     peer = None
     if consensus == "poa":
-        peer = PoAPeer(host, port, name)
+        peer = PoAPeer(host, port, name, activate_disk_load, activate_disk_save)
         peer.name_to_node_id_dict[peer.name.lower()] = peer.node_id
         peer.node_id_to_name_dict[peer.node_id] = peer.name.lower()
     elif consensus == "pos":
@@ -26,7 +28,7 @@ def start_peer():
             staker = True
         elif staker_raw_input == "false":
             staker = False
-        peer = PoSPeer(host, port, name, staker)
+        peer = PoSPeer(host, port, name, staker, activate_disk_load, activate_disk_save)
     else:
         miner = None
         miner_raw_input = input("Miner? ").strip().lower()
@@ -34,7 +36,7 @@ def start_peer():
             miner = True
         elif miner_raw_input == "false":
             miner = False
-        peer = PoWPeer(host, port, name, miner)
+        peer = PoWPeer(host, port, name, miner, activate_disk_load, activate_disk_save)
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

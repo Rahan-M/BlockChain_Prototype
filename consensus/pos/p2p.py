@@ -191,6 +191,8 @@ class Peer:
         self.known_peers = {}
         for key, value in content.items():
             self.known_peers[tuple(ast.literal_eval(key))] = tuple(value)
+        for key, value in self.known_peers:
+            self.name_to_public_key_dict[value[0].lower()] = value[1]
 
     async def send_peer_info(self, websocket):
         """

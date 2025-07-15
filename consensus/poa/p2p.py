@@ -219,6 +219,10 @@ class Peer:
         self.known_peers = {}
         for key, value in content.items():
             self.known_peers[tuple(ast.literal_eval(key))] = tuple(value)
+        for key, value in self.known_peers:
+            self.name_to_public_key_dict[value[0].lower()] = value[1]
+            self.node_id_to_name_dict[value[2]] = value[0].lower()
+            self.name_to_node_id_dict[value[0].lower()] = value[2]
 
     def get_peer_info_message(self):
         """

@@ -1,12 +1,21 @@
 # run.py
-import asyncio, signal, argparse
-import sys, os
+import asyncio, signal, argparse, os
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
 # Import your app factory and the shutdown_all_peers function
 from flask_app.app import create_app , shutdown_peer
 from config import DevelopmentConfig # Import the desired configuration
+
+import logging
+
+# Set up basic logging to console
+logging.basicConfig(level=logging.DEBUG) # Set to DEBUG for maximum verbosity
+
+# Specifically configure websockets loggers
+logging.getLogger('websockets.protocol').setLevel(logging.DEBUG)
+logging.getLogger('websockets.server').setLevel(logging.DEBUG)
+logging.getLogger('websockets.client').setLevel(logging.DEBUG)
 
 async def main():
     parser=argparse.ArgumentParser(description="Handshaker")
@@ -24,7 +33,6 @@ async def main():
     hypercorn_config.errorlog = "-"           # Log errors to stderr
     hypercorn_config.loglevel = "info"        # Set logging level
     hypercorn_config.workers = 1              # For development with shared state, keep at 1 worker.
-                                              # Multi-worker setups complicate shared `running_peer_tasks`.
 
     # 3. Create an asyncio.Event to signal Hypercorn to shut down
     shutdown_event = asyncio.Event()
@@ -59,7 +67,7 @@ async def main():
         # 7. After Hypercorn has stopped, initiate graceful shutdown of your peers
         
         print("Hypercorn server has finished. Initiating graceful peer shutdown.")
-        shutdown_peer()
+        await shutdown_peer()
         print("Application fully shut down.")
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))

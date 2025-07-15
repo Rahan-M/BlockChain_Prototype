@@ -1,14 +1,15 @@
 from flask import request, jsonify, Response
-import json, asyncio
+import json, asyncio, websockets
 from collections import OrderedDict
 from blockchain.pow import p2p, blockchain_structures
 from ecdsa import VerifyingKey, MalformedPointError, curves
-
-from ..app import _start_peer_in_background
+from ..app import set_consensus
 import threading
 
+peer_instance:p2p.Peer=None
+
 async def start_new_blockchain():
-    from ..app import peer_instance
+    global peer_instance
     if request.is_json:
         data = request.get_json()
         name = data.get('name')
@@ -19,19 +20,53 @@ async def start_new_blockchain():
         if peer_instance:
             return jsonify({"error": f"One peer is already running. Stop it to run another one"}, 409)
         
+        if not(name and port and host and miner):
+            return jsonify({"error": "Missing fields"}, 409)
+
+        set_consensus('pow')
         miner_bool=p2p.strtobool(miner)
-        # Use the _start_peer_in_background function imported from __init__.py
-        # I'm storing this in this variable because gemini hypothesized that will stop the
-        # the spontaneous cancelling of the node
-        thread=threading.Thread(target=_start_peer_in_background,args=(host, port, name, miner_bool))
-        thread.daemon=True
-        thread.start()
+        # thread=threading.Thread(target=_start_peer_in_background,args=(host, port, name, miner_bool))
+        # thread.daemon=True
+        # thread.start()
+        peer_instance = p2p.Peer(host, port, name, miner_bool)
+        try:
+            peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
+        except: # Catches all BaseException descendants
+            import sys
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print(f"An unexpected error occurred!")
+            print(f"Type: {exc_type.__name__}")
+            print(f"Value: {exc_value}")
+            print(f"Traceback object: {exc_traceback}")
+            # You can also use traceback.print_exc() for a more standard traceback output
+            import traceback
+            traceback.print_exc()
+        
+        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key_pem)
+        peer_instance.consensus_task=asyncio.create_task(peer_instance.find_longest_chain())
+        peer_instance.disc_task=asyncio.create_task(peer_instance.discover_peers())
+
+        if peer_instance.miner:
+            peer_instance.mine_task=asyncio.create_task(peer_instance.mine_blocks())
+
+        peer_instance.init_repo()
+        peer_instance.configure_ports()
+
+        print(peer_instance.server)
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
     
+def server_exists_check():
+    global peer_instance
+    print(peer_instance.server)
+    if(peer_instance.server):
+        return jsonify({'success':True, 'message':'Server exists'})
+
+    return jsonify({'success':False, 'message':"Server doesn't exist"})
+
 async def connect_to_blockchain():
-    from ..app import peer_instance
+    global peer_instance
     if request.is_json:
         data = request.get_json()
         name = data.get('name')
@@ -41,27 +76,48 @@ async def connect_to_blockchain():
         bootstrap_port = int(data.get('bootstrap_port'))
         bootstrap_host = data.get('bootstrap_host')
 
+        if not(name and port and host and miner and bootstrap_host and bootstrap_port):
+            return jsonify({"error": "Missing fields"}, 409)
 
         if peer_instance:
-            return jsonify({"error": f"One peer is already running. Stop it to run another one"}, 409)
+            return jsonify({"error": "One peer is already running. Stop it to run another one"}, 409)
         
         miner_bool=p2p.strtobool(miner)
-        # Use the _start_peer_in_background function imported from __init__.py
-        # I'm storing this in this variable because gemini hypothesized that will stop the
-        # the spontaneous cancelling of the node
+        peer_instance = p2p.Peer(host, port, name, miner_bool)
+        set_consensus('pow')
         try:
-            thread=threading.Thread(target=_start_peer_in_background,args=(host, port, name, miner_bool, bootstrap_host, bootstrap_port))
-            thread.daemon=True
-            thread.start()
-            return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
-        except:
-            return jsonify({"success":False ,"message": f"Some Error Occured While Starting Peer"})
+            peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
+            normalized_bootstrap_host, normalized_bootstrap_port = p2p.normalize_endpoint((bootstrap_host, bootstrap_port))
+            peer_instance.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port)
+            print(peer_instance.server)
+        except: # Catches all BaseException descendants
+            import sys
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print(f"An unexpected error occurred!")
+            print(f"Type: {exc_type.__name__}")
+            print(f"Value: {exc_value}")
+            print(f"Traceback object: {exc_traceback}")
+            # You can also use traceback.print_exc() for a more standard traceback output
+            import traceback
+            traceback.print_exc()
+        
+
+        peer_instance.consensus_task=asyncio.create_task(peer_instance.find_longest_chain())
+        peer_instance.disc_task=asyncio.create_task(peer_instance.discover_peers())
+
+        if peer_instance.miner:
+            peer_instance.mine_task=asyncio.create_task(peer_instance.mine_blocks())
+
+        peer_instance.init_repo()
+        peer_instance.configure_ports()
+        await asyncio.sleep(2)
+        return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
 
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
 
 async def add_transaction():
-    from ..app import peer_instance
+    global peer_instance
     if(not request.is_json):
         return jsonify({"success":False, "error": "Request must be JSON"})
 
@@ -88,7 +144,7 @@ async def add_transaction():
     
 
 def account_balance():
-    from ..app import peer_instance
+    global peer_instance
     if not peer_instance:
         return jsonify({"success":False, "error": "No node is running"}, 409)
     
@@ -105,7 +161,7 @@ def account_balance():
 
 
 def get_status():
-    from ..app import peer_instance
+    global peer_instance
     amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
 
     return Response(
@@ -122,7 +178,7 @@ def get_status():
     )
 
 def get_chain():
-    from ..app import peer_instance
+    global peer_instance
     chain = peer_instance.chain.chain
 
     chain_list = []
@@ -147,14 +203,14 @@ def get_chain():
     return jsonify({"success":True, "message":"succesful request", "chain": chain_list})
 
 def get_pending_transactions():
-    from ..app import peer_instance
+    global peer_instance
 
     pending_transactions = blockchain_structures.txs_to_json_digestable_form(list(peer_instance.mem_pool))
 
     return jsonify({"success":True, "message":"succesful request", "pending_transactions": pending_transactions})
 
 def get_known_peers():
-    from ..app import peer_instance
+    global peer_instance
 
     known_peers_list = []
     for peer in peer_instance.known_peers.keys():

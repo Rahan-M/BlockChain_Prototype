@@ -12,4 +12,9 @@ __pycache__/
 haha.txt
 *.pyc
 
+# Storage folders
+storage/poa/
+storage/pos/
+storage/pow/
+
 todo.md

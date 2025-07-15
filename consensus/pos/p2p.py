@@ -59,10 +59,12 @@ def get_contract_code_from_notepad():
     return contract_code
 
 class Peer:
-    def __init__(self, host, port, name, staker:bool, activate_disk_load):
+    def __init__(self, host, port, name, staker:bool, activate_disk_load, activate_disk_save):
         self.host = host
         self.name = name
         self.staker=staker
+
+        self.activate_disk_save = activate_disk_save
 
         self.port = port
         self.ipfs_port = port + 50  # API port
@@ -130,7 +132,8 @@ class Peer:
             self.wallet = None
         if not self.wallet:
             self.wallet=Wallet()
-            self.save_key_to_disk()
+            if self.activate_disk_save == "y":
+                self.save_key_to_disk()
         
         if activate_disk_load == "y":
             self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
@@ -368,7 +371,8 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
                 self.known_peers[normalized_endpoint]=(data['name'], data['public_key'])
-                self.save_known_peers_to_disk()
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data['name'].lower()]=data['public_key']
                 print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
                 if t == 'peer_info':
@@ -391,7 +395,8 @@ class Peer:
                     self.known_peers[normalized_endpoint]=(peer['name'], peer['public_key'])
                     self.name_to_public_key_dict[peer['name'].lower()]=peer['public_key']
             if new_peer_found:
-                self.save_known_peers_to_disk()
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
             pkt={
                 "type":"chain_request",
                 "id":str(uuid.uuid4())
@@ -600,7 +605,8 @@ class Peer:
                 self.current_stakes.clear()
 
             await self.broadcast_message(msg)
-            self.save_chain_to_disk()
+            if self.activate_disk_save == "y":
+                self.save_chain_to_disk()
 
         elif t=="slash_announcement":
             block1_dict=msg.get("evidence1")
@@ -669,7 +675,8 @@ class Peer:
             #If chain doesn't already exist we assign this as the chain
             if not self.chain:
                 self.chain=Chain(blockList=block_list)
-                self.save_chain_to_disk()
+                if self.activate_disk_save == "y":
+                    self.save_chain_to_disk()
                 
             else:
                 pos=Chain.instance.checkEquivalence(block_list)
@@ -682,14 +689,16 @@ class Peer:
                         l2=len(block_list)
                         if(l2>l1):
                             Chain.instance.rewrite(block_list)
-                            self.save_chain_to_disk()
+                            if self.activate_disk_save == "y":
+                                self.save_chain_to_disk()
                     else:# Malicious fork
                         await self.verify_and_slash(block1, block2, pos, block_list)
                         
                 elif(weight_of_chain(Chain.instance.chain)<weight_of_chain(block_list)):
                     Chain.instance.rewrite(block_list)
                     print("\nCurrent chain replaced by longer chain\n")
-                    self.save_chain_to_disk()
+                    if self.activate_disk_save == "y":
+                        self.save_chain_to_disk()
                 
                 else:
                     print("\nCurrent Chain Longer than received chain\n")
@@ -1314,7 +1323,8 @@ class Peer:
 
             self.seen_message_ids.add(pkt["id"])
             await self.broadcast_message(pkt)
-            self.save_chain_to_disk()
+            if self.activate_disk_save == "y":
+                self.save_chain_to_disk()
         self.last_epoch_end_ts=datetime.now()
 
         async with self.mem_pool_lock:

@@ -61,10 +61,12 @@ def get_contract_code_from_notepad():
     return contract_code
 
 class Peer:
-    def __init__(self, host, port, name, activate_disk_load):
+    def __init__(self, host, port, name, activate_disk_load, activate_disk_save):
         self.host = host
         self.port = port
         self.name = name
+
+        self.activate_disk_save = activate_disk_save
 
         self.ipfs_port = port + 50  # API port
         self.gateway_port = port + 81  # Gateway port
@@ -87,7 +89,8 @@ class Peer:
             self.node_id = None
         if not self.node_id:
             self.node_id = str(uuid.uuid4())
-            self.save_node_id_to_disk()
+            if self.activate_disk_save == "y":
+                self.save_node_id_to_disk()
 
         self.miners: List[list]= list() # List of [miners_list, activation_block]
 
@@ -141,7 +144,8 @@ class Peer:
             self.wallet = None
         if not self.wallet:
             self.wallet=Wallet()
-            self.save_key_to_disk()
+            if self.activate_disk_save == "y":
+                self.save_key_to_disk()
 
         if activate_disk_load == "y":
             self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
@@ -464,7 +468,8 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
             if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
-                self.save_known_peers_to_disk()
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
                 self.node_id_to_name_dict[data["node_id"]]=data["name"].lower()
                 self.name_to_node_id_dict[data["name"].lower()]=data["node_id"]
@@ -489,7 +494,8 @@ class Peer:
                     self.node_id_to_name_dict[peer["node_id"]]=peer["name"].lower()
                     self.name_to_node_id_dict[peer["name"].lower()]=peer["node_id"]
             if new_peer_found:
-                self.save_known_peers_to_disk()
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
             pkt={
                 "type":"network_details_request",
                 "id":str(uuid.uuid4())
@@ -627,7 +633,8 @@ class Peer:
                 await self.update_role(True)
             else:
                 await self.update_role(False)
-            self.save_chain_to_disk()
+            if self.activate_disk_save == "y":
+                self.save_chain_to_disk()
 
         elif t=="chain_request":
             if not self.chain:
@@ -654,12 +661,14 @@ class Peer:
             #If chain doesn't already exist we assign this as the chain
             if not self.chain:
                 self.chain=Chain(blockList=block_list)
-                self.save_chain_to_disk()
+                if self.activate_disk_save == "y":
+                    self.save_chain_to_disk()
 
             elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
                 print("\nCurrent chain replaced by longer chain")
-                self.save_chain_to_disk()
+                if self.activate_disk_save == "y":
+                    self.save_chain_to_disk()
             
             else:
                 print("\nCurrent Chain Longer than received chain")
@@ -1208,7 +1217,8 @@ class Peer:
                                     await self.update_role(True)
                                 else:
                                     await self.update_role(False)
-                                self.save_chain_to_disk()
+                                if self.activate_disk_save == "y":
+                                    self.save_chain_to_disk()
 
         except asyncio.CancelledError:
             print("Miner task stopped cleanly")

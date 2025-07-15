@@ -19,6 +19,7 @@ MAX_OUTPUT=2**256
 EPOCH_TIME=60
 GAS_PRICE = 0.001 # coin per gas unit
 BASE_DEPLOY_COST = 5
+CONSENSUS ="pos"
 
 class VrfThresholdException(Exception):
     pass
@@ -150,17 +151,17 @@ class Peer:
 
     def save_key_to_disk(self):
         key = self.wallet.private_key_pem
-        save_key(key)
+        save_key(key, CONSENSUS)
 
     def load_key_from_disk(self):
-        key = load_key()
+        key = load_key(CONSENSUS)
         if not key:
             self.wallet = None
             return
         self.wallet = Wallet(key)
 
     def load_chain_from_disk(self):
-        block_dict_list = load_chain()
+        block_dict_list = load_chain(CONSENSUS)
         if not block_dict_list:
             self.chain = None
             return
@@ -174,16 +175,16 @@ class Peer:
 
     def save_chain_to_disk(self):
         chain = Chain.instance.to_block_dict_list()
-        save_chain(chain)
+        save_chain(chain, CONSENSUS)
 
     def save_known_peers_to_disk(self):
         content = {}
         for key, value in self.known_peers.items():
             content[json.dumps(key)] = list(value)
-        save_peers(content)
+        save_peers(content, CONSENSUS)
 
     def load_known_peers_from_disk(self):
-        content = load_peers()
+        content = load_peers(CONSENSUS)
         if not content:
             self.known_peers = None
             return

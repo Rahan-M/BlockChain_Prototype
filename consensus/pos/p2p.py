@@ -329,6 +329,22 @@ class Peer:
             return False
         return True
 
+    def get_unique_name(self, base_name):
+        existing_names = []
+        for key, value in self.known_peers:
+            existing_names.append(value[0].lower())
+        
+        base_name = base_name.lower()
+        if base_name not in existing_names:
+            return base_name
+        
+        counter = 1
+        while True:
+            new_name = f"{base_name}{counter}"
+            if new_name not in existing_names:
+                return new_name
+            counter += 1
+
     async def handle_messages(self, websocket, msg):
         """
             This is a function to handle messages as the name suggests
@@ -373,6 +389,16 @@ class Peer:
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
+                if t =='peer_info':
+                    proposed_name = self.get_unique_name(data["name"])
+                    if proposed_name != data["name"]:
+                        pkt={
+                            "type":"change_name",
+                            "id":str(uuid.uuid4()),
+                            "new_name": proposed_name
+                        }
+                        await websocket.send(json.dumps(pkt))
+                        data["name"] = proposed_name
                 self.known_peers[normalized_endpoint]=(data['name'], data['public_key'])
                 if self.activate_disk_save == "y":
                     self.save_known_peers_to_disk()
@@ -384,6 +410,10 @@ class Peer:
                 else:
                     await self.broadcast_message(msg)
                     await self.send_known_peers(websocket)
+
+        elif t=="change_name":
+            new_name = msg["new_name"]
+            self.name = new_name
 
         elif t=="known_peers":
             # print("Received Known Peers")

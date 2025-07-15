@@ -9,6 +9,16 @@ from ecdsa import VerifyingKey, BadSignatureError
 
 from pathlib import Path
 
+import logging
+
+# Set up basic logging to console
+logging.basicConfig(level=logging.DEBUG) # Set to DEBUG for maximum verbosity
+
+# Specifically configure websockets loggers
+logging.getLogger('websockets.protocol').setLevel(logging.DEBUG)
+logging.getLogger('websockets.server').setLevel(logging.DEBUG)
+logging.getLogger('websockets.client').setLevel(logging.DEBUG)
+
 MAX_CONNECTIONS = 8
 
 def get_random_element(s):
@@ -95,6 +105,7 @@ class Peer:
         self.disc_task=None
         self.consensus_task=None
         self.server=None
+        self.keepalive_task=None
 
     async def send_peer_info(self, websocket):
         """
@@ -177,7 +188,7 @@ class Peer:
             return
         
         self.seen_message_ids.add(id)
-
+        print(f"\n{t}\n")
         if t=="ping":
             # print("Received Ping")
             pkt={
@@ -301,6 +312,7 @@ class Peer:
             await self.broadcast_message(msg)
 
         elif t=="chain_request":
+            print("\nReceived Chain Request\n")
             if not self.chain:
                 return
             pkt={
@@ -308,6 +320,7 @@ class Peer:
                 "id":str(uuid.uuid4()),
                 "chain":Chain.instance.to_block_dict_list()
             }
+            print("\nSent Chain\n")
             await websocket.send(json.dumps(pkt))
 
         elif t=="chain":
@@ -559,15 +572,15 @@ class Peer:
             and handle messages that come form this connection
             Also initiates the handshake
         """
-
         endpoint=(host, port)
         if endpoint in self.outbound_peers or endpoint==(self.host, self.port):
             return
 
         uri=f"ws://{host}:{port}"
-        
+        websocket=None
         try:
             websocket=await websockets.connect(uri)
+            print("\nHit Here 72\n")
             self.client_connections.add(websocket)
             self.outbound_peers.add(endpoint)
             self.have_sent_peer_info[websocket]=False
@@ -600,16 +613,38 @@ class Peer:
             async for raw in websocket:
                 msg=json.loads(raw)
                 await self.handle_messages(websocket, msg)
+        except asyncio.CancelledError:
+            print(f"[{self.name}] connect_to_peer task for {host}:{port} was CANCELLED during connection attempt or message handling.")
+            # Do NOT re-raise, allow finally to clean up gracefully
+            import sys
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print(f"An unexpected error occurred!")
+            print(f"Type: {exc_type.__name__}")
+            print(f"Value: {exc_value}")
+            print(f"Traceback object: {exc_traceback}")
+            # You can also use traceback.print_exc() for a more standard traceback output
+            import traceback
+            traceback.print_exc()
+
+        except TimeoutError:
+            print(f"[{self.name}] Failed to connect to {host}:{port}: Timed out during opening handshake. Is the bootstrap peer running and accessible?")
+            traceback.print_exc() # Print traceback for TimeoutError specifically
+        except ConnectionRefusedError:
+            print(f"[{self.name}] Connection refused by {host}:{port}. Is the peer running and listening?")
+            traceback.print_exc() # Print traceback for ConnectionRefusedError
         except Exception as e:
-            print(f"Failed to connect to {host}:{port} ::: {e}")
+            # This will catch any other unexpected exceptions
+            print(f"[{self.name}] An UNEXPECTED error occurred during outbound connection to {host}:{port}: {type(e).__name__}: {e}")
             traceback.print_exc()
         finally:
+            print("\nHit Here 81\n")
             self.client_connections.discard(websocket)
             self.outbound_peers.discard(endpoint)
             self.got_pong.pop(websocket, None)
             self.have_sent_peer_info.pop(websocket, None)
-            await websocket.close()
-            await websocket.wait_closed()
+            if websocket:
+                await websocket.close()
+                await websocket.wait_closed()
 
     async def discover_peers(self):
         """
@@ -767,14 +802,22 @@ class Peer:
         self.configure_ports()
         
         await self.consensus_task
-        asyncio.create_task(self.close_server())
 
-    async def close_server(self):
-        if(self.server and self.server!=None):
-            print("\nHey\n")
-            await self.server.close()
+    async def run_forever(self):
+        # Start background tasks
+        self.consensus_task = asyncio.create_task(self.find_longest_chain())
+        self.disc_task = asyncio.create_task(self.discover_peers())
+        if self.miner:
+            self.mine_task = asyncio.create_task(self.mine_blocks())
 
-    def stop(self):
+        # Keep running until explicitly cancelled
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            print(f"[{self.name}] run_forever cancelled")
+            await self.stop()
+
+    async def stop(self):
         if self.disc_task:
             self.disc_task.cancel()
 
@@ -789,6 +832,8 @@ class Peer:
 
         if self.server:
             print(f"\nServer : {self.server}\n")
+            self.server.close()
+            await self.server.wait_closed()
 
 
     async def printSomething(self):

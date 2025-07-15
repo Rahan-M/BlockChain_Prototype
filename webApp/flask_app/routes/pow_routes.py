@@ -38,3 +38,7 @@ def view_pending_transactions():
 @chain_bp.route('/peers', methods=['GET'])
 def view_known_peers():
     return pow_controllers.get_known_peers()
+
+@chain_bp.route('/check', methods=['GET'])
+def server_check():
+    return pow_controllers.server_exists_check()

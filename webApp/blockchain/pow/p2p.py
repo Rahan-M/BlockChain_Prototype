@@ -105,6 +105,7 @@ class Peer:
         self.disc_task=None
         self.consensus_task=None
         self.server=None
+        self.keepalive_task=None
 
     async def send_peer_info(self, websocket):
         """
@@ -801,7 +802,20 @@ class Peer:
         self.configure_ports()
         
         await self.consensus_task
-        asyncio.create_task(self.close_server())
+
+    async def run_forever(self):
+        # Start background tasks
+        self.consensus_task = asyncio.create_task(self.find_longest_chain())
+        self.disc_task = asyncio.create_task(self.discover_peers())
+        if self.miner:
+            self.mine_task = asyncio.create_task(self.mine_blocks())
+
+        # Keep running until explicitly cancelled
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            print(f"[{self.name}] run_forever cancelled")
+            await self.stop()
 
     async def stop(self):
         if self.disc_task:
@@ -818,7 +832,7 @@ class Peer:
 
         if self.server:
             print(f"\nServer : {self.server}\n")
-            await self.server.close()
+            self.server.close()
             await self.server.wait_closed()
 
 

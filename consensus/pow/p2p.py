@@ -56,7 +56,7 @@ def get_contract_code_from_notepad():
     return contract_code
 
 class Peer:
-    def __init__(self, host, port, name, miner:bool):
+    def __init__(self, host, port, name, miner:bool, activate_disk_load):
         self.host = host
         self.name = name
         self.miner=miner
@@ -79,7 +79,10 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        self.load_known_peers_from_disk()
+        if activate_disk_load == "y":
+            self.load_known_peers_from_disk()
+        else:
+            self.known_peers = None
         if not self.known_peers:
             self.known_peers : Dict[Tuple[str, int], Tuple[str, str]]={} # (host, port):(name, public key)
         """
@@ -111,12 +114,18 @@ class Peer:
 
         self.name_to_public_key_dict: Dict[str, str]={}
         
-        self.load_key_from_disk()
+        if activate_disk_load == "y":
+            self.load_key_from_disk()
+        else:
+            self.wallet = None
         if not self.wallet:
             self.wallet=Wallet()
             self.save_key_to_disk()
         
-        self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
+        if activate_disk_load == "y":
+            self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
+        else:
+            self.chain = None
 
         self.contractsDB = SmartContractDatabase()
 

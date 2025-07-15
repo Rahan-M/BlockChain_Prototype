@@ -61,7 +61,7 @@ def get_contract_code_from_notepad():
     return contract_code
 
 class Peer:
-    def __init__(self, host, port, name):
+    def __init__(self, host, port, name, activate_disk_load):
         self.host = host
         self.port = port
         self.name = name
@@ -81,7 +81,10 @@ class Peer:
 
         self.admin_id = None
 
-        self.load_node_id_from_disk()
+        if activate_disk_load == "y":
+            self.load_node_id_from_disk()
+        else:
+            self.node_id = None
         if not self.node_id:
             self.node_id = str(uuid.uuid4())
             self.save_node_id_to_disk()
@@ -97,7 +100,10 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        self.load_known_peers_from_disk()
+        if activate_disk_load == "y":
+            self.load_known_peers_from_disk()
+        else:
+            self.known_peers = None
         if not self.known_peers:
             self.known_peers: Dict[Tuple[str, int], Tuple[str, str, str]]={} # (host, port):(name, public key, node id)
         """
@@ -129,12 +135,18 @@ class Peer:
         self.node_id_to_name_dict: Dict[str, str]={}
         self.name_to_node_id_dict: Dict[str, str]={}
         
-        self.load_key_from_disk()
+        if activate_disk_load == "y":
+            self.load_key_from_disk()
+        else:
+            self.wallet = None
         if not self.wallet:
             self.wallet=Wallet()
             self.save_key_to_disk()
 
-        self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
+        if activate_disk_load == "y":
+            self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
+        else:
+            self.chain = None
 
         self.contractsDB = SmartContractDatabase()
 

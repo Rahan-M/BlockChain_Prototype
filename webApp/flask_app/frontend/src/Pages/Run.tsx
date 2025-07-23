@@ -169,7 +169,7 @@ const Run = () => {
                 <div className="bg-primary text-white text-center rounded-t-xl p-5">
                     Fill These
                 </div>
-                <div className="content p-5">
+                <div className="content p-5 flex flex-col items-center">
                     <div className="linkInp flex flex-col items-start mb-5"> 
                         <label htmlFor="" className="name font-orbitron">
                             Enter Public Key :

@@ -739,10 +739,9 @@ class Peer:
                         else:
                             print("\n Invalid Block \n")
 
-                        async with self.mem_pool_condition:
-                            for transaction in list(self.mem_pool):
-                                if newBlock.transaction_exists_in_block(transaction):
-                                    self.mem_pool.discard(transaction)
+                        for transaction in list(self.mem_pool):
+                            if newBlock.transaction_exists_in_block(transaction):
+                                self.mem_pool.discard(transaction)
                         
                         async with self.file_hashes_lock:
                             for hash in list(self.file_hashes.keys()):
@@ -834,7 +833,6 @@ class Peer:
             print(f"\nServer : {self.server}\n")
             self.server.close()
             await self.server.wait_closed()
-
 
     async def printSomething(self):
         print("\nYO\n")

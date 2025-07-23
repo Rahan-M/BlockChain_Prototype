@@ -101,11 +101,21 @@ async def connect_to_blockchain():
 
         peer_instance.init_repo()
         peer_instance.configure_ports()
-        await asyncio.sleep(2)
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
 
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
+
+
+async def stop_peer():
+    global peer_instance
+    if not peer_instance:
+        return jsonify({"success":False, "error": "No peer running"})
+
+    await peer_instance.stop()
+    peer_instance=None
+    set_consensus('')
+    return jsonify({"success":True, "message": "Peer Stopped Successfully"})
 
 def server_exists_check():
     global peer_instance

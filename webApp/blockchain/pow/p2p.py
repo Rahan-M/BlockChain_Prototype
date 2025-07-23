@@ -105,6 +105,7 @@ class Peer:
         self.disc_task=None
         self.consensus_task=None
         self.server=None
+        self.outgoing_conn_task=None
         self.keepalive_task=None
 
     async def send_peer_info(self, websocket):
@@ -819,6 +820,7 @@ class Peer:
     async def stop(self):
         if self.disc_task:
             self.disc_task.cancel()
+            print("Discover task cancelled")
 
         if self.consensus_task:
             self.consensus_task.cancel()

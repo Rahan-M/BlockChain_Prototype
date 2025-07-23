@@ -225,7 +225,7 @@ const Run = () => {
                     Are You Sure You Want to Stop Participating in this Blockchain?
                 </div>
                 <div className="buttons flex justify-around">
-                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{console.log('Hey')}}>
                         Yes
                     </button>
                     <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowStopConfirmation(false)}}>

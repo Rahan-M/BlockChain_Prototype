@@ -1026,7 +1026,8 @@ class Peer:
             self.have_sent_peer_info[websocket]=False
 
             print(f"Outbound connection formed to {host}:{port}")
-
+            
+            pkt = None
             # If connecting first time to the network, broadcasts node information to the entire network
             if Chain.instance == None:
                 pkt={
@@ -1040,16 +1041,14 @@ class Peer:
                         "node_id":self.node_id
                     }
                 }
+            else:
+                pkt={
+                    "type":"ping",
+                    "id":str(uuid.uuid4()),
+                } 
 
-                self.seen_message_ids.add(pkt["id"])
-                await self.send_message(websocket, pkt, True)
-                
-            ping={
-                "type":"ping",
-                "id":str(uuid.uuid4()),
-            }
-            self.seen_message_ids.add(ping["id"])
-            await self.send_message(websocket, ping, True)
+            self.seen_message_ids.add(pkt["id"])
+            await self.send_message(websocket, pkt, True)
 
             async for raw in websocket:
                 msg=json.loads(raw)

@@ -25,6 +25,7 @@ const Run = () => {
     const [accBal, setAccBalance]=useState(-1);
     const [showTxMenu1, setShowTxMenu1]=useState(false);
     const [showTxMenu2, setShowTxMenu2]=useState(false);
+    const [showStopConfirmation, setShowStopConfirmation]=useState(false);
     const [peers, setPeers]=useState<Peer[]>([]);
     const [pubKey, setPubKey]=useState("");
     const [amt, setAmt]=useState(-1);
@@ -52,6 +53,7 @@ const Run = () => {
             enqueueSnackbar("Create/Connect First", {variant:'warning'})
             navigate('/')
         }  
+        console.log(isRunning);
         // fetchData()
         // if(consensus=="pow"){
         //     setShowPowMenu(true);
@@ -161,8 +163,6 @@ const Run = () => {
         if(!showTxMenu2)
             return null;
     
-        if(!peers)
-            return null;
         return(
             <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
             <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
@@ -214,6 +214,29 @@ const Run = () => {
         )
     }
 
+    const stopConfirmation=()=>{
+        if(!showStopConfirmation)
+            return null;
+    
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                    Are You Sure You Want to Stop Participating in this Blockchain?
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
+                        Yes
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowStopConfirmation(false)}}>
+                        No
+                    </button>
+                </div>
+            </div>
+            </div>  
+        )
+    }
+
     const commonMenu=()=>{
         return(
                 <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
@@ -227,8 +250,14 @@ const Run = () => {
                             2. Add Transaction via public address
                         </div>
                     </div>
+                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                        <div className='mr-2 cursor-pointer' onClick={()=>setShowStopConfirmation(true)}>
+                            3. Stop 
+                        </div>
+                    </div>
                     {txMenu1()}
                     {txMenu2()}
+                    {stopConfirmation()}
                 </div>
         )
     }

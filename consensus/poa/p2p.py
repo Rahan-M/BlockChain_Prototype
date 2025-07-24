@@ -397,7 +397,7 @@ class Peer:
 
     def get_unique_name(self, base_name):
         existing_names = []
-        for key, value in self.known_peers:
+        for key, value in self.known_peers.items():
             existing_names.append(value[0].lower())
         
         base_name = base_name.lower()

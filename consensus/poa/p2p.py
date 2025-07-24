@@ -483,22 +483,22 @@ class Peer:
                 self.have_sent_peer_info[websocket]=True
             # print(f"[Sent peer]")
 
-        elif t =='peer_info' or t == "add_peer":
+        elif t =="peer_info":
             # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
             if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
-                if t =='peer_info':
-                    proposed_name = self.get_unique_name(data["name"])
-                    if proposed_name != data["name"]:
-                        pkt={
-                            "type":"change_name",
-                            "id":str(uuid.uuid4()),
-                            "new_name": proposed_name
-                        }
-                        await self.send_message(websocket, pkt, False)
-                        data["name"] = proposed_name
+                # if t =='peer_info':
+                #     proposed_name = self.get_unique_name(data["name"])
+                #     if proposed_name != data["name"]:
+                #         pkt={
+                #             "type":"change_name",
+                #             "id":str(uuid.uuid4()),
+                #             "new_name": proposed_name
+                #         }
+                #         await self.send_message(websocket, pkt, False)
+                #         data["name"] = proposed_name
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
                 if self.activate_disk_save == "y":
                     self.save_known_peers_to_disk()
@@ -506,10 +506,59 @@ class Peer:
                 self.node_id_to_name_dict[data["node_id"]]=data["name"].lower()
                 self.name_to_node_id_dict[data["name"].lower()]=data["node_id"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
-                if t == 'add_peer':
-                    await self.broadcast_message(msg)
+                # if t == 'add_peer':
+                #     await self.broadcast_message(msg)
                 message = self.get_known_peers_message()
                 await self.send_message(websocket, message, False)
+
+        elif t == "add_peer":
+            data=msg["data"]
+            normalized_self=normalize_endpoint((self.host, self.port))
+            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
+                proposed_name = self.get_unique_name(data["name"])
+                if proposed_name != data["name"]:
+                    pkt={
+                        "type":"change_name",
+                        "id":str(uuid.uuid4()),
+                        "new_name": proposed_name
+                    }
+                    await self.send_message(websocket, pkt, False)
+                    data["name"] = proposed_name
+                self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
+                self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
+                self.node_id_to_name_dict[data["node_id"]]=data["name"].lower()
+                self.name_to_node_id_dict[data["name"].lower()]=data["node_id"]
+                print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
+                pkt={
+                    "type":"new_peer",
+                    "id":str(uuid.uuid4()),
+                    "data":{
+                        "host":data["host"],
+                        "port":data["port"],
+                        "name":data["name"],
+                        "public_key":data["public_key"],
+                        "node_id":data["node_id"]
+                    }
+                }
+                self.seen_message_ids.add(pkt["id"])
+                await self.broadcast_message(pkt)
+
+        elif t=="new_peer":
+            data=msg["data"]
+            normalized_self=normalize_endpoint((self.host, self.port))
+            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
+                self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
+                self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
+                self.node_id_to_name_dict[data["node_id"]]=data["name"].lower()
+                self.name_to_node_id_dict[data["name"].lower()]=data["node_id"]
+                print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
+                await self.broadcast_message(msg)
 
         elif t=="change_name":
             del self.name_to_node_id_dict[self.name]

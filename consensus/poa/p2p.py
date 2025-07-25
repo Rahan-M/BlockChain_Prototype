@@ -515,12 +515,14 @@ class Peer:
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            new_peer_msg_id = str(uuid.uuid4())
             if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
                 proposed_name = self.get_unique_name(data["name"])
                 if proposed_name != data["name"]:
                     pkt={
                         "type":"change_name",
                         "id":str(uuid.uuid4()),
+                        "new_peer_msg_id": new_peer_msg_id,
                         "new_name": proposed_name
                     }
                     await self.send_message(websocket, pkt, False)
@@ -532,9 +534,11 @@ class Peer:
                 self.node_id_to_name_dict[data["node_id"]]=data["name"].lower()
                 self.name_to_node_id_dict[data["name"].lower()]=data["node_id"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
+                message = self.get_known_peers_message()
+                await self.send_message(websocket, message, False)
                 pkt={
                     "type":"new_peer",
-                    "id":str(uuid.uuid4()),
+                    "id":new_peer_msg_id,
                     "data":{
                         "host":data["host"],
                         "port":data["port"],
@@ -566,6 +570,7 @@ class Peer:
             self.name = new_name
             self.name_to_node_id_dict[self.name] = self.node_id
             self.node_id_to_name_dict[self.node_id] = self.name
+            self.seen_message_ids.add(msg["new_peer_msg_id"])
 
         elif t=="known_peers":
             # print("Received Known Peers")

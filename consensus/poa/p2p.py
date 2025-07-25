@@ -399,6 +399,8 @@ class Peer:
         existing_names = []
         for key, value in self.known_peers.items():
             existing_names.append(value[0].lower())
+
+        existing_names.append(self.name)
         
         base_name = base_name.lower()
         if base_name not in existing_names:

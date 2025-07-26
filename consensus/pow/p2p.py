@@ -275,8 +275,10 @@ class Peer:
 
     def get_unique_name(self, base_name):
         existing_names = []
-        for key, value in self.known_peers:
+        for key, value in self.known_peers.items():
             existing_names.append(value[0].lower())
+
+        existing_names.append(self.name)
         
         base_name = base_name.lower()
         if base_name not in existing_names:
@@ -327,37 +329,70 @@ class Peer:
                 self.have_sent_peer_info[websocket]=True
             # print(f"[Sent peer]")
 
-        elif t =='peer_info' or t == "add_peer":
+        elif t =='peer_info':
             # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
-            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
-                if t =='peer_info':
-                    proposed_name = self.get_unique_name(data["name"])
-                    if proposed_name != data["name"]:
-                        pkt={
-                            "type":"change_name",
-                            "id":str(uuid.uuid4()),
-                            "new_name": proposed_name
-                        }
-                        await websocket.send(json.dumps(pkt))
-                        data["name"] = proposed_name
+                self.known_peers[normalized_endpoint]=(data['name'], data['public_key'])
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
+                self.name_to_public_key_dict[data['name'].lower()]=data['public_key']
+                print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
+                await self.send_known_peers(websocket)
+
+        elif t == "add_peer":
+            data=msg["data"]
+            normalized_self=normalize_endpoint((self.host, self.port))
+            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            new_peer_msg_id = str(uuid.uuid4())
+            if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
+                proposed_name = self.get_unique_name(data["name"])
+                if proposed_name != data["name"]:
+                    pkt={
+                        "type":"change_name",
+                        "id":str(uuid.uuid4()),
+                        "new_peer_msg_id": new_peer_msg_id,
+                        "new_name": proposed_name
+                    }
+                    await websocket.send(json.dumps(pkt))
+                    data["name"] = proposed_name
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
                 if self.activate_disk_save == "y":
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
-                if t == 'peer_info':
-                    await self.send_known_peers(websocket)
-                    # print("Sent Known Peers")
-                else:
-                    await self.broadcast_message(msg)
-                    await self.send_known_peers(websocket)
+                await self.send_known_peers(websocket)
+                pkt={
+                    "type":"new_peer",
+                    "id":new_peer_msg_id,
+                    "data":{
+                        "host":data["host"],
+                        "port":data["port"],
+                        "name":data["name"],
+                        "public_key":data["public_key"]
+                    }
+                }
+                self.seen_message_ids.add(pkt["id"])
+                await self.broadcast_message(pkt)
+
+        elif t=="new_peer":
+            data=msg["data"]
+            normalized_self=normalize_endpoint((self.host, self.port))
+            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
+                self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
+                self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
+                print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
+                await self.broadcast_message(msg)
 
         elif t=="change_name":
             new_name = msg["new_name"]
             self.name = new_name
+            self.seen_message_ids.add(msg["new_peer_msg_id"])
 
         elif t=="known_peers":
             # print("Received Known Peers")
@@ -820,6 +855,7 @@ class Peer:
 
         uri=f"ws://{host}:{port}"
         
+        websocket = None
         try:
             websocket=await websockets.connect(uri)
             self.client_connections.add(websocket)
@@ -827,7 +863,8 @@ class Peer:
             self.have_sent_peer_info[websocket]=False
 
             print(f"Outbound connection formed to {host}:{port}")
-
+            
+            pkt = None
             # If connecting first time to the network, broadcasts node information to the entire network
             if Chain.instance == None:
                 pkt={
@@ -840,23 +877,20 @@ class Peer:
                         "public_key":self.wallet.public_key
                     }
                 }
+            else:
+                pkt={
+                    "type":"ping",
+                    "id":str(uuid.uuid4()),
+                } 
 
-                self.seen_message_ids.add(pkt["id"])
-                await websocket.send(json.dumps(pkt))
-                
-            ping={
-                "type":"ping",
-                "id":str(uuid.uuid4()),
-            }
-            self.seen_message_ids.add(ping["id"])
-            await websocket.send(json.dumps(ping))
+            self.seen_message_ids.add(pkt["id"])
+            await websocket.send(json.dumps(pkt))
 
             async for raw in websocket:
                 msg=json.loads(raw)
                 await self.handle_messages(websocket, msg)
         except Exception as e:
             print(f"Failed to connect to {host}:{port} ::: {e}")
-            traceback.print_exc()
         finally:
             self.client_connections.discard(websocket)
             self.outbound_peers.discard(endpoint)

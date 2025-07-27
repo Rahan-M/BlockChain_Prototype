@@ -50,7 +50,6 @@ async def start_new_blockchain():
         peer_instance.init_repo()
         peer_instance.configure_ports()
 
-        await asyncio.sleep(1)
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})

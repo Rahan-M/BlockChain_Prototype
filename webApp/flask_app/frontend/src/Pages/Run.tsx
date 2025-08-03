@@ -13,7 +13,7 @@ interface Peer {
 }
 
 const Run = () => {
-    // const {isRunning, loadingAuth}=useAuth();
+    const {isRunning, loadingAuth}=useAuth();
     // const [showPowMenu, setShowPowMenu]=useState(false)
     // const [showPosMenu, setShowPosMenu]=useState(false)
     // const [showPoaMenu, setShowPoaMenu]=useState(false)
@@ -50,29 +50,29 @@ const Run = () => {
 
 
 
-    // useEffect(() => {
-    //     if(!isRunning){
-    //         enqueueSnackbar("Create/Connect First", {variant:'warning'})
-    //         navigate('/')
-    //     }  
-    //     console.log(isRunning);
-    //     // fetchData()
-    //     // if(consensus=="pow"){
-    //     //     setShowPowMenu(true);
-    //     //     setShowPosMenu(false);
-    //     //     setShowPoaMenu(false);
-    //     // }
-    //     // if(consensus=="pos"){
-    //     //     setShowPosMenu(true);
-    //     //     setShowPowMenu(false);
-    //     //     setShowPoaMenu(false);
-    //     // }
-    //     // if(consensus=="poa"){
-    //     //     setShowPoaMenu(true);
-    //     //     setShowPosMenu(false);
-    //     //     setShowPowMenu(false);
-    //     // }
-    // }, [isRunning, loadingAuth])
+    useEffect(() => {
+        if(!isRunning){
+            enqueueSnackbar("Create/Connect First", {variant:'warning'})
+            navigate('/')
+        }  
+        console.log(isRunning);
+        // fetchData()
+        // if(consensus=="pow"){
+        //     setShowPowMenu(true);
+        //     setShowPosMenu(false);
+        //     setShowPoaMenu(false);
+        // }
+        // if(consensus=="pos"){
+        //     setShowPosMenu(true);
+        //     setShowPowMenu(false);
+        //     setShowPoaMenu(false);
+        // }
+        // if(consensus=="poa"){
+        //     setShowPoaMenu(true);
+        //     setShowPosMenu(false);
+        //     setShowPowMenu(false);
+        // }
+    }, [isRunning, loadingAuth])
 
     const addTransaction= async()=>{
         setShowTxMenu1(false);

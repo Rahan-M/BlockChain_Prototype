@@ -54,8 +54,6 @@ async def start_new_blockchain():
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
     
-
-
 async def connect_to_blockchain():
     global peer_instance
     if request.is_json:
@@ -105,7 +103,6 @@ async def connect_to_blockchain():
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
 
-
 async def stop_peer():
     global peer_instance
     if not peer_instance:
@@ -147,11 +144,9 @@ async def add_transaction():
     except (MalformedPointError, ValueError, Exception) as e:
         return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
 
-
     await peer_instance.create_and_broadcast_tx(public_key, amt)
     return jsonify({"success":True, "message": "Transaction Added"})
     
-
 def account_balance():
     global peer_instance
     if not peer_instance:
@@ -166,8 +161,6 @@ def account_balance():
         return jsonify({"success":True, "message":"succesful request", "account_balance": amt})
     except:
         return jsonify({"success":False, "error": "error while fetching account balance"}, 409)
-
-
 
 def get_status():
     global peer_instance

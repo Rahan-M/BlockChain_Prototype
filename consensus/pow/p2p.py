@@ -283,7 +283,7 @@ class Peer:
         base_name = base_name.lower()
         if base_name not in existing_names:
             return base_name
-        
+    
         counter = 1
         while True:
             new_name = f"{base_name}{counter}"

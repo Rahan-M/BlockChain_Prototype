@@ -10,7 +10,7 @@ class Transaction:
     def __init__(self, payload, sender: str, receiver: str, id=None, ts=None):
         self.id=id or str(uuid.uuid4())
         self.payload=payload   # amount or [code, amount] or [contract id, function_name, arguments, state, amount]
-        self.sender: str=sender   # Public Key
+        self.sender: str=sender  # Public Key
         self.receiver: str=receiver   # Public Key or "deploy" or "invoke"
         self.sign:bytes=None
         self.ts=ts or datetime.now().timestamp()

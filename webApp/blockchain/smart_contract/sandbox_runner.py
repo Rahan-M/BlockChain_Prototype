@@ -1,4 +1,4 @@
-from smart_contract.smart_contract import ContractEnvironment
+from blockchain.smart_contract.smart_contract import ContractEnvironment
 
 def sandbox_contract_runner(code, func_name, args, state, return_dict):
     try:

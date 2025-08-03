@@ -250,7 +250,7 @@ class Peer:
 
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
-            transaction=Transaction(transaction_dict["amount"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["ts"])
+            transaction=Transaction(transaction_dict["payload"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["ts"])
             if(transaction.sender!="Genesis"):
                 transaction.sign=base64.b64decode(transaction_dict["sign"])
             transactions.append(transaction)
@@ -424,7 +424,7 @@ class Peer:
                 print("\nInvalid Transaction, amount<=0\n")
                 return
             
-            transaction: Transaction=Transaction(tx['amount'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
+            transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return
@@ -650,7 +650,6 @@ class Peer:
                 if transaction.receiver == "invoke" and transaction.payload[0] == contract_id:
                     return transaction.payload[3]
         return {}
-
 
     async def uploadFile(self, desc: str, path:str):
         file_path=Path(path)
@@ -911,7 +910,6 @@ class Peer:
 
         return response
 
-
     async def find_longest_chain(self):
         """
             We routinely check every 30 seconds, every other chain and we replace
@@ -929,7 +927,6 @@ class Peer:
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         # We start the server
-        print("\nHit here1\n")
         try:
             self.server=await websockets.serve(self.handle_connections, self.host, self.port)
             print(self.server)

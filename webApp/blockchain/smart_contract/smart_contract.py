@@ -1,7 +1,7 @@
 from RestrictedPython import compile_restricted
 from RestrictedPython.Eval import default_guarded_getiter
 from RestrictedPython.Guards import safe_builtins
-from smart_contract.gas_meter import GasMeter
+from blockchain.smart_contract.gas_meter import GasMeter
 import math
 
 def _getitem_(obj, index):

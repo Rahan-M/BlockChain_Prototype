@@ -13,7 +13,7 @@ interface Peer {
 }
 
 const Run = () => {
-    const {isRunning, loadingAuth}=useAuth();
+    // const {isRunning, loadingAuth}=useAuth();
     // const [showPowMenu, setShowPowMenu]=useState(false)
     // const [showPosMenu, setShowPosMenu]=useState(false)
     // const [showPoaMenu, setShowPoaMenu]=useState(false)
@@ -25,6 +25,8 @@ const Run = () => {
     const [accBal, setAccBalance]=useState(-1);
     const [showTxMenu1, setShowTxMenu1]=useState(false);
     const [showTxMenu2, setShowTxMenu2]=useState(false);
+    const [showUploadMenu, setShowUploadMenu]=useState(false);
+    const [showDownloadMenu, setShowDownloadMenu]=useState(false);
     const [showStopConfirmation, setShowStopConfirmation]=useState(false);
     const [peers, setPeers]=useState<Peer[]>([]);
     const [pubKey, setPubKey]=useState("");
@@ -48,29 +50,29 @@ const Run = () => {
 
 
 
-    useEffect(() => {
-        if(!isRunning){
-            enqueueSnackbar("Create/Connect First", {variant:'warning'})
-            navigate('/')
-        }  
-        console.log(isRunning);
-        // fetchData()
-        // if(consensus=="pow"){
-        //     setShowPowMenu(true);
-        //     setShowPosMenu(false);
-        //     setShowPoaMenu(false);
-        // }
-        // if(consensus=="pos"){
-        //     setShowPosMenu(true);
-        //     setShowPowMenu(false);
-        //     setShowPoaMenu(false);
-        // }
-        // if(consensus=="poa"){
-        //     setShowPoaMenu(true);
-        //     setShowPosMenu(false);
-        //     setShowPowMenu(false);
-        // }
-    }, [isRunning, loadingAuth])
+    // useEffect(() => {
+    //     if(!isRunning){
+    //         enqueueSnackbar("Create/Connect First", {variant:'warning'})
+    //         navigate('/')
+    //     }  
+    //     console.log(isRunning);
+    //     // fetchData()
+    //     // if(consensus=="pow"){
+    //     //     setShowPowMenu(true);
+    //     //     setShowPosMenu(false);
+    //     //     setShowPoaMenu(false);
+    //     // }
+    //     // if(consensus=="pos"){
+    //     //     setShowPosMenu(true);
+    //     //     setShowPowMenu(false);
+    //     //     setShowPoaMenu(false);
+    //     // }
+    //     // if(consensus=="poa"){
+    //     //     setShowPoaMenu(true);
+    //     //     setShowPosMenu(false);
+    //     //     setShowPowMenu(false);
+    //     // }
+    // }, [isRunning, loadingAuth])
 
     const addTransaction= async()=>{
         setShowTxMenu1(false);
@@ -214,6 +216,126 @@ const Run = () => {
         )
     }
 
+    const uploadMenu=()=>{
+        if(!showUploadMenu)
+            return null;
+    
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                    Fill These
+                </div>
+                <div className="content p-5 flex flex-col items-center">
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter Description Of The File :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e)=>{
+                            let tempKey=`${e.target.value}\n`;  
+                            const length=tempKey.length
+                            if(length>50){
+                                tempKey=tempKey.substring(0,26)+'\n'+tempKey.substring(27, length-26)+'\n'+tempKey.substring(length-25);
+                            }
+                            enqueueSnackbar("Not a valid public address", {variant:'error'});
+                            // This is because the backend expects a newline charachter at 3 points in the public key.
+                            // The library we are using (ecdsa) will otherwise see this as an invalid key
+                            setPubKey(tempKey)
+                        }}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter the Absolute Path of The File :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setAmt(Number(e.target.value))}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
+                        Upload File
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowUploadMenu(false)}}>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            </div>  
+        )
+    }
+
+    const downloadMenu=()=>{
+        if(!showDownloadMenu)
+            return null;
+    
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                    Fill These
+                </div>
+                <div className="content p-5 flex flex-col items-center">
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter Cid Of The File :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e)=>{
+                            let tempKey=`${e.target.value}\n`;  
+                            const length=tempKey.length
+                            if(length>50){
+                                tempKey=tempKey.substring(0,26)+'\n'+tempKey.substring(27, length-26)+'\n'+tempKey.substring(length-25);
+                            }
+                            enqueueSnackbar("Not a valid public address", {variant:'error'});
+                            // This is because the backend expects a newline charachter at 3 points in the public key.
+                            // The library we are using (ecdsa) will otherwise see this as an invalid key
+                            setPubKey(tempKey)
+                        }}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter the path :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setAmt(Number(e.target.value))}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter the name of the file :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setAmt(Number(e.target.value))}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
+                        Download File
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowDownloadMenu(false)}}>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            </div>  
+        )
+    }
+
     const stopConfirmation=()=>{
         if(!showStopConfirmation)
             return null;
@@ -237,27 +359,64 @@ const Run = () => {
         )
     }
 
+    const fileMenu=()=>{
+        return(
+            <>
+            <div className='self-start px-20'>
+                <h1 className='text-2xl'>File Menu</h1>
+            </div>
+            <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowUploadMenu(true)}>
+                    Upload File
+                </div>
+            </div>
+            <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowDownloadMenu(true)}>
+                    Download File
+                </div>
+            </div>
+            </>
+        )
+    }
+
+    const txMenu=()=>{
+        return(
+            <>
+            <div className='self-start px-20'>
+                <h1 className='text-2xl'>Transaction Menu</h1>
+            </div>
+            <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu1(true)}>
+                    Add Transaction via saved name
+                </div>
+            </div>
+            <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
+                    Add Transaction via public address
+                </div>
+            </div>
+            </>
+        )
+    }
+
     const commonMenu=()=>{
         return(
                 <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
-                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
-                        <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu1(true)}>
-                            1. Add Transaction via saved name
-                        </div>
+                    {txMenu()}
+                    {fileMenu()}
+                    <div className='self-start px-20'>
+                        <h1 className='text-2xl'>Danger Zone</h1>
                     </div>
-                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
-                        <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
-                            2. Add Transaction via public address
-                        </div>
-                    </div>
-                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                    <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
                         <div className='mr-2 cursor-pointer' onClick={()=>setShowStopConfirmation(true)}>
-                            3. Stop 
+                            Stop 
                         </div>
                     </div>
                     {txMenu1()}
                     {txMenu2()}
                     {stopConfirmation()}
+                    {uploadMenu()}
+                    {downloadMenu()}
                 </div>
         )
     }

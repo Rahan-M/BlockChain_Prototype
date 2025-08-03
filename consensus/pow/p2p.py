@@ -45,7 +45,7 @@ def get_contract_code_from_notepad():
         tmp_file.write("    return state, 'some message'\n")
     
     # Open it in Notepad (waits until closed)
-    subprocess.call(["notepad.exe", temp_filename])
+    subprocess.call(["gedit", temp_filename])
 
     # Read the edited code
     with open(temp_filename, 'r', encoding='utf-8') as f:
@@ -426,6 +426,11 @@ class Peer:
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
+            
+            if(tx['amount']<=0):
+                print("\nInvalid Transaction, amount<=0\n")
+                return
+            
             transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
@@ -1011,7 +1016,7 @@ class Peer:
         hash_object = hashlib.sha256(data.encode('utf-8'))
         return hash_object.hexdigest()
         
-    def deploy_contract(self, transaction):
+    def deploy_contract(self, transaction: Transaction):
         sender = transaction.sender
         timestamp = transaction.ts
         code = transaction.payload[0]

@@ -1,5 +1,5 @@
-import asyncio, websockets, traceback
-import argparse, json, uuid, base64
+import asyncio, websockets
+import json, uuid, base64
 import threading, socket
 import os, subprocess
 from typing import Set, Dict, List, Tuple
@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
 from pathlib import Path
 import tempfile
-import ast
+import ast 
 import hashlib
 
 MAX_CONNECTIONS = 8
@@ -426,11 +426,7 @@ class Peer:
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
-            
-            if(tx['amount']<=0):
-                print("\nInvalid Transaction, amount<=0\n")
-                return
-            
+                      
             transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
@@ -453,6 +449,10 @@ class Peer:
                 amount = transaction.payload
             if(amount>Chain.instance.calc_balance(transaction.sender, self.mem_pool)):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
+                return
+
+            if(tx['amount']<=0):
+                print("\nInvalid Transaction, amount<=0\n")
                 return
 
             try:

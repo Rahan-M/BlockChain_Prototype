@@ -420,9 +420,6 @@ class Peer:
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
             
-            if(tx['amount']<=0):
-                print("\nInvalid Transaction, amount<=0\n")
-                return
             
             transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
@@ -448,6 +445,9 @@ class Peer:
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
+            if(amount<=0):
+                print("\nInvalid Transaction, amount<=0\n")
+                return
 
             try:
                 public_key=VerifyingKey.from_pem(msg['sender_pem'].encode())

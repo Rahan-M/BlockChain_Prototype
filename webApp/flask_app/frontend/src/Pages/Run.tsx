@@ -105,7 +105,7 @@ const Run = () => {
     }  
 
     const downloadFile= async()=>{
-        setShowUploadMenu(false);
+        setShowDownloadMenu(false);
         const res=await axios.post('/api/pow/downloadFile',{
             "cid":fileCid,
             "path":filePath,

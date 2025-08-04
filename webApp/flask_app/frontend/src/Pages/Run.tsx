@@ -32,6 +32,11 @@ const Run = () => {
     const [pubKey, setPubKey]=useState("");
     const [amt, setAmt]=useState(-1);
     
+    const [fileName, setFileName]=useState("");
+    const [fileCid, setFileCid]=useState("");
+    const [filePath, setFilePath]=useState("");
+    const [fileDesc, setFileDesc]=useState("");
+
     const navigate=useNavigate()
     const {enqueueSnackbar}=useSnackbar()
     
@@ -80,6 +85,31 @@ const Run = () => {
         const res=await axios.post('/api/pow/transaction',{
             "public_key":pubKey,
             "amt":amt
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to add transaction", {variant:'error'});
+        }
+        enqueueSnackbar("Added transaction succesfully", {variant:'success'});
+    }   
+
+    const uploadFile= async()=>{
+        setShowUploadMenu(false);
+        const res=await axios.post('/api/pow/uploadFile',{
+            "desc":fileDesc,
+            "path":filePath
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to add transaction", {variant:'error'});
+        }
+        enqueueSnackbar("Added transaction succesfully", {variant:'success'});
+    }  
+
+    const downloadFile= async()=>{
+        setShowUploadMenu(false);
+        const res=await axios.post('/api/pow/downloadFile',{
+            "cid":fileCid,
+            "path":filePath,
+            "name":fileName
         })
         if(!res.data.success){
             enqueueSnackbar("Failed to add transaction", {variant:'error'});
@@ -234,15 +264,7 @@ const Run = () => {
                         <input
                         type="text"
                         onChange={(e)=>{
-                            let tempKey=`${e.target.value}\n`;  
-                            const length=tempKey.length
-                            if(length>50){
-                                tempKey=tempKey.substring(0,26)+'\n'+tempKey.substring(27, length-26)+'\n'+tempKey.substring(length-25);
-                            }
-                            enqueueSnackbar("Not a valid public address", {variant:'error'});
-                            // This is because the backend expects a newline charachter at 3 points in the public key.
-                            // The library we are using (ecdsa) will otherwise see this as an invalid key
-                            setPubKey(tempKey)
+                            setFileDesc(e.target.value);
                         }}
                         className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
                         />
@@ -253,13 +275,13 @@ const Run = () => {
                         </label>
                         <input
                         type="text"
-                        onChange={(e) => setAmt(Number(e.target.value))}
+                        onChange={(e) => setFilePath(e.target.value)}
                         className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
                         />
                     </div>
                 </div>
                 <div className="buttons flex justify-around">
-                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={uploadFile}>
                         Upload File
                     </button>
                     <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowUploadMenu(false)}}>
@@ -289,15 +311,7 @@ const Run = () => {
                         <input
                         type="text"
                         onChange={(e)=>{
-                            let tempKey=`${e.target.value}\n`;  
-                            const length=tempKey.length
-                            if(length>50){
-                                tempKey=tempKey.substring(0,26)+'\n'+tempKey.substring(27, length-26)+'\n'+tempKey.substring(length-25);
-                            }
-                            enqueueSnackbar("Not a valid public address", {variant:'error'});
-                            // This is because the backend expects a newline charachter at 3 points in the public key.
-                            // The library we are using (ecdsa) will otherwise see this as an invalid key
-                            setPubKey(tempKey)
+                            setFileCid(e.target.value)
                         }}
                         className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
                         />
@@ -308,7 +322,7 @@ const Run = () => {
                         </label>
                         <input
                         type="text"
-                        onChange={(e) => setAmt(Number(e.target.value))}
+                        onChange={(e) => setFilePath(e.target.value)}
                         className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
                         />
                     </div>
@@ -318,13 +332,13 @@ const Run = () => {
                         </label>
                         <input
                         type="text"
-                        onChange={(e) => setAmt(Number(e.target.value))}
+                        onChange={(e) => setFileName(e.target.value)}
                         className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
                         />
                     </div>
                 </div>
                 <div className="buttons flex justify-around">
-                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addTransaction}>
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={downloadFile}>
                         Download File
                     </button>
                     <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowDownloadMenu(false)}}>

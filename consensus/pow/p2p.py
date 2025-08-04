@@ -451,7 +451,7 @@ class Peer:
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
 
-            if(tx['amount']<=0):
+            if(amount<=0):
                 print("\nInvalid Transaction, amount<=0\n")
                 return
 

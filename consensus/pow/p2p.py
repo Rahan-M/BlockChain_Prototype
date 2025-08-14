@@ -9,9 +9,7 @@ from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
 from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
 from consensus.pow.flask_app import create_flask_app, run_flask_app
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes, serialization
-from ecdsa import VerifyingKey, BadSignatureError
+from ecdsa import VerifyingKey
 from pathlib import Path
 import tempfile
 import ast

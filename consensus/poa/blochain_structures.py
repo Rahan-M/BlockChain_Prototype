@@ -1,10 +1,7 @@
 import json, hashlib, uuid, base64
 from typing import List, Dict
 from datetime import datetime
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.backends import default_backend
-from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
+from ecdsa import SigningKey, SECP256k1, VerifyingKey
 import binascii
 
 GAS_PRICE = 0.001 # coin per gas unit

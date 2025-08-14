@@ -1,9 +1,7 @@
 import json, hashlib, uuid, base64
 from typing import List, Dict
 from datetime import datetime
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.backends import default_backend
+from ecdsa import SigningKey, SECP256k1, VerifyingKey
 import binascii
 
 GAS_PRICE = 0.001 # coin per gas unit
@@ -44,22 +42,11 @@ class Transaction:
     def is_valid_signature(self):
         try:
             # Load public key from PEM string
-            public_key = serialization.load_pem_public_key(
-                self.sender.encode(),
-                backend=default_backend()
-            )
+            public_key = VerifyingKey.from_pem(self.sender.encode())
 
             message = str(self).encode()
 
-            public_key.verify(
-                self.sign,
-                message,
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
-                ),
-                hashes.SHA256()
-            )
+            public_key.verify(self.sign, message)
             return True
         except Exception as e:
             print(f"Invalid transaction signature: {e}")
@@ -134,20 +121,12 @@ class Block:
     def is_valid_signature(self):
         try:
             # Load public key from PEM string
-            public_key = serialization.load_pem_public_key(
-                self.miner_public_key.encode(),
-                backend=default_backend()
-            )
+            public_key = VerifyingKey.from_pem(self.miner_public_key.encode())
 
             message = self.get_message_to_sign()
             signature = binascii.unhexlify(self.signature)
 
-            public_key.verify(
-                signature,
-                message,
-                padding.PKCS1v15(),
-                hashes.SHA256()
-            )
+            public_key.verify(signature, message)
             print("\nValid Block\n")
             return True
         except Exception as e:
@@ -254,16 +233,8 @@ class Chain:
                 return False
             sign_bytes=transaction.sign
             try:
-                public_key=serialization.load_pem_public_key(transaction.sender.encode())
-                public_key.verify(
-                    sign_bytes,
-                    str(transaction).encode(),
-                    padding.PSS(
-                        mgf=padding.MGF1(hashes.SHA256()),
-                        salt_length=padding.PSS.MAX_LENGTH
-                    ),
-                    hashes.SHA256()
-                )
+                public_key=VerifyingKey.from_pem(transaction.sender.encode())
+                public_key.verify(sign_bytes, str(transaction).encode())
             except:
                 print("\nInvalid Signature On Transaction\n")
                 return False
@@ -310,28 +281,13 @@ class Chain:
 class Wallet:
     def __init__(self, private_key_pem: str = None):
         if not private_key_pem:
-            self.private_key = rsa.generate_private_key(
-                public_exponent=65537,
-                key_size=2048,
-                backend=default_backend()
-            )
+            self.private_key = SigningKey.generate(curve=SECP256k1)
         else:
-            self.private_key = serialization.load_pem_private_key(
-                private_key_pem.encode(),
-                password=None,
-                backend=default_backend()
-            )
+            self.private_key = SigningKey.from_pem(private_key_pem)
+            
+        self.private_key_pem = self.private_key.to_pem().decode()
 
-        self.private_key_pem = self.private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        ).decode()
-
-        self.public_key = self.private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        ).decode()
+        self.public_key = self.private_key.get_verifying_key().to_pem().decode()
 
 
 # Is valid chain function

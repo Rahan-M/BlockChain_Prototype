@@ -1,5 +1,5 @@
 import asyncio, websockets
-import argparse, json, uuid, base64
+import json, uuid, base64
 from typing import Set, Dict, List, Tuple
 import copy
 import threading
@@ -10,9 +10,7 @@ from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
 from storage.storage_manager import save_node_id, load_node_id, save_key, load_key, save_chain, load_chain, save_peers, load_peers
 from consensus.poa.flask_app import create_flask_app, run_flask_app
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.backends import default_backend
+from ecdsa import VerifyingKey
 import binascii
 import os
 import tempfile
@@ -270,11 +268,7 @@ class Peer:
             "activation_block": activation_block,
         }
         message = json.dumps(pkt, sort_keys=True).encode()
-        signature = self.wallet.private_key.sign(
-            message,
-            padding.PKCS1v15(),
-            hashes.SHA256()
-        )
+        signature = self.wallet.private_key.sign(message)
         pkt["signature"] = signature.hex()
         self.seen_message_ids.add(pkt["id"])
         await self.broadcast_message(pkt)
@@ -439,10 +433,7 @@ class Peer:
 
         if t=="miners_list_update":
             try:
-                public_key = serialization.load_pem_public_key(
-                    self.get_public_key_by_node_id(self.admin_id).encode(),
-                    backend=default_backend()
-                )
+                public_key = VerifyingKey.from_pem(self.get_public_key_by_node_id(self.admin_id).encode())
 
                 message = json.dumps({
                     "type":"miners_list_update",
@@ -453,12 +444,7 @@ class Peer:
 
                 signature = binascii.unhexlify(msg["signature"])
 
-                public_key.verify(
-                    signature,
-                    message,
-                    padding.PKCS1v15(),
-                    hashes.SHA256()
-                )
+                public_key.verify(signature, message)
             except Exception as e:
                 print(f"Invalid miners list update signature: {e}")
                 return
@@ -651,16 +637,8 @@ class Peer:
                 return
 
             try:
-                public_key=serialization.load_pem_public_key(tx['sender'].encode())
-                public_key.verify(
-                    sign_bytes,
-                    tx_str.encode(),
-                    padding.PSS(
-                        mgf=padding.MGF1(hashes.SHA256()),
-                        salt_length=padding.PSS.MAX_LENGTH
-                    ),
-                    hashes.SHA256()
-                )
+                public_key=VerifyingKey.from_pem(tx['sender'].encode())
+                public_key.verify(sign_bytes, tx_str.encode())
             except:
                 print("Invalid Signature")
                 return
@@ -831,14 +809,7 @@ class Peer:
         transaction=Transaction(payload, self.wallet.public_key, receiver_public_key)
         transaction_str=str(transaction)
         
-        signature=self.wallet.private_key.sign(
-            transaction_str.encode(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
-        )
+        signature=self.wallet.private_key.sign(transaction_str.encode())
 
         signature_b64=base64.b64encode(signature).decode()
         # b64encode returns bytes, Decode converts bytes to string
@@ -1227,11 +1198,7 @@ class Peer:
 
     def sign_block(self, block: Block):
         message = block.get_message_to_sign()
-        signature = self.wallet.private_key.sign(
-            message,
-            padding.PKCS1v15(),
-            hashes.SHA256()
-        )
+        signature = self.wallet.private_key.sign(message)
         block.signature = signature.hex()  # Store as hex string for transport
 
     async def mine_blocks(self):

@@ -11,6 +11,7 @@ from storage.storage_manager import save_key, load_key, save_chain, load_chain, 
 from consensus.pow.flask_app import create_flask_app, run_flask_app
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
+from ecdsa import VerifyingKey, BadSignatureError
 from pathlib import Path
 import tempfile
 import ast
@@ -451,16 +452,8 @@ class Peer:
                 return
 
             try:
-                public_key=serialization.load_pem_public_key(tx['sender'].encode())
-                public_key.verify(
-                    sign_bytes,
-                    tx_str.encode(),
-                    padding.PSS(
-                        mgf=padding.MGF1(hashes.SHA256()),
-                        salt_length=padding.PSS.MAX_LENGTH
-                    ),
-                    hashes.SHA256()
-                )
+                public_key=VerifyingKey.from_pem(tx['sender'].encode())
+                public_key.verify(sign_bytes, tx_str.encode())
             except:
                 print("Invalid Signature")
                 return
@@ -620,14 +613,7 @@ class Peer:
         transaction=Transaction(payload, self.wallet.public_key, receiver_public_key)
         transaction_str=str(transaction)
         
-        signature=self.wallet.private_key.sign(
-            transaction_str.encode(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
-        )
+        signature=self.wallet.private_key.sign(transaction_str.encode())
 
         signature_b64=base64.b64encode(signature).decode()
         # b64encode returns bytes, Decode converts bytes to string

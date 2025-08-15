@@ -662,7 +662,7 @@ class Peer:
                 print("\nPlease enter a valid number!!!\n")
             if ch==1:
                 rec = await asyncio._get_running_loop().run_in_executor(
-                    None, input, "\nEnter Receiver's Name: "
+                    None, input, "\nEnter Receiver's Name or Public Key: "
                 )
 
                 if rec == "deploy":
@@ -722,10 +722,21 @@ class Peer:
                     amt= await asyncio._get_running_loop().run_in_executor(
                         None, input, "\nEnter Amount to send: "
                     )
+
                     receiver_public_key = self.name_to_public_key_dict.get(rec.lower().strip())
-                    if(receiver_public_key==None):
-                        print("No such person available in directory...")
-                        continue
+
+                    if receiver_public_key is None:
+                        rec_split = rec.split("\\n")
+                        rec_refined = "\n".join(rec_split)
+                        exist = 0
+                        for (nme, pk) in self.name_to_public_key_dict.items():
+                            if pk == rec_refined:
+                                receiver_public_key = pk
+                                exist = 1
+                                break
+                        if exist == 0:
+                            print("No person available in directory with provided name or public key...")
+                            continue
                     
                     try:
                         amt=float(amt)

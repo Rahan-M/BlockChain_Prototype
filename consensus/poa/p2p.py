@@ -946,6 +946,10 @@ class Peer:
                         print("Amount must be a number")
                         continue
 
+                    if(amt<=0):
+                        print("\nAmount must be positive\n")
+                        continue
+
                     if amt<=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool):
                         await self.create_and_broadcast_tx(receiver_public_key, amt)
                     else:

@@ -8,6 +8,8 @@ from ..app import set_consensus
 import sys, traceback, os
 
 peer_instance:p2p.Peer=None
+GAS_PRICE = 0.001 # coin per gas unit
+BASE_DEPLOY_COST = 5
 
 async def start_new_blockchain():
     global peer_instance
@@ -130,22 +132,58 @@ async def add_transaction():
 
     data=request.get_json()
     public_key=data.get('public_key')
-    amt=data.get('amt')
+    payload=data.get('payload')
+    amount = None
 
-    if(not (public_key and amt)):
-        return jsonify({"success":False, "error": "Public Key or Amount Not Found"})
+    if(not (public_key and payload)):
+        return jsonify({"success":False, "error": "Public Key or Payload Not Found"})
     
-    curve=curves.SECP256k1
-    
-    try:
-        vk=VerifyingKey.from_pem(public_key)
-        if(vk.curve!=curve):
+    if public_key == "deploy":
+        contract_code = payload[0]
+        if not contract_code:
+            return jsonify({"success":False, "error": "Contract Code Not Found"})
+        
+        gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
+        amount = gas_used * GAS_PRICE
+        payload = [contract_code, amount]
+
+    elif public_key == "invoke":
+        contract_id = payload[0]
+        func_name = payload[1]
+        args = payload[2]
+
+        if contract_id not in peer_instance.contractsDB.contracts:
+            return jsonify({"success":False, "error": "No such contract found"})
+        
+        response = peer_instance.run_contract(payload)
+        if(response["error"] != None):
+            return jsonify({"success":False, "error": response["error"]})
+        state = response["state"]
+        gas_used = response["gas_used"]
+        amount = gas_used * GAS_PRICE
+        payload = [contract_id, func_name, args, state, amount]
+
+    else:
+        curve=curves.SECP256k1
+        try:
+            vk=VerifyingKey.from_pem(public_key)
+            if(vk.curve!=curve):
+                return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
+        except (MalformedPointError, ValueError, Exception) as e:
             return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
-    
-    except (MalformedPointError, ValueError, Exception) as e:
-        return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
+        
+        try:
+            amount = float(payload)
+        except ValueError:
+            return jsonify({"success":False, "error": "Amount must be a number"})
+        
+        if amount < 0:
+            return jsonify({"success":False, "error": "Amount must be a positive value"})
 
-    await peer_instance.create_and_broadcast_tx(public_key, amt)
+    if amount > peer_instance.chain.calc_balance(peer_instance.wallet.public_key, peer_instance.mem_pool):
+        return jsonify({"success":False, "error": "Insufficient Account Balance"})
+    
+    await peer_instance.create_and_broadcast_tx(public_key, payload)
     return jsonify({"success":True, "message": "Transaction Added"})
     
 def account_balance():

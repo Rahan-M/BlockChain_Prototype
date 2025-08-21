@@ -28,6 +28,8 @@ const Run = () => {
     const [showUploadMenu, setShowUploadMenu]=useState(false);
     const [showDownloadMenu, setShowDownloadMenu]=useState(false);
     const [showStopConfirmation, setShowStopConfirmation]=useState(false);
+    const [showDepMenu, setShowDepMenu]=useState(false);
+
     const [peers, setPeers]=useState<Peer[]>([]);
     const [pubKey, setPubKey]=useState("");
     const [amt, setAmt]=useState(-1);
@@ -36,6 +38,8 @@ const Run = () => {
     const [fileCid, setFileCid]=useState("");
     const [filePath, setFilePath]=useState("");
     const [fileDesc, setFileDesc]=useState("");
+
+    const [contractCode, setContractCode]=useState("");
 
     const navigate=useNavigate()
     const {enqueueSnackbar}=useSnackbar()
@@ -56,11 +60,11 @@ const Run = () => {
 
 
     useEffect(() => {
-        if(!isRunning){
-            enqueueSnackbar("Create/Connect First", {variant:'warning'})
-            navigate('/')
-        }  
-        console.log(isRunning);
+        // if(!isRunning){
+        //     enqueueSnackbar("Create/Connect First", {variant:'warning'})
+        //     navigate('/')
+        // }  
+        // console.log(isRunning);
         // fetchData()
         // if(consensus=="pow"){
         //     setShowPowMenu(true);
@@ -84,7 +88,7 @@ const Run = () => {
         setShowTxMenu2(false);
         const res=await axios.post('/api/pow/transaction',{
             "public_key":pubKey,
-            "amt":amt
+            "payload":amt
         })
         if(!res.data.success){
             enqueueSnackbar("Failed to add transaction", {variant:'error'});
@@ -373,6 +377,63 @@ const Run = () => {
         )
     }
 
+    const deployContract=async()=>{
+        setShowDepMenu(false);
+        const res=await axios.post('/api/pow/transaction',{
+            "public_key":'deploy',
+            "payload":[contractCode]
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to deploy contract", {variant:'error'});
+        }
+        enqueueSnackbar("Contract Deployed Successfully", {variant:'success'});
+    }
+
+    const depMenu = () => { // Menu for smart contract deployment
+        if (!showDepMenu)
+            return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+                <div className=" bg-secondary w-[40vw] rounded-2xl border-[3px] border-solid border-primary">
+                    <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                        Fill These
+                    </div>
+                    <div className="content p-5 flex flex-col items-center">
+                        <div className="linkInp flex flex-col items-start mb-5"> 
+                            <label htmlFor="" className="name font-orbitron">
+                                Enter Code :
+                            </label>
+                            <textarea
+                            defaultValue={`# Write our smart contract's function here (in python)
+def function_name(parameter1, parameter2, parameter3, state):
+    # your code here
+    return state, 'some message'`}                                onChange={(e) => {
+                                    setContractCode(e.target.value);
+                                }}
+                                className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-[35vw] h-[50vh] resize-none"
+                            />
+                        </div>
+                    </div>
+                    <div className="buttons flex justify-around">
+                        <button
+                            className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3"
+                            onClick={deployContract}
+                        >
+                            Deploy Contract
+                        </button>
+                        <button
+                            className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3"
+                            onClick={() => { setShowDepMenu(false) }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>  
+        )
+    }
+
     const fileMenu=()=>{
         return(
             <>
@@ -413,11 +474,32 @@ const Run = () => {
         )
     }
 
+    const scMenu=()=>{
+        return(
+            <>
+            <div className='self-start px-20'>
+                <h1 className='text-2xl'>Smart Contract Menu</h1>
+            </div>
+            <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowDepMenu(true)}>
+                    Deploy Contract
+                </div>
+            </div>
+            <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
+                    Invoke Contract
+                </div>
+            </div>
+            </>
+        )
+    }
+
     const commonMenu=()=>{
         return(
                 <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
                     {txMenu()}
                     {fileMenu()}
+                    {scMenu()}
                     <div className='self-start px-20'>
                         <h1 className='text-2xl'>Danger Zone</h1>
                     </div>
@@ -431,6 +513,7 @@ const Run = () => {
                     {stopConfirmation()}
                     {uploadMenu()}
                     {downloadMenu()}
+                    {depMenu()}
                 </div>
         )
     }

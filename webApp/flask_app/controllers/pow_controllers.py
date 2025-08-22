@@ -19,6 +19,8 @@ async def start_new_blockchain():
         port = int(data.get('port'))
         host = data.get('host')
         miner = data.get('miner')
+        persistent_load = data.get('persistent_load')
+        persistent_save = data.get('persistent_save')
 
         if peer_instance:
             return jsonify({"error": f"One peer is already running. Stop it to run another one"}, 409)
@@ -31,7 +33,7 @@ async def start_new_blockchain():
         # thread=threading.Thread(target=_start_peer_in_background,args=(host, port, name, miner_bool))
         # thread.daemon=True
         # thread.start()
-        peer_instance = p2p.Peer(host, port, name, miner_bool)
+        peer_instance = p2p.Peer(host, port, name, miner_bool, persistent_load, persistent_save)
         try:
             peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
             asyncio.create_task(peer_instance.server.wait_closed())
@@ -65,6 +67,8 @@ async def connect_to_blockchain():
         port = int(data.get('port'))
         host = data.get('host')
         miner = data.get('miner')
+        persistent_load = data.get('persistent_load')
+        persistent_save = data.get('persistent_save')
         bootstrap_port = int(data.get('bootstrap_port'))
         bootstrap_host = data.get('bootstrap_host')
 
@@ -75,7 +79,7 @@ async def connect_to_blockchain():
             return jsonify({"error": "One peer is already running. Stop it to run another one"}, 409)
         
         miner_bool=p2p.strtobool(miner)
-        peer_instance = p2p.Peer(host, port, name, miner_bool)
+        peer_instance = p2p.Peer(host, port, name, miner_bool, persistent_load, persistent_save)
         set_consensus('pow')
         try:
             peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)

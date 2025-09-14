@@ -4,19 +4,18 @@ from datetime import datetime
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
 
 class Transaction:
-    def __init__(self, amount: float, sender: str, receiver: str, id=None, ts=None):
+    def __init__(self, payload, sender: str, receiver: str, id=None, ts=None):
         self.id=id or str(uuid.uuid4())
-        self.amount: float=amount
-        self.sender: str=sender   # Public Key
-        self.receiver: str=receiver   # Public Key
-
+        self.payload=payload   # amount or [code, amount] or [contract id, function_name, arguments, state, amount]
+        self.sender: str=sender  # Public Key
+        self.receiver: str=receiver   # Public Key or "deploy" or "invoke"
         self.sign:bytes=None
         self.ts=ts or datetime.now().timestamp()
 
     def to_dict(self):
         dict={
             "id":self.id,
-            "amount":self.amount,
+            "payload":self.payload,
             "sender":self.sender,
             "receiver":self.receiver,
             "ts":self.ts
@@ -26,9 +25,9 @@ class Transaction:
     def __eq__(self, other):
         return(
             self.id==other.id and
-            self.amount==other.amount and
             self.sender==other.sender and
-            self.receiver==other.receiver
+            self.receiver==other.receiver and
+            self.ts==other.ts
         )
     
     def __hash__(self):
@@ -198,12 +197,15 @@ class Chain:
         valid_chain_len=valid_chain_length(len(self.chain))
 
         for i in range(valid_chain_len):
-            for transaction in (self.chain[i]).transactions:
-                if transaction.sender==publicKey:   
-                    bal-=transaction.amount
+            for transaction in (Chain.instance.chain[i]).transactions:
+                if transaction.sender==publicKey:
+                    if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                        bal-=transaction.payload[-1]
+                    else:
+                        bal-=transaction.payload
                 elif transaction.receiver==publicKey:
-                    bal+=transaction.amount
-            if self.chain[i].miner==publicKey:
+                    bal+=transaction.payload
+            if Chain.instance.chain[i].miner==publicKey:
                 bal+=6 #Miner reward
         
         # Since these transactions are not part of the chain we don't add
@@ -213,9 +215,11 @@ class Chain:
         if pending_transactions:
             for transaction in pending_transactions:
                 if transaction.sender==publicKey:
-                    bal-=transaction.amount
+                    if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                        bal-=transaction.payload[-1]
+                    else:
+                        bal-=transaction.payload
         return bal
-
 class Wallet:
     def __init__(self):
         self.private_key = SigningKey.generate(curve=SECP256k1)
@@ -232,10 +236,13 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i):
 
     for i in range(valid_chain_len):
         for transaction in (block_list[i]).transactions:
-            if transaction.sender==publicKey:   
-                bal-=transaction.amount
+            if transaction.sender==publicKey:
+                if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                    bal-=transaction.payload[-1]
+                else:
+                    bal-=transaction.payload
             elif transaction.receiver==publicKey:
-                bal+=transaction.amount
+                bal+=transaction.payload
         if block_list[i].miner==publicKey:
             bal+=6 #Miner reward
         
@@ -260,7 +267,12 @@ def isvalidChain(blockList:List[Block]):
                 print("\nInvalid signature on transaction\n")
                 return False
 
-            if(calc_balance_block_list(blockList, transaction.sender, i)<transaction.amount):
+            amount = 0
+            if(transaction.receiver == "deploy" or transaction.receiver == "invoke"):
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
                 return False
         
         if (blockList[i].prevHash!=blockList[i-1].hash):

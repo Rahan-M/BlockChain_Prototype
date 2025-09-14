@@ -11,13 +11,18 @@ chain_bp = Blueprint('chain_bp', __name__, template_folder='templates', static_f
 async def start_bc():
     return await pow_controllers.start_new_blockchain()
 
+@chain_bp.route('/connect', methods=['POST'])
+async def connect_to_bc():
+    return await pow_controllers.connect_to_blockchain()
+
+@chain_bp.route('/stop', methods=['GET'])
+async def stop_peer():
+    return await pow_controllers.stop_peer()
+
 @chain_bp.route('/transaction', methods=['POST'])
 async def add_tx():
     return await pow_controllers.add_transaction()
 
-@chain_bp.route('/connect', methods=['POST'])
-async def connect_to_bc():
-    return await pow_controllers.connect_to_blockchain()
 
 @chain_bp.route('/balance', methods=['GET'])
 async def find_balance():
@@ -42,3 +47,11 @@ def view_known_peers():
 @chain_bp.route('/check', methods=['GET'])
 def server_check():
     return pow_controllers.server_exists_check()
+
+@chain_bp.route('/uploadFile', methods=['POST'])
+async def uploadFile():
+    return await pow_controllers.uploadFileIPFS()
+
+@chain_bp.route('/downloadFile', methods=['POST'])
+def downloadFile():
+    return pow_controllers.downloadFileIPFS()

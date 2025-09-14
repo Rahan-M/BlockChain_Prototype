@@ -25,10 +25,26 @@ const Run = () => {
     const [accBal, setAccBalance]=useState(-1);
     const [showTxMenu1, setShowTxMenu1]=useState(false);
     const [showTxMenu2, setShowTxMenu2]=useState(false);
+    const [showUploadMenu, setShowUploadMenu]=useState(false);
+    const [showDownloadMenu, setShowDownloadMenu]=useState(false);
+    const [showStopConfirmation, setShowStopConfirmation]=useState(false);
+    const [showDepMenu, setShowDepMenu]=useState(false);
+    const [showInvokeMenu, setShowInvokeMenu]=useState(false);
+
     const [peers, setPeers]=useState<Peer[]>([]);
     const [pubKey, setPubKey]=useState("");
     const [amt, setAmt]=useState(-1);
     
+    const [fileName, setFileName]=useState("");
+    const [fileCid, setFileCid]=useState("");
+    const [filePath, setFilePath]=useState("");
+    const [fileDesc, setFileDesc]=useState("");
+
+    const [contractCode, setContractCode]=useState("");
+    const [contractId, setContractId]=useState("");
+    const [funcName, setFuncName]=useState("");
+    const [args, setArgs]=useState<string[]>([]);
+
     const navigate=useNavigate()
     const {enqueueSnackbar}=useSnackbar()
     
@@ -48,10 +64,11 @@ const Run = () => {
 
 
     useEffect(() => {
-        if(!isRunning){
-            enqueueSnackbar("Create/Connect First", {variant:'warning'})
-            navigate('/')
-        }  
+        // if(!isRunning){
+        //     enqueueSnackbar("Create/Connect First", {variant:'warning'})
+        //     navigate('/')
+        // }  
+        // console.log(isRunning);
         // fetchData()
         // if(consensus=="pow"){
         //     setShowPowMenu(true);
@@ -75,7 +92,32 @@ const Run = () => {
         setShowTxMenu2(false);
         const res=await axios.post('/api/pow/transaction',{
             "public_key":pubKey,
-            "amt":amt
+            "payload":amt
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to add transaction", {variant:'error'});
+        }
+        enqueueSnackbar("Added transaction succesfully", {variant:'success'});
+    }   
+
+    const uploadFile= async()=>{
+        setShowUploadMenu(false);
+        const res=await axios.post('/api/pow/uploadFile',{
+            "desc":fileDesc,
+            "path":filePath
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to add transaction", {variant:'error'});
+        }
+        enqueueSnackbar("Added transaction succesfully", {variant:'success'});
+    }  
+
+    const downloadFile= async()=>{
+        setShowDownloadMenu(false);
+        const res=await axios.post('/api/pow/downloadFile',{
+            "cid":fileCid,
+            "path":filePath,
+            "name":fileName
         })
         if(!res.data.success){
             enqueueSnackbar("Failed to add transaction", {variant:'error'});
@@ -161,8 +203,6 @@ const Run = () => {
         if(!showTxMenu2)
             return null;
     
-        if(!peers)
-            return null;
         return(
             <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
             <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
@@ -214,21 +254,365 @@ const Run = () => {
         )
     }
 
+    const uploadMenu=()=>{
+        if(!showUploadMenu)
+            return null;
+    
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                    Fill These
+                </div>
+                <div className="content p-5 flex flex-col items-center">
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter Description Of The File :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e)=>{
+                            setFileDesc(e.target.value);
+                        }}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter the Absolute Path of The File :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setFilePath(e.target.value)}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={uploadFile}>
+                        Upload File
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowUploadMenu(false)}}>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            </div>  
+        )
+    }
+
+    const downloadMenu=()=>{
+        if(!showDownloadMenu)
+            return null;
+    
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                    Fill These
+                </div>
+                <div className="content p-5 flex flex-col items-center">
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter Cid Of The File :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e)=>{
+                            setFileCid(e.target.value)
+                        }}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter the path :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setFilePath(e.target.value)}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                            Enter the name of the file :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setFileName(e.target.value)}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={downloadFile}>
+                        Download File
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowDownloadMenu(false)}}>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            </div>  
+        )
+    }
+
+
+
+
+    const stopConfirmation=()=>{
+        if(!showStopConfirmation)
+            return null;
+    
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                    Are You Sure You Want to Stop Participating in this Blockchain?
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{console.log('Hey')}}>
+                        Yes
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowStopConfirmation(false)}}>
+                        No
+                    </button>
+                </div>
+            </div>
+            </div>  
+        )
+    }
+
+
+    const invokeContract=async()=>{
+        setShowDepMenu(false);
+        const res=await axios.post('/api/pow/transaction',{
+            "public_key":'invoke',
+            "payload":[contractId, funcName, args]
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to invoke contract", {variant:'error'});
+        }
+        enqueueSnackbar("Contract Invoked Successfully", {variant:'success'});
+    }
+
+    const invokeMenu = () => {
+        if (!showInvokeMenu) return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center">
+                <div className="bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                    <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                        Fill These
+                    </div>
+                    <div className="content p-5 flex flex-col items-center">
+                        
+                        {/* Contract ID */}
+                        <div className="linkInp flex flex-col items-start mb-5"> 
+                            <label className="name font-orbitron">Enter Contract Id :</label>
+                            <input
+                                type="text"
+                                onChange={(e) => setContractId(e.target.value)}
+                                className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                            />
+                        </div>
+
+                        {/* Function Name */}
+                        <div className="linkInp flex flex-col items-start mb-5"> 
+                            <label className="name font-orbitron">Enter the Function Name :</label>
+                            <input
+                                type="text"
+                                onChange={(e) => setFuncName(e.target.value)}
+                                className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                            />
+                        </div>
+
+                        {/* Dynamic Arguments */}
+                        {args.map((arg, index) => (
+                            <div key={index} className="linkInp flex flex-col items-start mb-3">
+                                <label className="name font-orbitron">Enter Argument {index + 1} :</label>
+                                <input
+                                    type="text"
+                                    value={arg}
+                                    onChange={(e) => {
+                                        const newArgs = [...args];
+                                        newArgs[index] = e.target.value;
+                                        setArgs(newArgs);
+                                    }}
+                                    className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                                />
+                            </div>
+                        ))}
+
+                        {/* Add Argument Button */}
+                        <button
+                            className="bg-tertiary text-white px-4 py-2 rounded-xl mb-5"
+                            onClick={() => setArgs([...args, ""])}
+                        >
+                            + Add Argument
+                        </button>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="buttons flex justify-around">
+                        <button
+                            className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3"
+                            onClick={invokeContract}
+                        >
+                            Invoke Contract
+                        </button>
+                        <button
+                            className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3"
+                            onClick={() => setShowInvokeMenu(false)}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const deployContract=async()=>{
+        setShowDepMenu(false);
+        const res=await axios.post('/api/pow/transaction',{
+            "public_key":'deploy',
+            "payload":[contractCode]
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to deploy contract", {variant:'error'});
+        }
+        enqueueSnackbar("Contract Deployed Successfully", {variant:'success'});
+    }
+
+    const depMenu = () => { // Menu for smart contract deployment
+        if (!showDepMenu)
+            return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+                <div className=" bg-secondary w-[40vw] rounded-2xl border-[3px] border-solid border-primary">
+                    <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                        Fill These
+                    </div>
+                    <div className="content p-5 flex flex-col items-center">
+                        <div className="linkInp flex flex-col items-start mb-5"> 
+                            <label htmlFor="" className="name font-orbitron">
+                                Enter Code :
+                            </label>
+                            <textarea
+                            defaultValue={`# Write our smart contract's function here (in python)
+def function_name(parameter1, parameter2, parameter3, state):
+    # your code here
+    return state, 'some message'`}                                onChange={(e) => {
+                                    setContractCode(e.target.value);
+                                }}
+                                className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-[35vw] h-[50vh] resize-none"
+                            />
+                        </div>
+                    </div>
+                    <div className="buttons flex justify-around">
+                        <button
+                            className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3"
+                            onClick={deployContract}
+                        >
+                            Deploy Contract
+                        </button>
+                        <button
+                            className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3"
+                            onClick={() => { setShowDepMenu(false) }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>  
+        )
+    }
+
+
+    const fileMenu=()=>{
+        return(
+            <>
+            <div className='self-start px-20'>
+                <h1 className='text-2xl'>File Menu</h1>
+            </div>
+            <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowUploadMenu(true)}>
+                    Upload File
+                </div>
+            </div>
+            <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowDownloadMenu(true)}>
+                    Download File
+                </div>
+            </div>
+            </>
+        )
+    }
+
+    const txMenu=()=>{
+        return(
+            <>
+            <div className='self-start px-20'>
+                <h1 className='text-2xl'>Transaction Menu</h1>
+            </div>
+            <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu1(true)}>
+                    Add Transaction via saved name
+                </div>
+            </div>
+            <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
+                    Add Transaction via public address
+                </div>
+            </div>
+            </>
+        )
+    }
+
+    const scMenu=()=>{
+        return(
+            <>
+            <div className='self-start px-20'>
+                <h1 className='text-2xl'>Smart Contract Menu</h1>
+            </div>
+            <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowDepMenu(true)}>
+                    Deploy Contract
+                </div>
+            </div>
+            <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowInvokeMenu(true)}>
+                    Invoke Contract
+                </div>
+            </div>
+            </>
+        )
+    }
+
     const commonMenu=()=>{
         return(
                 <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
-                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
-                        <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu1(true)}>
-                            1. Add Transaction via saved name
-                        </div>
+                    {txMenu()}
+                    {fileMenu()}
+                    {scMenu()}
+                    <div className='self-start px-20'>
+                        <h1 className='text-2xl'>Danger Zone</h1>
                     </div>
-                    <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
-                        <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
-                            2. Add Transaction via public address
+                    <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                        <div className='mr-2 cursor-pointer' onClick={()=>setShowStopConfirmation(true)}>
+                            Stop 
                         </div>
                     </div>
                     {txMenu1()}
                     {txMenu2()}
+                    {stopConfirmation()}
+                    {uploadMenu()}
+                    {downloadMenu()}
+                    {depMenu()}
+                    {invokeMenu()}
                 </div>
         )
     }

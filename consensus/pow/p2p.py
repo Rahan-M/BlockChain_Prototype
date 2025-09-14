@@ -1,5 +1,5 @@
-import asyncio, websockets, traceback
-import argparse, json, uuid, base64
+import asyncio, websockets
+import json, uuid, base64
 import threading, socket
 import os, subprocess
 from typing import Set, Dict, List, Tuple
@@ -12,7 +12,7 @@ from consensus.pow.flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey
 from pathlib import Path
 import tempfile
-import ast
+import ast 
 import hashlib
 
 MAX_CONNECTIONS = 8
@@ -44,7 +44,7 @@ def get_contract_code_from_notepad():
         tmp_file.write("    return state, 'some message'\n")
     
     # Open it in Notepad (waits until closed)
-    subprocess.call(["notepad.exe", temp_filename])
+    subprocess.call(["gedit", temp_filename])
 
     # Read the edited code
     with open(temp_filename, 'r', encoding='utf-8') as f:
@@ -282,7 +282,7 @@ class Peer:
         base_name = base_name.lower()
         if base_name not in existing_names:
             return base_name
-        
+    
         counter = 1
         while True:
             new_name = f"{base_name}{counter}"
@@ -425,6 +425,7 @@ class Peer:
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
+                      
             transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
@@ -447,6 +448,10 @@ class Peer:
                 amount = transaction.payload
             if(amount>Chain.instance.calc_balance(transaction.sender, self.mem_pool)):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
+                return
+
+            if(amount<=0):
+                print("\nInvalid Transaction, amount<=0\n")
                 return
 
             try:
@@ -1010,7 +1015,7 @@ class Peer:
         hash_object = hashlib.sha256(data.encode('utf-8'))
         return hash_object.hexdigest()
         
-    def deploy_contract(self, transaction):
+    def deploy_contract(self, transaction: Transaction):
         sender = transaction.sender
         timestamp = transaction.ts
         code = transaction.payload[0]

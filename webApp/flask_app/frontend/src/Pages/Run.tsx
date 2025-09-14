@@ -49,7 +49,7 @@ const Run = () => {
     const {enqueueSnackbar}=useSnackbar()
     
     const fetchData=async()=>{
-        const res=await axios.get("/api/${consensus}/status")
+        const res=await axios.get(`/api/${consensus}/status`)
         if(!res.data.success)
             return
 

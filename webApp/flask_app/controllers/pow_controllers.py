@@ -184,8 +184,9 @@ async def add_transaction():
         if amount < 0:
             return jsonify({"success":False, "error": "Amount must be a positive value"})
 
-    if amount > peer_instance.chain.calc_balance(peer_instance.wallet.public_key, peer_instance.mem_pool):
-        return jsonify({"success":False, "error": "Insufficient Account Balance"})
+    bal=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, peer_instance.mem_pool)
+    if amount > bal:
+        return jsonify({"success":False, "error": f"Insufficient Account Balance {amount}>{bal}"})
     
     await peer_instance.create_and_broadcast_tx(public_key, payload)
     return jsonify({"success":True, "message": "Transaction Added"})

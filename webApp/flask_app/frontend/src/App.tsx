@@ -10,20 +10,24 @@ function App() {
   const [name, setName]=useState("");
   const [port, setPort]=useState("");
   const [host, setHost]=useState("");
-  const [miner, setMiner]=useState('true');
+  const [miner, setMiner]=useState(true);
   const [consensus, setConsensus]=useState("pow");
   const [bootStrapHost, setBootStrapHost]=useState("");
   const [bootStrapPort, setBootStrapPort]=useState("");
   const {login}=useAuth()
   const navigate=useNavigate()
   const {enqueueSnackbar}=useSnackbar()
+  const [saveEnabled, setSaveEnabled]=useState(false);
+  const [loadEnabled, setLoadEnabled]=useState(false);
 
   const handleStart=async ()=>{
     const res=await axios.post(`/api/${consensus}/create`, {
       "name":name,
       "host":host,
       "port":port,
-      "miner":true
+      "miner":true,
+      "persistent_load":loadEnabled,
+      "persistent_save":saveEnabled
     })
     login(consensus)
     if(res.data.success){
@@ -43,6 +47,8 @@ function App() {
       "miner":miner,
       "bootstrap_host":bootStrapHost,
       "bootstrap_port":bootStrapPort,
+      "persistent_load":loadEnabled,
+      "persistent_save":saveEnabled
     })
     login(consensus)
     if(res.data.success){
@@ -108,6 +114,54 @@ function App() {
                   <option value="poa">Proof Of Authority (poa)</option>
                   <option value="pos">Proof Of Stake (pos)</option>
                 </select>
+              </div>
+            </div>
+            <div className="flex justify-around px-5">
+              <div className="flex gap-2">
+                <label htmlFor="save_toggle" className="name font-orbitron">
+                  Save to Disk?
+                </label>
+                <button
+                  type="button"
+                  role="switch"
+                  name="save_toggle"
+                  aria-checked={saveEnabled}
+                  onClick={() => setSaveEnabled(!saveEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    saveEnabled ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                  >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      saveEnabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                    />
+                </button>
+                {/* Hidden input so it works in a form */}
+                <input type="hidden" name="featuresaveEnabled" value={String(saveEnabled)} />
+              </div>
+              <div className="flex gap-2">
+                <label htmlFor="load_toggle" className="name font-orbitron ">
+                  Load to Disk?
+                </label>
+                <button
+                  type="button"
+                  role="switch"
+                  name="load_toggle"
+                  aria-checked={loadEnabled}
+                  onClick={() => setLoadEnabled(!loadEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    loadEnabled ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                  >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      loadEnabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                    />
+                </button>
+                {/* Hidden input so it works in a form */}
+                <input type="hidden" name="featureloadEnabled" value={String(loadEnabled)} />
               </div>
             </div>
             <div className="buttons flex justify-around">
@@ -202,20 +256,78 @@ function App() {
                   />
               </div>
               {consensus=='pow' && 
-              <div>
-                <div className="Miner-Question">Do you want to mine blocks?</div>
-                <div className="radButtons flex justify-between">
-                  <div className="trueOpt flex items-center gap-2">
-                    <label htmlFor="true-miner">Yes</label>
-                    <input type="radio" id="true-miner" name="miner" value='true' onChange={()=>setMiner("true")}/>
-                  </div>
-                  <div className="falseOpt flex items-center gap-2">
-                    <label htmlFor="false-miner">No</label>
-                    <input type="radio" id="false-miner" name="miner" value='false' onChange={()=>setMiner("false")}/>
-                  </div>
-                </div>
+              <div className="flex gap-2 my-3">
+                <label htmlFor="save_toggle" className="name font-orbitron">
+                  Do you want to mine blocks?
+                </label>
+                <button
+                  type="button"
+                  role="switch"
+                  name="save_toggle"
+                  aria-checked={miner}
+                  onClick={() => setMiner(!miner)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    miner ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                  >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      miner ? "translate-x-6" : "translate-x-1"
+                    }`}
+                    />
+                </button>
+                {/* Hidden input so it works in a form */}
+                <input type="hidden" name="miner" value={String(miner)} />
               </div>
               }
+            </div>
+            <div className="flex justify-around px-5">
+              <div className="flex gap-2">
+                <label htmlFor="save_toggle" className="name font-orbitron">
+                  Save to Disk?
+                </label>
+                <button
+                  type="button"
+                  role="switch"
+                  name="save_toggle"
+                  aria-checked={saveEnabled}
+                  onClick={() => setSaveEnabled(!saveEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    saveEnabled ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                  >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      saveEnabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                    />
+                </button>
+                {/* Hidden input so it works in a form */}
+                <input type="hidden" name="featuresaveEnabled" value={String(saveEnabled)} />
+              </div>
+              <div className="flex gap-2">
+                <label htmlFor="load_toggle" className="name font-orbitron ">
+                  Load to Disk?
+                </label>
+                <button
+                  type="button"
+                  role="switch"
+                  name="load_toggle"
+                  aria-checked={loadEnabled}
+                  onClick={() => setLoadEnabled(!loadEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    loadEnabled ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                  >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      loadEnabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                    />
+                </button>
+                {/* Hidden input so it works in a form */}
+                <input type="hidden" name="featureloadEnabled" value={String(loadEnabled)} />
+              </div>
             </div>
             <div className="buttons flex justify-around">
               <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={handleConnect}>

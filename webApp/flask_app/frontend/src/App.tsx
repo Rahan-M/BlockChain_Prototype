@@ -105,8 +105,8 @@ function App() {
                 </label>
                 <select name="options" className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96" onChange={(e)=>setConsensus(e.target.value)}>
                   <option value="pow">Proof Of Work (pow)</option>
-                  <option value="poa">Proof Of Stake (poa)</option>
-                  <option value="pos">Proof Of Authority (pos)</option>
+                  <option value="poa">Proof Of Authority (poa)</option>
+                  <option value="pos">Proof Of Stake (pos)</option>
                 </select>
               </div>
             </div>

@@ -13,7 +13,7 @@ interface Peer {
 }
 
 const Run = () => {
-    const {isRunning, loadingAuth}=useAuth();
+    const {isRunning, loadingAuth, consensus}=useAuth();
     // const [showPowMenu, setShowPowMenu]=useState(false)
     // const [showPosMenu, setShowPosMenu]=useState(false)
     // const [showPoaMenu, setShowPoaMenu]=useState(false)
@@ -49,7 +49,7 @@ const Run = () => {
     const {enqueueSnackbar}=useSnackbar()
     
     const fetchData=async()=>{
-        const res=await axios.get("/api/pow/status")
+        const res=await axios.get("/api/${consensus}/status")
         if(!res.data.success)
             return
 
@@ -61,13 +61,11 @@ const Run = () => {
         setVk(res.data.public_key)
     }
 
-
-
     useEffect(() => {
-        // if(!isRunning){
-        //     enqueueSnackbar("Create/Connect First", {variant:'warning'})
-        //     navigate('/')
-        // }  
+        if(!isRunning){
+            enqueueSnackbar("Create/Connect First", {variant:'warning'})
+            navigate('/')
+        }  
         // console.log(isRunning);
         // fetchData()
         // if(consensus=="pow"){
@@ -85,12 +83,12 @@ const Run = () => {
         //     setShowPosMenu(false);
         //     setShowPowMenu(false);
         // }
-    }, [isRunning, loadingAuth])
+    }, [isRunning, loadingAuth, consensus])
 
     const addTransaction= async()=>{
         setShowTxMenu1(false);
         setShowTxMenu2(false);
-        const res=await axios.post('/api/pow/transaction',{
+        const res=await axios.post(`/api/${consensus}/transaction`,{
             "public_key":pubKey,
             "payload":amt
         })
@@ -102,7 +100,7 @@ const Run = () => {
 
     const uploadFile= async()=>{
         setShowUploadMenu(false);
-        const res=await axios.post('/api/pow/uploadFile',{
+        const res=await axios.post(`/api/${consensus}/uploadFile`,{
             "desc":fileDesc,
             "path":filePath
         })
@@ -114,7 +112,7 @@ const Run = () => {
 
     const downloadFile= async()=>{
         setShowDownloadMenu(false);
-        const res=await axios.post('/api/pow/downloadFile',{
+        const res=await axios.post(`/api/${consensus}/downloadFile`,{
             "cid":fileCid,
             "path":filePath,
             "name":fileName
@@ -127,7 +125,7 @@ const Run = () => {
 
     const fetchPeers = async () => {
         try {
-            const res = await axios.get("/api/pow/peers");
+            const res = await axios.get("/api/${consensus}/peers");
             if (!res.data.success) {
                 enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
                 return;
@@ -358,9 +356,6 @@ const Run = () => {
         )
     }
 
-
-
-
     const stopConfirmation=()=>{
         if(!showStopConfirmation)
             return null;
@@ -387,7 +382,7 @@ const Run = () => {
 
     const invokeContract=async()=>{
         setShowDepMenu(false);
-        const res=await axios.post('/api/pow/transaction',{
+        const res=await axios.post(`/api/${consensus}/transaction`,{
             "public_key":'invoke',
             "payload":[contractId, funcName, args]
         })
@@ -476,7 +471,7 @@ const Run = () => {
 
     const deployContract=async()=>{
         setShowDepMenu(false);
-        const res=await axios.post('/api/pow/transaction',{
+        const res=await axios.post(`/api/${consensus}/transaction`,{
             "public_key":'deploy',
             "payload":[contractCode]
         })
@@ -530,7 +525,6 @@ def function_name(parameter1, parameter2, parameter3, state):
             </div>  
         )
     }
-
 
     const fileMenu=()=>{
         return(

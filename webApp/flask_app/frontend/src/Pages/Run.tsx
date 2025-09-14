@@ -100,7 +100,7 @@ const Run = () => {
 
     const uploadFile= async()=>{
         setShowUploadMenu(false);
-        const res=await axios.post(`/api/${consensus}/uploadFile`,{
+        const res=await axios.post(`/api/ipfs/uploadFile`,{
             "desc":fileDesc,
             "path":filePath
         })
@@ -112,7 +112,7 @@ const Run = () => {
 
     const downloadFile= async()=>{
         setShowDownloadMenu(false);
-        const res=await axios.post(`/api/${consensus}/downloadFile`,{
+        const res=await axios.post(`/api/ipfs/downloadFile`,{
             "cid":fileCid,
             "path":filePath,
             "name":fileName
@@ -125,7 +125,7 @@ const Run = () => {
 
     const fetchPeers = async () => {
         try {
-            const res = await axios.get("/api/${consensus}/peers");
+            const res = await axios.get(`/api/${consensus}/peers`);
             if (!res.data.success) {
                 enqueueSnackbar("Failed to fetch known peers", { variant: "error" });
                 return;

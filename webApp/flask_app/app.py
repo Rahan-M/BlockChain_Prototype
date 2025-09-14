@@ -61,8 +61,10 @@ def create_app(config_class=None):
         return await shutdown_peer()
 
     # Import and register blueprints INSIDE the factory function
-    from .routes.pow_routes import chain_bp
-    app.register_blueprint(chain_bp, url_prefix='/api/pow')
- 
+    from .routes.pow_routes import pow_bp
+    app.register_blueprint(pow_bp, url_prefix='/api/pow')
 
+    from .routes.ipfs_routes import ipfs_bp
+    app.register_blueprint(ipfs_bp, url_prefix='/api/ipfs')
+ 
     return app

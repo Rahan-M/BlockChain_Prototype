@@ -29,6 +29,7 @@ const Run = () => {
     const [showDownloadMenu, setShowDownloadMenu]=useState(false);
     const [showStopConfirmation, setShowStopConfirmation]=useState(false);
     const [showDepMenu, setShowDepMenu]=useState(false);
+    const [showInvokeMenu, setShowInvokeMenu]=useState(false);
 
     const [peers, setPeers]=useState<Peer[]>([]);
     const [pubKey, setPubKey]=useState("");
@@ -40,6 +41,9 @@ const Run = () => {
     const [fileDesc, setFileDesc]=useState("");
 
     const [contractCode, setContractCode]=useState("");
+    const [contractId, setContractId]=useState("");
+    const [funcName, setFuncName]=useState("");
+    const [args, setArgs]=useState<string[]>([]);
 
     const navigate=useNavigate()
     const {enqueueSnackbar}=useSnackbar()
@@ -354,6 +358,9 @@ const Run = () => {
         )
     }
 
+
+
+
     const stopConfirmation=()=>{
         if(!showStopConfirmation)
             return null;
@@ -376,6 +383,96 @@ const Run = () => {
             </div>  
         )
     }
+
+
+    const invokeContract=async()=>{
+        setShowDepMenu(false);
+        const res=await axios.post('/api/pow/transaction',{
+            "public_key":'invoke',
+            "payload":[contractId, funcName, args]
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to invoke contract", {variant:'error'});
+        }
+        enqueueSnackbar("Contract Invoked Successfully", {variant:'success'});
+    }
+
+    const invokeMenu = () => {
+        if (!showInvokeMenu) return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center">
+                <div className="bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                    <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                        Fill These
+                    </div>
+                    <div className="content p-5 flex flex-col items-center">
+                        
+                        {/* Contract ID */}
+                        <div className="linkInp flex flex-col items-start mb-5"> 
+                            <label className="name font-orbitron">Enter Contract Id :</label>
+                            <input
+                                type="text"
+                                onChange={(e) => setContractId(e.target.value)}
+                                className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                            />
+                        </div>
+
+                        {/* Function Name */}
+                        <div className="linkInp flex flex-col items-start mb-5"> 
+                            <label className="name font-orbitron">Enter the Function Name :</label>
+                            <input
+                                type="text"
+                                onChange={(e) => setFuncName(e.target.value)}
+                                className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                            />
+                        </div>
+
+                        {/* Dynamic Arguments */}
+                        {args.map((arg, index) => (
+                            <div key={index} className="linkInp flex flex-col items-start mb-3">
+                                <label className="name font-orbitron">Enter Argument {index + 1} :</label>
+                                <input
+                                    type="text"
+                                    value={arg}
+                                    onChange={(e) => {
+                                        const newArgs = [...args];
+                                        newArgs[index] = e.target.value;
+                                        setArgs(newArgs);
+                                    }}
+                                    className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                                />
+                            </div>
+                        ))}
+
+                        {/* Add Argument Button */}
+                        <button
+                            className="bg-tertiary text-white px-4 py-2 rounded-xl mb-5"
+                            onClick={() => setArgs([...args, ""])}
+                        >
+                            + Add Argument
+                        </button>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="buttons flex justify-around">
+                        <button
+                            className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3"
+                            onClick={invokeContract}
+                        >
+                            Invoke Contract
+                        </button>
+                        <button
+                            className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3"
+                            onClick={() => setShowInvokeMenu(false)}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     const deployContract=async()=>{
         setShowDepMenu(false);
@@ -434,6 +531,7 @@ def function_name(parameter1, parameter2, parameter3, state):
         )
     }
 
+
     const fileMenu=()=>{
         return(
             <>
@@ -486,7 +584,7 @@ def function_name(parameter1, parameter2, parameter3, state):
                 </div>
             </div>
             <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
-                <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
+                <div className='mr-2 cursor-pointer' onClick={()=>setShowInvokeMenu(true)}>
                     Invoke Contract
                 </div>
             </div>
@@ -514,6 +612,7 @@ def function_name(parameter1, parameter2, parameter3, state):
                     {uploadMenu()}
                     {downloadMenu()}
                     {depMenu()}
+                    {invokeMenu()}
                 </div>
         )
     }

@@ -61,7 +61,6 @@ def get_contract_code_from_notepad():
 
     return contract_code
 
-
 class Peer:
     def __init__(self, host, port, name, miner:bool, activate_disk_load='n', activate_disk_save='n'):
         self.host = host

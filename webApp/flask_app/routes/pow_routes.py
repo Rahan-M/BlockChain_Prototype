@@ -46,3 +46,11 @@ def view_known_peers():
 @pow_bp.route('/check', methods=['GET'])
 def server_check():
     return pow_controllers.server_exists_check()
+
+@pow_bp.route('/uploadFile', methods=['POST'])
+async def uploadFile():
+    return await pow_controllers.uploadFileIPFS()
+
+@pow_bp.route('/downloadFile', methods=['POST'])
+def downloadFile():
+    return pow_controllers.downloadFileIPFS()

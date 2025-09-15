@@ -950,7 +950,6 @@ class Peer:
         else:
             self.chain=Chain(publicKey=self.wallet.public_key_pem)
 
-        # Create flask app
         self.consensus_task=asyncio.create_task(self.find_longest_chain())
         self.disc_task=asyncio.create_task(self.discover_peers())
 

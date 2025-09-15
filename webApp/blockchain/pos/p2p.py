@@ -1,6 +1,6 @@
 import asyncio, websockets, traceback, hashlib
 import argparse, json, uuid, base64
-import threading, socket, os, subprocess
+import socket, os, subprocess
 from datetime import datetime, timedelta
 from typing import Set, Dict, List, Tuple, Any
 from consensus.pos.blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
@@ -137,7 +137,7 @@ class Peer:
         self.daemon_process=None
 
         self.current_stakes: set[Stake]=set() # Public key is stored as pem string
-        self.current_stakers:Dict[str, int]={}
+        self.current_stakers:Dict[str, int]={} # Public Key is mapped to amount
         self.curr_stakers_condition=asyncio.Condition() 
         
         self.name_to_public_key_dict: Dict[str, str]={}
@@ -157,12 +157,17 @@ class Peer:
             self.chain = None
 
         self.contractsDB = SmartContractDatabase()
-
         self.create_block_condition=asyncio.Condition()
         """
             Starts a timer for the creation of next block
         """
         self.mine_task=None
+        self.disc_task=None
+        self.reset_task=None
+        self.consensus_task=None
+        self.server=None
+        self.outgoing_conn_task=None
+        self.keepalive_task=None
 
     def save_key_to_disk(self):
         key = self.wallet.private_key_pem
@@ -1009,10 +1014,14 @@ class Peer:
 
     #                 receiver_public_key = self.name_to_public_key_dict.get(rec.lower().strip())
 
-    #                 if receiver_public_key is None:
-    #                     rec_split = rec.split("\\n")
-    #                     rec_refined = "\n".join(rec_split)
-    #                     exist = 0
+                    # if receiver_public_key is None: #then name is not present
+                    #     # This converts any literal \n sequences into actual newlines (\n).
+                    #     # Meaning: if the input was a public key pasted with escaped newlines,
+                    #     #  it turns it into a properly formatted PEM block.
+
+                    #     rec_split = rec.split("\\n")
+                    #     rec_refined = "\n".join(rec_split)
+                    #     exist = 0
     #                     for (nme, pk) in self.name_to_public_key_dict.items():
     #                         if pk == rec_refined:
     #                             receiver_public_key = pk
@@ -1294,7 +1303,7 @@ class Peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
 
-    async def send_stake_announcements(self, amt: int):
+    async def send_stake_announcements(self, amt: float):
         """
             Used for sending stake announcements
         """
@@ -1472,7 +1481,20 @@ class Peer:
 
     async def start(self, bootstrap_host=None, bootstrap_port=None):
         # We start the server
-        await websockets.serve(self.handle_connections, self.host, self.port)
+        try:
+            self.server=await websockets.serve(self.handle_connections, self.host, self.port)
+            print(self.server)
+        except: # Catches all BaseException descendants
+            import sys
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            print(f"An unexpected error occurred!")
+            print(f"Type: {exc_type.__name__}")
+            print(f"Value: {exc_value}")
+            print(f"Traceback object: {exc_traceback}")
+            # You can also use traceback.print_exc() for a more standard traceback output
+            import traceback
+            traceback.print_exc()
+
         # We await the setting up of the server and the handle connections funciton,
         # This returns a websocket server object eventually
 
@@ -1484,19 +1506,55 @@ class Peer:
             self.chain=Chain(publicKey=self.wallet.public_key_pem, privatekey=self.wallet.private_key)
             self.last_epoch_end_ts=datetime.now()
 
-        # Create flask app
-        flask_app = create_flask_app(self)
-        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
-        flask_thread.start()
-
         reset_task=asyncio.create_task(self.restart_epoch())
-        inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
 
+        self.init_repo()
+        self.configure_ports()
 
-        await inp_task
+        await self.consensus_task
 
-        reset_task.cancel()
-        disc_task.cancel()
-        consensus_task.cancel()
+    async def run_forever(self):
+        # Start background tasks
+        self.consensus_task = asyncio.create_task(self.find_longest_chain())
+        self.disc_task = asyncio.create_task(self.discover_peers())
+        self.reset_task=asyncio.create_task(self.restart_epoch())
+
+        # Keep running until explicitly cancelled
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            print(f"[{self.name}] run_forever cancelled")
+            await self.stop()
+
+    async def stop(self):
+        if self.disc_task:
+            self.disc_task.cancel()
+            print("Discover task cancelled")
+
+        if self.consensus_task:
+            self.consensus_task.cancel()
+
+        if self.daemon_process:
+            self.stop_daemon()
+
+        if self.reset_task:
+            self.reset_task.cancel()
+
+        if self.server:
+            print(f"\nServer : {self.server}\n")
+            self.server.close()
+            await self.server.wait_closed()
+
+def strtobool(v):
+    if isinstance(v, bool):
+        return v
+
+    if v.lower() in ("true", "yes", "1", "t"):
+        return True
+
+    elif v.lower() in ("false", "no", "0", "f"):
+        return False
+
+    raise argparse.ArgumentTypeError("Boolean Value Expected")    

@@ -64,7 +64,7 @@ def create_app(config_class=None):
     from .routes.pow_routes import pow_bp
     app.register_blueprint(pow_bp, url_prefix='/api/pow')
 
-    from .routes.ipfs_routes import ipfs_bp
-    app.register_blueprint(ipfs_bp, url_prefix='/api/ipfs')
+    from .routes.pos_routes import pos_bp
+    app.register_blueprint(pos_bp, url_prefix='/api/pos')
  
     return app

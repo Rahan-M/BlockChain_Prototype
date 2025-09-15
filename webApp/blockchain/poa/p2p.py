@@ -137,6 +137,14 @@ class Peer:
             async with self.mem_pool_condition is executed only if
             there is no other such block currently being executed
         """
+        self.mine_task=None
+        self.disc_task=None
+        self.consensus_task=None
+        self.sampler_task=None
+        self.round_task=None
+        self.server=None
+        self.outgoing_conn_task=None
+        self.keepalive_task=None
 
         self.daemon_process=None
 
@@ -286,6 +294,12 @@ class Peer:
             if node_id == target_node_id:
                 return public_key
         return None
+
+    def is_found_node_id(self, target_node_id):
+        for (host, port), (name, public_key, node_id) in self.known_peers.items():
+            if node_id == target_node_id:
+                return True
+        return False
 
     def get_current_miners_list(self):
         miners_list = None
@@ -1115,3 +1129,41 @@ class Peer:
         response = executor.run(func_name, args, state)
 
         return response
+    
+    async def run_forever(self):
+        # Start background tasks
+        self.consensus_task = asyncio.create_task(self.find_longest_chain())
+        self.disc_task = asyncio.create_task(self.discover_peers())
+        self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
+        self.round_task = asyncio.create_task(self.round_calculator())
+
+        # Keep running until explicitly cancelled
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            print(f"[{self.name}] run_forever cancelled")
+            await self.stop()
+
+    async def stop(self):
+        if self.disc_task:
+            self.disc_task.cancel()
+            print("Discover task cancelled")
+
+        if self.consensus_task:
+            self.consensus_task.cancel()
+
+        if self.sampler_task:
+            self.sampler_task.cancel()
+
+        if self.round_task:
+            self.round_task.cancel()
+
+        if self.daemon_process:
+            self.stop_daemon()
+
+        if self.server:
+            print(f"\nServer : {self.server}\n")
+            self.server.close()
+            await self.server.wait_closed()
+
+        await self.update_role(False)

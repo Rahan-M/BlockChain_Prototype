@@ -55,7 +55,7 @@ async def uploadFile():
 def downloadFile():
     return pos_controllers.downloadFileIPFS()
 
-@pos_bp.route('/view_stakes', methods=['POST'])
+@pos_bp.route('/view_stakes', methods=['GET'])
 def view_stakes():
     return pos_controllers.current_stakes()
 

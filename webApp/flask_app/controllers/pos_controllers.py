@@ -344,11 +344,14 @@ def current_stakes():
         entry=stake.to_dict()
         pubKey=stake.staker
         name='?'
-        for nm, pk in peer_instance.name_to_public_key_dict.items():
-            if pk == pubKey:
-                name=nm
+        if pubKey==peer_instance.wallet.public_key_pem:
+            name=peer_instance.name
+        else:
+            for nm, pk in peer_instance.name_to_public_key_dict.items():
+                if pk == pubKey:
+                    name=nm
         entry['name']=name
-        current_stakes_list.append(name)
+        current_stakes_list.append(entry)
     
     return jsonify({"success":True, "current_stakes": current_stakes_list})
 

@@ -220,7 +220,9 @@ def get_status():
             ("port", peer_instance.port),
             ("account_balance", amt),
             ("public_key",peer_instance.wallet.public_key),
-            ("private_key",peer_instance.wallet.private_key_pem)
+            ("private_key",peer_instance.wallet.private_key_pem),
+            ("node_id", peer_instance.node_id),
+            ("admin_id", peer_instance.admin_id),
         ])),
         mimetype='application/json'
     )

@@ -1,5 +1,6 @@
 from flask import request, jsonify, Response
-import json, asyncio, websockets
+import json, asyncio, websockets, base64
+from typing import List, Dict
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from blockchain.pos import p2p, blockchain_structures
@@ -301,16 +302,39 @@ def get_chain():
                 "cid": cid,
                 "desc": desc,
             })
-        chain_list.append({
-            "id": block.id,
-            "prevHash": block.prevHash,
-            "transactions": blockchain_structures.txs_to_json_digestable_form(block.transactions),
-            "ts": block.ts,
-            "hash": block.hash,
-            "miner": block.creator,
-            "staked_amt":block.staked_amt,
-            "files": file_list,
-        })
+
+        stakes_dict_list:List[Dict]=[]
+        for stake in block.stakers:
+            stake_dict=stake.to_dict()
+            if(stake.sign):
+                stake_dict["sign"]=base64.b64encode(stake.sign).decode()
+            stakes_dict_list.append(stake_dict)
+        
+        if(block.transactions[0].sender=="Genesis"):
+            chain_list.append({
+                "id": block.id,
+                "prevHash": block.prevHash,
+                "transactions": blockchain_structures.txs_to_json_digestable_form(block.transactions),
+                "ts": block.ts,
+                "hash": block.hash,
+                "miner": block.creator,
+                "staked_amt":block.staked_amt,
+                "files": file_list,
+            })
+        else:
+            chain_list.append({
+                "id": block.id,
+                "prevHash": block.prevHash,
+                "transactions": blockchain_structures.txs_to_json_digestable_form(block.transactions),
+                "ts": block.ts,
+                "hash": block.hash,
+                "miner": block.creator,
+                "staked_amt":block.staked_amt,
+                "files": file_list,
+                "stakes":stakes_dict_list,
+                "vrf_proof":base64.b64encode(block.vrf_proof).decode(),
+                "seed":block.seed
+            })
     return jsonify({"success":True, "message":"succesful request", "chain": chain_list})
 
 def current_stakes():

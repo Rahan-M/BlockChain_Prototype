@@ -38,6 +38,14 @@ const Chain = () => {
         desc: string;
     }
 
+    interface Stake{
+        id:string,
+        staker:string,
+        amt:number,
+        ts:string,
+        sign:string
+    }
+
     interface Block {
         id: string;
         ts: string;
@@ -47,7 +55,10 @@ const Chain = () => {
         miner: string;
         transactions: Transaction[];
         files: File[];
+        stakes: Stake[];
         staked_amt?:number;
+        vrf_proof?:string;
+        seed?:string;
     }
 
     type ChainViewerProps = {
@@ -57,7 +68,6 @@ const Chain = () => {
     const ChainViewer = ({ chain }: ChainViewerProps) => {
         return (
             <div className="chain-container">
-                <h1>Consensus = {consensus}</h1>
                 {chain.map((block: Block, index: number) => (
                     <div key={index} className="block border p-4 m-2 rounded bg-gray-100">
                         <p><strong>Block ID:</strong> {block.id}</p>
@@ -67,6 +77,8 @@ const Chain = () => {
                         {consensus=='pow' && <p><strong>Nonce:</strong> {block.nonce}</p>}
                         <p>{consensus === 'pos' ? <strong>Staker:</strong> : <strong>Miner:</strong>} {block.miner}</p>
                         {consensus=='pos' && <p><strong>Staked Amount:</strong> {block.staked_amt}</p>}
+                        {block.vrf_proof && <p><strong>Vrf Proof:</strong> {block.vrf_proof}</p>}
+                        {block.seed && <p><strong>Seed:</strong> {block.seed}</p>}
 
                         <div className="transactions mt-2">
                             <p className="font-semibold underline">Transactions:</p>
@@ -92,6 +104,20 @@ const Chain = () => {
                                 ))}
                             </div>
                         )}
+                        {block.stakes && block.stakes.length>0 &&
+                            <div className="Stakes mt-2">
+                                <p className="font-semibold underline">Stakes:</p>
+                                {block.stakes.map((stake, idx) => (
+                                    <div key={idx} className="file border p-2 mt-1 bg-white rounded">
+                                        <p>Id: {stake.id}</p>
+                                        <p>Staker: {stake.staker}{stake.staker==block.miner && <h1>Winner!!!</h1>}</p>
+                                        <p>Amount: {stake.amt}</p>
+                                        <p>Timestamp: {stake.ts}</p>
+                                        <p>Sign: {stake.sign}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        }
                     </div>
                 ))}
             </div>

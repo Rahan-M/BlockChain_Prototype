@@ -3,6 +3,7 @@ import { IoReloadSharp } from "react-icons/io5";
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
+import { IoIosCloseCircle } from "react-icons/io";
 import axios from 'axios'
 
 interface Peer {
@@ -432,16 +433,25 @@ const Run = () => {
                         {args.map((arg, index) => (
                             <div key={index} className="linkInp flex flex-col items-start mb-3">
                                 <label className="name font-orbitron">Enter Argument {index + 1} :</label>
-                                <input
-                                    type="text"
-                                    value={arg}
-                                    onChange={(e) => {
-                                        const newArgs = [...args];
-                                        newArgs[index] = e.target.value;
-                                        setArgs(newArgs);
-                                    }}
-                                    className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
-                                />
+                                <div className='flex items-center'>
+                                    <input
+                                        type="text"
+                                        value={arg}
+                                        onChange={(e) => {
+                                            const newArgs = [...args];
+                                            newArgs[index] = e.target.value;
+                                            setArgs(newArgs);
+                                        }}
+                                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                                    />
+                                    <IoIosCloseCircle
+                                        onClick={() => {
+                                            const newArgs = args.filter((_, i) => i !== index);
+                                            setArgs(newArgs);
+                                        }}
+                                        className="cursor-pointer text-2xl text-tertiary bg-white"
+                                    />
+                                </div>
                             </div>
                         ))}
 

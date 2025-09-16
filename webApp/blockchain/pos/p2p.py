@@ -3,12 +3,11 @@ import argparse, json, uuid, base64
 import socket, os, subprocess
 from datetime import datetime, timedelta
 from typing import Set, Dict, List, Tuple, Any
-from consensus.pos.blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
-from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
-from smart_contract.contracts_db import SmartContractDatabase
-from smart_contract.secure_executor import SecureContractExecutor
-from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
-from consensus.pos.flask_app import create_flask_app, run_flask_app
+from blockchain.pos.blockchain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
+from blockchain.pos.ipfs import addToIpfs, download_ipfs_file_subprocess
+from blockchain.smart_contract.contracts_db import SmartContractDatabase
+from blockchain.smart_contract.secure_executor import SecureContractExecutor
+from blockchain.storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
 from ecdsa import VerifyingKey, BadSignatureError
 import tempfile
 from pathlib import Path

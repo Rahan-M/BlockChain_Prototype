@@ -54,3 +54,11 @@ async def uploadFile():
 @pos_bp.route('/downloadFile', methods=['POST'])
 def downloadFile():
     return pos_controllers.downloadFileIPFS()
+
+@pos_bp.route('/view_stakes', methods=['POST'])
+def view_stakes():
+    return pos_controllers.current_stakes()
+
+@pos_bp.route('/stake', methods=['POST'])
+async def stake():
+    return await pos_controllers.stake()

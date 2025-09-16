@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useSnackbar } from 'notistack';
+import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 
 const Chain = () => {
     const [chain, setChain] = useState([]);
-
+    const {consensus}=useAuth();
     const { enqueueSnackbar } = useSnackbar();
 
     const fetchChain = async () => {
         try {
-            const res = await axios.get("/api/pow/chain")
+            const res = await axios.get(`/api/${consensus}/chain`)
             if (!res.data.success) {
                 return;
             }
@@ -42,10 +43,11 @@ const Chain = () => {
         ts: string;
         prevhash: string;
         hash: string;
-        nonce: number;
+        nonce?: number;
         miner: string;
         transactions: Transaction[];
         files: File[];
+        staked_amt?:number;
     }
 
     type ChainViewerProps = {
@@ -55,14 +57,16 @@ const Chain = () => {
     const ChainViewer = ({ chain }: ChainViewerProps) => {
         return (
             <div className="chain-container">
+                <h1>Consensus = {consensus}</h1>
                 {chain.map((block: Block, index: number) => (
                     <div key={index} className="block border p-4 m-2 rounded bg-gray-100">
                         <p><strong>Block ID:</strong> {block.id}</p>
                         <p><strong>Timestamp:</strong> {block.ts}</p>
                         <p><strong>Previous Hash:</strong> {block.prevhash}</p>
                         <p><strong>Hash:</strong> {block.hash}</p>
-                        <p><strong>Nonce:</strong> {block.nonce}</p>
-                        <p><strong>Miner:</strong> {block.miner}</p>
+                        {consensus=='pow' && <p><strong>Nonce:</strong> {block.nonce}</p>}
+                        <p>{consensus === 'pos' ? <strong>Staker:</strong> : <strong>Miner:</strong>} {block.miner}</p>
+                        {consensus=='pos' && <p><strong>Staked Amount:</strong> {block.staked_amt}</p>}
 
                         <div className="transactions mt-2">
                             <p className="font-semibold underline">Transactions:</p>

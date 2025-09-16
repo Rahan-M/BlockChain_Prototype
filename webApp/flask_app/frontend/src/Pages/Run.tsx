@@ -694,7 +694,7 @@ def function_name(parameter1, parameter2, parameter3, state):
         <div className='flex bg-secondary justify-around'>
             <div className='options w-full'>
                 {commonMenu()}
-                {posMenu()}
+                {consensus=='pos' && posMenu()}
             </div>
             <div className='bg-tertiary w-2'></div>
             <div className='status w-full relative flex flex-col p-5 pt-20 gap-3'>

@@ -2,11 +2,9 @@ from flask import request, jsonify, Response
 import json, asyncio, websockets
 from datetime import datetime, timedelta
 from collections import OrderedDict
-from blockchain.pos import p2p
+from blockchain.pos import p2p, blockchain_structures
 from blockchain.pos.ipfs import download_ipfs_file_subprocess
 from ecdsa import VerifyingKey, MalformedPointError, curves
-
-from webApp.blockchain.pos import blockchain_structures, blockchain_structures
 from ..app import set_consensus
 import sys, traceback, os
 
@@ -22,7 +20,7 @@ async def start_new_blockchain():
         name = data.get('name')
         port = int(data.get('port'))
         host = data.get('host')
-        staker = data.get('staker')
+        staker = data.get('miner')
         persistent_load = data.get('persistent_load')
         persistent_save = data.get('persistent_save')
 
@@ -49,7 +47,7 @@ async def start_new_blockchain():
             traceback.print_exc()
 
         peer_instance.last_epoch_end_ts=datetime.now()
-        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key_pem)
+        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key_pem, privatekey=peer_instance.wallet.private_key)
         peer_instance.keepalive_task = asyncio.get_event_loop().create_task(
             peer_instance.run_forever()
         )
@@ -68,7 +66,7 @@ async def connect_to_blockchain():
         name = data.get('name')
         port = int(data.get('port'))
         host = data.get('host')
-        staker = data.get('staker')
+        staker = data.get('miner')
         persistent_load = data.get('persistent_load')
         persistent_save = data.get('persistent_save')
         bootstrap_port = int(data.get('bootstrap_port'))
@@ -105,6 +103,7 @@ async def connect_to_blockchain():
 
         peer_instance.init_repo()
         peer_instance.configure_ports()
+        await asyncio.sleep(2)
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
 
     else:
@@ -250,7 +249,9 @@ async def stake():
     peer_instance.staked_amt=amount
     time_left=EPOCH_TIME-time_since.seconds
     asyncio.create_task(peer_instance.create_blocks(time_left))
-    return jsonify({"success":False, "error": f"Creating block in {time_left} seconds"})
+    if(time_left<0):
+        return jsonify({"success":False, "error": f"Please wait till the next epoch starts"})
+    return jsonify({"success":True, "message": f"Creating block in {time_left} seconds"})
 
 
 # current stakes, time since last epoch
@@ -281,7 +282,7 @@ def get_status():
             ("host", peer_instance.host),
             ("port", peer_instance.port),
             ("account_balance", amt),
-            ("time_since_last_epoch", time_since),
+            ("tsle", time_since),
             ("public_key",peer_instance.wallet.public_key_pem),
             ("private_key",peer_instance.wallet.private_key_pem)
         ])),
@@ -305,12 +306,11 @@ def get_chain():
             "prevHash": block.prevHash,
             "transactions": blockchain_structures.txs_to_json_digestable_form(block.transactions),
             "ts": block.ts,
-            "nonce": block.nonce,
             "hash": block.hash,
-            "staker": block.staker,
+            "miner": block.creator,
+            "staked_amt":block.staked_amt,
             "files": file_list,
         })
-
     return jsonify({"success":True, "message":"succesful request", "chain": chain_list})
 
 def current_stakes():
@@ -326,7 +326,7 @@ def current_stakes():
         entry['name']=name
         current_stakes_list.append(name)
     
-    return jsonify({"success":True, "Current Stakes": current_stakes_list})
+    return jsonify({"success":True, "current_stakes": current_stakes_list})
 
 
 def get_pending_transactions():

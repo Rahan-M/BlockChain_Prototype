@@ -3,6 +3,7 @@ import { IoReloadSharp } from "react-icons/io5";
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
+import { IoIosCloseCircle } from "react-icons/io";
 import axios from 'axios'
 
 interface Peer {
@@ -22,6 +23,7 @@ const Run = () => {
     const [host, setHost]=useState("");
     const [vk, setVk]=useState("");
     const [sk, setSk]=useState("");
+    const [tsle, setTsle]=useState(-1);
     const [accBal, setAccBalance]=useState(-1);
     const [showTxMenu1, setShowTxMenu1]=useState(false);
     const [showTxMenu2, setShowTxMenu2]=useState(false);
@@ -45,6 +47,9 @@ const Run = () => {
     const [funcName, setFuncName]=useState("");
     const [args, setArgs]=useState<string[]>([]);
 
+    const[stakeAmt, setStakeAmt]=useState(0);
+    const[showStakePopup, setShowStakePopup]=useState(false);
+
     const navigate=useNavigate()
     const {enqueueSnackbar}=useSnackbar()
     
@@ -59,13 +64,15 @@ const Run = () => {
         setAccBalance(res.data.account_balance)
         setSk(res.data.private_key)
         setVk(res.data.public_key)
+        if(res.data.tsle)
+            setTsle(res.data.tsle)
     }
 
     useEffect(() => {
-        if(!isRunning){
-            enqueueSnackbar("Create/Connect First", {variant:'warning'})
-            navigate('/')
-        }  
+        // if(!isRunning){
+        //     enqueueSnackbar("Create/Connect First", {variant:'warning'})
+        //     navigate('/')
+        // }  
         // console.log(isRunning);
         // fetchData()
         // if(consensus=="pow"){
@@ -379,7 +386,6 @@ const Run = () => {
         )
     }
 
-
     const invokeContract=async()=>{
         setShowDepMenu(false);
         const res=await axios.post(`/api/${consensus}/transaction`,{
@@ -427,16 +433,25 @@ const Run = () => {
                         {args.map((arg, index) => (
                             <div key={index} className="linkInp flex flex-col items-start mb-3">
                                 <label className="name font-orbitron">Enter Argument {index + 1} :</label>
-                                <input
-                                    type="text"
-                                    value={arg}
-                                    onChange={(e) => {
-                                        const newArgs = [...args];
-                                        newArgs[index] = e.target.value;
-                                        setArgs(newArgs);
-                                    }}
-                                    className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
-                                />
+                                <div className='flex items-center'>
+                                    <input
+                                        type="text"
+                                        value={arg}
+                                        onChange={(e) => {
+                                            const newArgs = [...args];
+                                            newArgs[index] = e.target.value;
+                                            setArgs(newArgs);
+                                        }}
+                                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                                    />
+                                    <IoIosCloseCircle
+                                        onClick={() => {
+                                            const newArgs = args.filter((_, i) => i !== index);
+                                            setArgs(newArgs);
+                                        }}
+                                        className="cursor-pointer text-2xl text-tertiary bg-white"
+                                    />
+                                </div>
                             </div>
                         ))}
 
@@ -623,10 +638,73 @@ def function_name(parameter1, parameter2, parameter3, state):
         navigate('/peers');
     }
     
+    const sendStake=async()=>{
+        setShowStakePopup(false);
+        const res=await axios.post("/api/pos/stake",{
+            "amount":stakeAmt
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to set stake", {variant:'error'});
+        }
+        enqueueSnackbar("Set stake succesfully", {variant:'success'});
+    }
+
+    const stakePopup=()=>{
+        if(!showStakePopup)
+            return null;
+        
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+            <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                    Select amount to stake
+                </div>
+                <div className="content p-5 flex flex-col gap-5 items-center">
+                    <div className="linkInp flex flex-col items-start mb-5"> 
+                        <label htmlFor="" className="name font-orbitron">
+                        Enter the amount to send :
+                        </label>
+                        <input
+                        type="text"
+                        onChange={(e) => setStakeAmt(Number(e.target.value))}
+                        className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
+                        />
+                    </div>
+                </div>
+                <div className="buttons flex justify-around">
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={sendStake}>
+                        Stake
+                    </button>
+                    <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowStakePopup(false)}}>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            </div>  
+        )
+    }
+
+    const posMenu=()=>{
+        return(
+            <div className='flex flex-col justify-center items-center gap-5'>
+                <div className='self-start px-20'>
+                    <h1 className='text-2xl'>POS Menu</h1>
+                </div>
+                <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
+                    <div className='mr-2 cursor-pointer' onClick={()=>setShowStakePopup(true)}>
+                        Set Stake
+                    </div>
+                </div>
+                {stakePopup()}
+            </div>
+        )
+    }
+
     return (
         <div className='flex bg-secondary justify-around'>
             <div className='options w-full'>
                 {commonMenu()}
+                {consensus=='pos' && posMenu()}
             </div>
             <div className='bg-tertiary w-2'></div>
             <div className='status w-full relative flex flex-col p-5 pt-20 gap-3'>
@@ -649,6 +727,9 @@ def function_name(parameter1, parameter2, parameter3, state):
                 <div>
                     Public Key : {vk}
                 </div>
+                {tsle!=-1 &&<div>
+                    Time Since Last Epoch : {tsle}
+                </div>}
                 <div className='cursor-pointer bg-primary p-3 w-[7vw] text-center text-white rounded-xl' onClick={viewChainPage}>
                     View Chain
                 </div>
@@ -657,6 +738,9 @@ def function_name(parameter1, parameter2, parameter3, state):
                 </div>
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewKnownPeersPage}>
                     View Known Peers
+                </div>
+                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/stakes')}>
+                    View Current Stakes
                 </div>
             </div>
         </div>

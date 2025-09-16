@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useSnackbar } from 'notistack';
+import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 
 const Mempool = () => {
+    const {consensus}=useAuth();
     const [mempool, setMempool] = useState([]);
-
     const { enqueueSnackbar } = useSnackbar();
 
     const fetchMempool = async () => {
         try {
-            const res = await axios.get("/api/pow/pending")
+            const res = await axios.get(`/api/${consensus}/pending`)
             if (!res.data.success) {
                 return;
             }

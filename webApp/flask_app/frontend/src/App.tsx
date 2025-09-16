@@ -229,8 +229,8 @@ function App() {
                 </label>
                 <select name="options" className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96" onChange={(e)=>setConsensus(e.target.value)}>
                   <option value="pow">Proof Of Work (pow)</option>
-                  <option value="poa">Proof Of Stake (poa)</option>
-                  <option value="pos">Proof Of Authority (pos)</option>
+                  <option value="poa">Proof Of Authority (poa)</option>
+                  <option value="pos">Proof Of Stake (pos)</option>
                 </select>
               </div>
               <div className="linkInp flex flex-col items-start mb-5"> 
@@ -255,7 +255,6 @@ function App() {
                   className="border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96"
                   />
               </div>
-              {consensus=='pow' && 
               <div className="flex gap-2 my-3">
                 <label htmlFor="save_toggle" className="name font-orbitron">
                   Do you want to mine blocks?
@@ -279,7 +278,6 @@ function App() {
                 {/* Hidden input so it works in a form */}
                 <input type="hidden" name="miner" value={String(miner)} />
               </div>
-              }
             </div>
             <div className="flex justify-around px-5">
               <div className="flex gap-2">

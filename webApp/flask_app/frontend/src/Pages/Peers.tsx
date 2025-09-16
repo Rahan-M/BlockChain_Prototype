@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useSnackbar } from 'notistack';
+import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 
 const Peers = () => {
+    const {consensus}=useAuth();
     const [peers, setPeers] = useState([]);
-
     const { enqueueSnackbar } = useSnackbar();
 
     const fetchPeers = async () => {
         try {
-            const res = await axios.get("/api/pow/peers")
+            const res = await axios.get(`/api/${consensus}/peers`)
             if (!res.data.success) {
                 return;
             }

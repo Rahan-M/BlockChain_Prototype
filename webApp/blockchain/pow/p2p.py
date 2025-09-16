@@ -61,7 +61,6 @@ def get_contract_code_from_notepad():
 
     return contract_code
 
-
 class Peer:
     def __init__(self, host, port, name, miner:bool, activate_disk_load='n', activate_disk_save='n'):
         self.host = host
@@ -951,7 +950,6 @@ class Peer:
         else:
             self.chain=Chain(publicKey=self.wallet.public_key_pem)
 
-        # Create flask app
         self.consensus_task=asyncio.create_task(self.find_longest_chain())
         self.disc_task=asyncio.create_task(self.discover_peers())
 

@@ -59,6 +59,8 @@ const Chain = () => {
         staked_amt?:number;
         vrf_proof?:string;
         seed?:string;
+        miner_node_id: string;
+        miner_public_key: string;
     }
 
     type ChainViewerProps = {
@@ -75,7 +77,10 @@ const Chain = () => {
                         <p><strong>Previous Hash:</strong> {block.prevhash}</p>
                         <p><strong>Hash:</strong> {block.hash}</p>
                         {consensus=='pow' && <p><strong>Nonce:</strong> {block.nonce}</p>}
-                        <p>{consensus === 'pos' ? <strong>Staker:</strong> : <strong>Miner:</strong>} {block.miner}</p>
+                        {consensus === 'pos' && <p><strong>Staker:</strong> {block.miner}</p>} 
+                        {consensus === 'pow' && <p><strong>Miner:</strong> {block.miner}</p>}
+                        {consensus === 'poa' && <p><strong>Miner Node ID:</strong> {block.miner_node_id}</p>}
+                        {consensus === 'poa' && <p><strong>Miner Public Key:</strong> {block.miner_public_key}</p>}
                         {consensus=='pos' && <p><strong>Staked Amount:</strong> {block.staked_amt}</p>}
                         {block.vrf_proof && <p><strong>Vrf Proof:</strong> {block.vrf_proof}</p>}
                         {block.seed && <p><strong>Seed:</strong> {block.seed}</p>}

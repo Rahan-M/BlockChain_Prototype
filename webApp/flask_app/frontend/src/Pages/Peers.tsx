@@ -30,6 +30,7 @@ const Peers = () => {
         host: string;
         port: number;
         public_key: string;
+        node_id: string;
     }
 
     type PeersViewerProps = {
@@ -45,6 +46,7 @@ const Peers = () => {
                         <p><strong>Host:</strong> {peer.host}</p>
                         <p><strong>Port:</strong> {peer.port}</p>
                         <p><strong>Public Key:</strong> {peer.public_key}</p>
+                        <p><strong>Node ID:</strong> {peer.node_id}</p>
                     </div>
                 ))}
             </div>

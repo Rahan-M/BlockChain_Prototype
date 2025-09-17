@@ -14,7 +14,7 @@ interface Peer {
 }
 
 const Run = () => {
-    const {isRunning, loadingAuth, consensus}=useAuth();
+    const {isRunning, loadingAuth, consensus, admin}=useAuth();
     // const [showPowMenu, setShowPowMenu]=useState(false)
     // const [showPosMenu, setShowPosMenu]=useState(false)
     // const [showPoaMenu, setShowPoaMenu]=useState(false)
@@ -50,6 +50,17 @@ const Run = () => {
     const[stakeAmt, setStakeAmt]=useState(0);
     const[showStakePopup, setShowStakePopup]=useState(false);
 
+    const[showAddMinerPopup, setShowAddMinerPopup]=useState(false);
+    const[showRemoveMinerPopup, setShowRemoveMinerPopup]=useState(false);
+
+    const[nodeId, setNodeId]=useState("");
+    const[adminId, setAdminId]=useState("");
+
+    const[addNodeId, setAddNodeId]=useState("");
+    const[removeNodeId, setRemoveNodeId]=useState("");
+    const[laminers, setLaminers]=useState([]);
+    const[nlaminers, setNlaminers]=useState([]);
+
     const navigate=useNavigate()
     const {enqueueSnackbar}=useSnackbar()
     
@@ -66,6 +77,10 @@ const Run = () => {
         setVk(res.data.public_key)
         if(res.data.tsle)
             setTsle(res.data.tsle)
+        if(consensus == "poa"){
+            setNodeId(res.data.node_id)
+            setAdminId(res.data.admin_id)
+        }
     }
 
     useEffect(() => {
@@ -700,11 +715,178 @@ def function_name(parameter1, parameter2, parameter3, state):
         )
     }
 
+    const fetchNotLatestMinersList = async () => {
+        try {
+            const res = await axios.get(`/api/poa/nlaminers`);
+            if (!res.data.success) {
+                enqueueSnackbar("Failed to fetch not latest miners", { variant: "error" });
+                return;
+            }
+            // Ensure data.nlaminers is an array, default to empty if not
+            const fetchedNlaminers = Array.isArray(res.data.nlaminers) ? res.data.nlaminers : [];
+            setNlaminers(fetchedNlaminers);
+
+            // Only set initial addNodeId if peers were successfully fetched and exist
+            if (fetchedNlaminers.length > 0) {
+                setAddNodeId(fetchedNlaminers[0].node_id);
+            } else {
+                // Handle case where no peers are fetched (e.g., clear pubKey)
+                setAddNodeId('');
+                enqueueSnackbar("No not latest miners found.", { variant: "info" });
+            }
+
+        } catch (err) {
+            enqueueSnackbar("Failed to fetch not latest miners", { variant: "error" });
+            console.error("Error fetching not latest miners:", err); // Log the actual error
+        }
+    };
+
+    useEffect(() => {
+        if (showAddMinerPopup) {
+            fetchNotLatestMinersList();
+        }
+    }, [showAddMinerPopup]); 
+
+    const addMiner=async()=>{
+        setShowAddMinerPopup(false);
+        const res=await axios.post("/api/poa/add",{
+            "node_id":addNodeId
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to add miner", {variant:'error'});
+        }
+        enqueueSnackbar("Miner added successfully", {variant:'success'});
+    }
+
+    const addMinerPopup=()=>{
+        if(!showAddMinerPopup)
+            return null;
+        
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+                <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                    <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                        Choose Whom to Add
+                    </div>
+                    <div className="content p-5 flex flex-col gap-5 items-center">
+                        <select name="nlaminers" id="nlaminers_opts" className='border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96' onChange={(e)=>{setAddNodeId(e.target.value)}}>
+                            {nlaminers.map((nlaminer)=>(
+                                <option key={nlaminer.name} value={nlaminer.node_id}>{nlaminer.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="buttons flex justify-around">
+                        <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={addMiner}>
+                            Add Miner
+                        </button>
+                        <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowAddMinerPopup(false)}}>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>  
+        )
+    }
+
+    const fetchLatestMinersList = async () => {
+        try {
+            const res = await axios.get(`/api/poa/laminers`);
+            if (!res.data.success) {
+                enqueueSnackbar("Failed to fetch latest miners", { variant: "error" });
+                return;
+            }
+            // Ensure data.laminers is an array, default to empty if not
+            const fetchedLaminers = Array.isArray(res.data.laminers) ? res.data.laminers : [];
+            setLaminers(fetchedLaminers);
+
+            // Only set initial addNodeId if peers were successfully fetched and exist
+            if (fetchedLaminers.length > 0) {
+                setRemoveNodeId(fetchedLaminers[0].node_id);
+            } else {
+                // Handle case where no peers are fetched (e.g., clear pubKey)
+                setRemoveNodeId('');
+                enqueueSnackbar("No latest miners found.", { variant: "info" });
+            }
+
+        } catch (err) {
+            enqueueSnackbar("Failed to fetch latest miners", { variant: "error" });
+            console.error("Error fetching latest miners:", err); // Log the actual error
+        }
+    };
+
+    useEffect(() => {
+        if (showRemoveMinerPopup) {
+            fetchLatestMinersList();
+        }
+    }, [showRemoveMinerPopup]); 
+
+    const removeMiner=async()=>{
+        setShowRemoveMinerPopup(false);
+        const res=await axios.post("/api/poa/remove",{
+            "node_id":removeNodeId
+        })
+        if(!res.data.success){
+            enqueueSnackbar("Failed to remove miner", {variant:'error'});
+        }
+        enqueueSnackbar("Miner removed successfully", {variant:'success'});
+    }
+
+    const removeMinerPopup=()=>{
+        if(!showRemoveMinerPopup)
+            return null;
+        
+        return(
+            <div className="fixed inset-0 bg-black/50 z-5 flex justify-center items-center">
+                <div className=" bg-secondary w-[30vw] rounded-2xl border-[3px] border-solid border-primary">
+                    <div className="bg-primary text-white text-center rounded-t-xl p-5">
+                        Choose Whom to Remove
+                    </div>
+                    <div className="content p-5 flex flex-col gap-5 items-center">
+                        <select name="laminers" id="laminers_opts" className='border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96' onChange={(e)=>{setRemoveNodeId(e.target.value)}}>
+                            {laminers.map((laminer)=>(
+                                <option key={laminer.name} value={laminer.node_id}>{laminer.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="buttons flex justify-around">
+                        <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={removeMiner}>
+                            Remove Miner
+                        </button>
+                        <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowRemoveMinerPopup(false)}}>
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>  
+        )
+    }
+
+    const poaMenu=()=>{
+        return(
+            <div className='flex flex-col justify-center items-center gap-5'>
+                <div className='self-start px-20'>
+                    <h1 className='text-2xl'>POA Menu</h1>
+                </div>
+                <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                    <div className='mr-2 cursor-pointer' onClick={()=>setShowAddMinerPopup(true)}>
+                        Add Miner
+                    </div>
+                    <div className='mr-2 cursor-pointer' onClick={()=>setShowRemoveMinerPopup(true)}>
+                        Remove Miner
+                    </div>
+                </div>
+                {addMinerPopup()}
+                {removeMinerPopup()}
+            </div>
+        )
+    }
+
     return (
         <div className='flex bg-secondary justify-around'>
             <div className='options w-full'>
                 {commonMenu()}
                 {consensus=='pos' && posMenu()}
+                {consensus=='poa' && admin && poaMenu()}
             </div>
             <div className='bg-tertiary w-2'></div>
             <div className='status w-full relative flex flex-col p-5 pt-20 gap-3'>
@@ -721,6 +903,16 @@ def function_name(parameter1, parameter2, parameter3, state):
                 <div>
                     Account Balance : {accBal}
                 </div>
+                { consensus == "poa" &&
+                    <div>
+                        Node ID : {nodeId}
+                    </div>
+                }
+                { consensus == "poa" &&
+                    <div>
+                        Admin ID : {adminId}
+                    </div>
+                }
                 <div>
                     Private Key : {sk} 
                 </div>
@@ -742,6 +934,11 @@ def function_name(parameter1, parameter2, parameter3, state):
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/stakes')}>
                     View Current Stakes
                 </div>
+                { consensus == "poa" &&
+                    <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/miners')}>
+                        View Current Miners
+                    </div>
+                }
             </div>
         </div>
     )

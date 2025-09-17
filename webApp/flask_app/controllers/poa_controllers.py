@@ -47,7 +47,7 @@ async def start_new_blockchain():
 
         # Genesis block data updation
         peer_instance.chain.chain[0].miner_node_id = peer_instance.node_id
-        peer_instance.chain.chain[0].miner_public_key = peer_instance.public_key
+        peer_instance.chain.chain[0].miner_public_key = peer_instance.wallet.public_key
         peer_instance.chain.chain[0].miners_list = [peer_instance.node_id]
         peer_instance.sign_block(peer_instance.chain.chain[0])
         peer_instance.admin_id = peer_instance.node_id

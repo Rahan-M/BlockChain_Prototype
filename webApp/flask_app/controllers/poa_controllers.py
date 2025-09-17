@@ -346,6 +346,51 @@ async def remove_miner():
 
     return jsonify({"success":True, "message": "Miner Removed"})
 
+def get_latest_miners():
+    global peer_instance
+    if(not request.is_json):
+        return jsonify({"success":False, "error": "Request must be JSON"})
+    
+    miners_node_id_list = None
+    if peer_instance.miners:
+        miners_node_id_list = copy.deepcopy(peer_instance.miners[-1][0])
+    else:
+        miners_node_id_list = copy.deepcopy(peer_instance.chain.chain[-1].miners_list)
+
+    latest_miners_list = []
+    for node_id in miners_node_id_list:
+        name = peer_instance.node_id_to_name_dict[node_id]
+        latest_miners_list.append({
+            "node_id": node_id,
+            "name": name,
+            "public_key": peer_instance.name_to_public_key_dict[name],
+        })
+
+    return jsonify({"success":True, "message":"succesful request", "laminers": latest_miners_list})
+
+def get_not_latest_miners():
+    global peer_instance
+    if(not request.is_json):
+        return jsonify({"success":False, "error": "Request must be JSON"})
+    
+    miners_node_id_list = None
+    if peer_instance.miners:
+        miners_node_id_list = copy.deepcopy(peer_instance.miners[-1][0])
+    else:
+        miners_node_id_list = copy.deepcopy(peer_instance.chain.chain[-1].miners_list)
+
+    not_latest_miners_list = []
+    for node_id in peer_instance.node_id_to_name_dict:
+        if node_id not in miners_node_id_list:
+            name = peer_instance.node_id_to_name_dict[node_id]
+            not_latest_miners_list.append({
+                "node_id": node_id,
+                "name": name,
+                "public_key": peer_instance.name_to_public_key_dict[name],
+            })
+
+    return jsonify({"success":True, "message":"succesful request", "nlaminers": not_latest_miners_list})
+
 async def uploadFileIPFS():
     global peer_instance
     if(not request.is_json):

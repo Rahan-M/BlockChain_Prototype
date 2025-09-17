@@ -55,6 +55,14 @@ async def add_miner():
 async def remove_miner():
     return await poa_controllers.remove_miner()
 
+@poa_bp.route('/laminers', methods=['GET'])
+def view_latest_miners():
+    return poa_controllers.get_latest_miners()
+
+@poa_bp.route('/nlaminers', methods=['GET'])
+def view_not_latest_miners():
+    return poa_controllers.get_not_latest_miners()
+
 @poa_bp.route('/check', methods=['GET'])
 def server_check():
     return poa_controllers.server_exists_check()

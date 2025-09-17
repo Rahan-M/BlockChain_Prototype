@@ -959,54 +959,136 @@ class Peer:
             We mine blocks whenever there are greater than or equal to three
             transactions in mem pool
         """
+
+        # I'm going to create two transactions (sum of which whould exceed my account balance)
+        # Then I'll make two blocks, I'll put one tx in the first one and the other in the second
+        # Then I among the active connections I have, I'll send half of them block1 and the other half of them block 2
         while True:
             await asyncio.sleep(30)
             async with self.mem_pool_condition:
-                if(len(self.mem_pool)>0):
-                    transaction_list=[]
-                    for transaction in self.mem_pool:
-                        if Chain.instance.transaction_exists_in_chain(transaction):
-                            self.mem_pool.remove(transaction)
-                            continue
-                        else:
-                            transaction_list.append(transaction)
+                transaction_list=[]
+                for transaction in self.mem_pool:
+                    if Chain.instance.transaction_exists_in_chain(transaction):
+                        self.mem_pool.remove(transaction)
+                        continue
+                    else:
+                        transaction_list.append(transaction)
 
-                    if(len(transaction_list)>0):
-                        newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                        newBlock.files=self.file_hashes.copy()
+                if(len(transaction_list)<=0 and len(self.name_to_public_key_dict)<=1):
+                    continue
 
-                        await asyncio.to_thread(Chain.instance.mine, newBlock)
-                        newBlock.miner=self.wallet.public_key
+                # pk=None
+                # for name, pubKey in self.name_to_public_key_dict.items():
+                #     pk=pubKey
+                #     break # Just select one
+                # Create an iterator over the dictionary's values
+                values_iter = iter(self.name_to_public_key_dict.values())
 
-                        if Chain.instance.isValidBlock(newBlock):
-                            Chain.instance.chain.append(newBlock)
-                            print("\nBlock Appended \n")
+                # Get the first two values, with a default of None if they don't exist
+                pk1 = next(values_iter, None)
+                pk2 = next(values_iter, None)
+                acc_bal=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool)
+                payload=acc_bal*0.75
 
-                            for transaction in newBlock.transactions:
-                                if transaction.receiver == "deploy":
-                                    self.deploy_contract(transaction)
+                transaction1=Transaction(payload, self.wallet.public_key, pk1)
+                transaction1_str=str(transaction1)
+                signature=self.wallet.private_key.sign(transaction1_str.encode())
+                transaction1.sign=signature
+                transaction_list.append(transaction1)
+                newBlock1=Block(Chain.instance.lastBlock.hash, transaction_list)
+
+                transaction_list.pop()
+                transaction2=Transaction(payload, self.wallet.public_key, pk2)
+                transaction2_str=str(transaction2)
+                signature=self.wallet.private_key.sign(transaction2_str.encode())
+                transaction2.sign=signature
+                transaction_list.append(transaction2)
+                newBlock2=Block(Chain.instance.lastBlock.hash, transaction_list)
+
+                newBlock1.files=self.file_hashes.copy()
+                newBlock2.files=self.file_hashes.copy()
+
+                await asyncio.to_thread(Chain.instance.mine, newBlock1)
+                await asyncio.to_thread(Chain.instance.mine, newBlock2)
+
+                newBlock1.miner=self.wallet.public_key
+                newBlock2.miner=self.wallet.public_key
+
+                if not Chain.instance.isValidBlock(newBlock1) or not Chain.instance.isValidBlock(newBlock1):
+                    print("\n Invalid Block \n")
+                    continue
+
+                Chain.instance.chain.append(newBlock1)
+                print("\nBlock Appended \n")
+
+                for transaction in newBlock1.transactions:
+                    if transaction.receiver == "deploy":
+                        self.deploy_contract(transaction)
+                
+                async with self.file_hashes_lock:
+                    for hash in list(self.file_hashes.keys()):
+                        if newBlock1.cid_exists_in_block(hash):
+                            self.file_hashes.pop(hash, None)
+
+                for transaction in self.mem_pool:
+                    if newBlock1.transaction_exists_in_block(transaction):
+                        self.mem_pool.remove(transaction)
                             
-                            async with self.file_hashes_lock:
-                                for hash in list(self.file_hashes.keys()):
-                                    if newBlock.cid_exists_in_block(hash):
-                                        self.file_hashes.pop(hash, None)
+                pkt1={
+                    "type":"new_block",
+                    "id":str(uuid.uuid4()),
+                    "block":newBlock1.to_dict(),
+                    "miner":self.wallet.public_key
+                }
+                pkt2={
+                    "type":"new_block",
+                    "id":str(uuid.uuid4()),
+                    "block":newBlock1.to_dict(),
+                    "miner":self.wallet.public_key
+                }
 
-                            for transaction in self.mem_pool:
-                                if newBlock.transaction_exists_in_block(transaction):
-                                    self.mem_pool.remove(transaction)
-                                        
-                            pkt={
-                                "type":"new_block",
-                                "id":str(uuid.uuid4()),
-                                "block":newBlock.to_dict(),
-                                "miner":self.wallet.public_key
-                            }
-                            self.seen_message_ids.add(pkt["id"])
-                            await self.broadcast_message(pkt)
-                            if self.activate_disk_save == "y":
-                                self.save_chain_to_disk()
+                self.seen_message_ids.add(pkt1["id"])
+                self.seen_message_ids.add(pkt2["id"])
+                if self.activate_disk_save == "y":
+                    self.save_chain_to_disk()
+
+                targets=self.server_connections | self.client_connections
+                targets_list=list(targets)
+                for i in range(len(targets_list)//2):
+                    ws=targets_list[i]
+                    try:
+                        await ws.send(json.dumps(pkt1))
+
+                    except Exception as e:
+                        print(f"Error broadcasting: {e}")
+                        if ws in self.server_connections:
+                            self.server_connections.discard(ws)
                         else:
-                            print("\n Invalid Block \n")
+                            normalized_endpoint = normalize_endpoint((ws.remote_address[0], ws.remote_address[1]))
+                            self.client_connections.discard(ws)
+                            self.outbound_peers.discard(normalized_endpoint)
+                            self.got_pong.pop(ws, None)
+                            self.have_sent_peer_info.pop(ws, None)
+                        await ws.close()
+                        await ws.wait_closed()
+
+                for i in range(len(targets_list)//2, len(targets_list)):
+                    ws=targets_list[i]
+                    try:
+                        await ws.send(json.dumps(pkt2))
+
+                    except Exception as e:
+                        print(f"Error broadcasting: {e}")
+                        if ws in self.server_connections:
+                            self.server_connections.discard(ws)
+                        else:
+                            normalized_endpoint = normalize_endpoint((ws.remote_address[0], ws.remote_address[1]))
+                            self.client_connections.discard(ws)
+                            self.outbound_peers.discard(normalized_endpoint)
+                            self.got_pong.pop(ws, None)
+                            self.have_sent_peer_info.pop(ws, None)
+                        await ws.close()
+                        await ws.wait_closed()
                                     
     def calculate_contract_id(self, sender, timestamp):
         data = f"{sender}:{timestamp}"

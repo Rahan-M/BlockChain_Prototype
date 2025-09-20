@@ -2,6 +2,7 @@ import asyncio
 from consensus.poa.p2p import Peer as PoAPeer
 from consensus.pos.p2p import Peer as PoSPeer
 from consensus.pow.p2p import Peer as PoWPeer
+from consensus.pow.mal_node import Peer as PowMalPeer
 
 def start_peer():
     host = "localhost"
@@ -29,14 +30,25 @@ def start_peer():
         elif staker_raw_input == "false":
             staker = False
         peer = PoSPeer(host, port, name, staker, activate_disk_load, activate_disk_save)
-    else:
-        miner = None
-        miner_raw_input = input("Miner? ").strip().lower()
-        if miner_raw_input == "true":
-            miner = True
-        elif miner_raw_input == "false":
-            miner = False
-        peer = PoWPeer(host, port, name, miner, activate_disk_load, activate_disk_save)
+    else:        
+        mal=False
+        mal_raw_input = input("Malcious? ").strip().lower()
+        if mal_raw_input == "true":
+            mal = True
+        elif mal_raw_input == "false":
+            mal = False
+        
+        if(not mal):
+            miner = None
+            miner_raw_input = input("Miner? ").strip().lower()
+            if miner_raw_input == "true":
+                miner = True
+            elif miner_raw_input == "false":
+                miner = False
+            peer = PoWPeer(host, port, name, miner, activate_disk_load, activate_disk_save)
+        else:
+            peer = PowMalPeer(host, port, name, True, activate_disk_load, activate_disk_save)
+
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

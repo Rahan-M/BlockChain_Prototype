@@ -573,12 +573,12 @@ def function_name(parameter1, parameter2, parameter3, state):
                 <h1 className='text-2xl'>File Menu</h1>
             </div>
             <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
-                <div className='mr-2 cursor-pointer' onClick={()=>setShowUploadMenu(true)}>
+                <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowUploadMenu(true)}>
                     Upload File
                 </div>
             </div>
             <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
-                <div className='mr-2 cursor-pointer' onClick={()=>setShowDownloadMenu(true)}>
+                <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowDownloadMenu(true)}>
                     Download File
                 </div>
             </div>
@@ -593,12 +593,12 @@ def function_name(parameter1, parameter2, parameter3, state):
                 <h1 className='text-2xl'>Transaction Menu</h1>
             </div>
             <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
-                <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu1(true)}>
+                <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowTxMenu1(true)}>
                     Add Transaction via saved name
                 </div>
             </div>
             <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
-                <div className='mr-2 cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
+                <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowTxMenu2(true)}>
                     Add Transaction via public address
                 </div>
             </div>
@@ -613,41 +613,16 @@ def function_name(parameter1, parameter2, parameter3, state):
                 <h1 className='text-2xl'>Smart Contract Menu</h1>
             </div>
             <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
-                <div className='mr-2 cursor-pointer' onClick={()=>setShowDepMenu(true)}>
+                <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowDepMenu(true)}>
                     Deploy Contract
                 </div>
             </div>
             <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
-                <div className='mr-2 cursor-pointer' onClick={()=>setShowInvokeMenu(true)}>
+                <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowInvokeMenu(true)}>
                     Invoke Contract
                 </div>
             </div>
             </>
-        )
-    }
-
-    const commonMenu=()=>{
-        return(
-                <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
-                    {txMenu()}
-                    {fileMenu()}
-                    {scMenu()}
-                    <div className='self-start px-20'>
-                        <h1 className='text-2xl'>Danger Zone</h1>
-                    </div>
-                    <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
-                        <div className='mr-2 cursor-pointer' onClick={()=>setShowStopConfirmation(true)}>
-                            Stop 
-                        </div>
-                    </div>
-                    {txMenu1()}
-                    {txMenu2()}
-                    {stopConfirmation()}
-                    {uploadMenu()}
-                    {downloadMenu()}
-                    {depMenu()}
-                    {invokeMenu()}
-                </div>
         )
     }
 
@@ -711,17 +686,17 @@ def function_name(parameter1, parameter2, parameter3, state):
 
     const posMenu=()=>{
         return(
-            <div className='flex flex-col justify-center items-center gap-5'>
+            <>
                 <div className='self-start px-20'>
                     <h1 className='text-2xl'>POS Menu</h1>
                 </div>
                 <div className="accBal flex items-center  bg-primary text-white p-5 rounded-xl">
-                    <div className='mr-2 cursor-pointer' onClick={()=>setShowStakePopup(true)}>
+                    <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowStakePopup(true)}>
                         Set Stake
                     </div>
                 </div>
                 {stakePopup()}
-            </div>
+            </>
         )
     }
 
@@ -879,21 +854,50 @@ def function_name(parameter1, parameter2, parameter3, state):
 
     const poaMenu=()=>{
         return(
-            <div className='flex flex-col justify-center items-center gap-5'>
+            <>
                 <div className='self-start px-20'>
                     <h1 className='text-2xl'>POA Menu</h1>
                 </div>
                 <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
-                    <div className='mr-2 cursor-pointer' onClick={()=>setShowAddMinerPopup(true)}>
+                    <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowAddMinerPopup(true)}>
                         Add Miner
                     </div>
-                    <div className='mr-2 cursor-pointer' onClick={()=>setShowRemoveMinerPopup(true)}>
+                </div>
+                <div className='flex items-center  bg-primary text-white p-5 rounded-xl'>
+                    <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowRemoveMinerPopup(true)}>
                         Remove Miner
                     </div>
                 </div>
                 {addMinerPopup()}
                 {removeMinerPopup()}
-            </div>
+            </>
+        )
+    }
+
+    const commonMenu=()=>{
+        return(
+                <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
+                    {txMenu()}
+                    {fileMenu()}
+                    {scMenu()}
+                    {consensus=='pos' && posMenu()}
+                    {consensus=='poa' && admin && poaMenu()}
+                    <div className='self-start px-20'>
+                        <h1 className='text-2xl'>Danger Zone</h1>
+                    </div>
+                    <div className="flex items-center  bg-primary text-white p-5 rounded-xl">
+                        <div className='mr-2 w-[15vw] cursor-pointer' onClick={()=>setShowStopConfirmation(true)}>
+                            Stop 
+                        </div>
+                    </div>
+                    {txMenu1()}
+                    {txMenu2()}
+                    {stopConfirmation()}
+                    {uploadMenu()}
+                    {downloadMenu()}
+                    {depMenu()}
+                    {invokeMenu()}
+                </div>
         )
     }
 
@@ -901,8 +905,6 @@ def function_name(parameter1, parameter2, parameter3, state):
         <div className='flex bg-secondary justify-around'>
             <div className='options w-full'>
                 {commonMenu()}
-                {consensus=='pos' && posMenu()}
-                {consensus=='poa' && admin && poaMenu()}
             </div>
             <div className='bg-tertiary w-2'></div>
             <div className='status w-full relative flex flex-col p-5 pt-20 gap-3'>
@@ -938,7 +940,7 @@ def function_name(parameter1, parameter2, parameter3, state):
                 {tsle!=-1 &&<div>
                     Time Since Last Epoch : {tsle}
                 </div>}
-                <div className='cursor-pointer bg-primary p-3 w-[7vw] text-center text-white rounded-xl' onClick={viewChainPage}>
+                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewChainPage}>
                     View Chain
                 </div>
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewPendingTransactionsPage}>

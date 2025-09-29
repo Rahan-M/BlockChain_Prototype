@@ -289,10 +289,9 @@ class Chain:
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool,current_stakes=block.stakers): 
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool,current_stakes=block.stakers) or amount<0: 
                 # we have to make sure the current transactions are included when checking for balance
-                print("\nInvalid Transactions, stake should be slashed\n")
-                return
+                return False
             mem_pool.append(transaction)
         return True
  

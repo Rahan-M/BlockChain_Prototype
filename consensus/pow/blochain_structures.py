@@ -186,6 +186,11 @@ class Chain:
         return False
                 
     def isValidBlock(self, block: Block):
+        #Verify Pow:
+        if not block.hash.startswith("00000"):
+            print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
+            return False
+
         if self.lastBlock.hash!=block.prevHash:
             print("Hash Problem")
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
@@ -209,16 +214,10 @@ class Chain:
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool): 
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool or amount<0): 
                 # we have to make sure the current transactions are included when checking for balance
-                return
+                return False
             mem_pool.append(transaction)
-
-
-        #Verify Pow:
-        if not block.hash.startswith("00000"):
-            print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
-            return False
 
         return True
 

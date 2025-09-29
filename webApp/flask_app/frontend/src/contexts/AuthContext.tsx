@@ -23,21 +23,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const storedConsensus=localStorage.getItem('consensus');
         const storedAdmin = localStorage.getItem('admin');
 
-        if(!(storedIsRunning && storedConsensus))
-            return;
-        try{
-            const parsedIsRunning=JSON.parse(storedIsRunning);
-            const parsedAdmin = storedAdmin ? JSON.parse(storedAdmin) : false;
-            setIsRunning(parsedIsRunning);
-            setConsensus(storedConsensus);
-            setAdmin(parsedAdmin);
+        if(storedIsRunning && storedConsensus){
+            try{
+                const parsedIsRunning=JSON.parse(storedIsRunning);
+                const parsedAdmin = storedAdmin ? JSON.parse(storedAdmin) : false;
+                setIsRunning(parsedIsRunning);
+                setConsensus(storedConsensus);
+                setAdmin(parsedAdmin);
+            }
+            catch (err){
+                console.error("Error while parsing,",err);
+                localStorage.removeItem('isRunning');
+                localStorage.removeItem('consensus');
+                localStorage.removeItem('admin');
+            }
         }
-        catch (err){
-            console.error("Error while parsing,",err);
-            localStorage.removeItem('isRunning');
-            localStorage.removeItem('consensus');
-            localStorage.removeItem('admin');
-        } 
         setLoadingAuth(false);
     }, [])
 

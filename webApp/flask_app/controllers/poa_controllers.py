@@ -30,6 +30,8 @@ async def start_new_blockchain():
         set_consensus('poa')
         
         peer_instance = p2p.Peer(host, port, name, persistent_load, persistent_save)
+        peer_instance.name_to_node_id_dict[peer_instance.name.lower()] = peer_instance.node_id
+        peer_instance.node_id_to_name_dict[peer_instance.node_id] = peer_instance.name.lower()
         try:
             peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
             asyncio.create_task(peer_instance.server.wait_closed())
@@ -282,10 +284,15 @@ def get_current_miners():
     current_miners_list = []
     for node_id in miners_node_id_list:
         name = peer_instance.node_id_to_name_dict[node_id]
+        public_key = None
+        if node_id == peer_instance.node_id:
+            public_key = peer_instance.wallet.public_key
+        else:
+            public_key = peer_instance.name_to_public_key_dict[name]
         current_miners_list.append({
             "node_id": node_id,
             "name": name,
-            "public_key": peer_instance.name_to_public_key_dict[name],
+            "public_key": public_key,
         })
 
     return jsonify({"success":True, "message":"succesful request", "current_miners": current_miners_list})
@@ -360,10 +367,15 @@ def get_latest_miners():
     latest_miners_list = []
     for node_id in miners_node_id_list:
         name = peer_instance.node_id_to_name_dict[node_id]
+        public_key = None
+        if node_id == peer_instance.node_id:
+            public_key = peer_instance.wallet.public_key
+        else:
+            public_key = peer_instance.name_to_public_key_dict[name]
         latest_miners_list.append({
             "node_id": node_id,
             "name": name,
-            "public_key": peer_instance.name_to_public_key_dict[name],
+            "public_key": public_key,
         })
 
     return jsonify({"success":True, "message":"succesful request", "laminers": latest_miners_list})
@@ -383,10 +395,15 @@ def get_not_latest_miners():
     for node_id in peer_instance.node_id_to_name_dict:
         if node_id not in miners_node_id_list:
             name = peer_instance.node_id_to_name_dict[node_id]
+            public_key = None
+            if node_id == peer_instance.node_id:
+                public_key = peer_instance.wallet.public_key
+            else:
+                public_key = peer_instance.name_to_public_key_dict[name]
             not_latest_miners_list.append({
                 "node_id": node_id,
                 "name": name,
-                "public_key": peer_instance.name_to_public_key_dict[name],
+                "public_key": public_key,
             })
 
     return jsonify({"success":True, "message":"succesful request", "nlaminers": not_latest_miners_list})

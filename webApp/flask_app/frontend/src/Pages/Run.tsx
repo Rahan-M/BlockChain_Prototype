@@ -84,6 +84,16 @@ const Run = () => {
     }
 
     useEffect(() => {
+        if(loadingAuth) return;
+
+        if(!isRunning || !consensus){
+            enqueueSnackbar("Create/Connect First", {variant:'warning'});
+            navigate('/');
+            return;
+        }
+
+        console.log("Consensus in Run:", consensus);
+        fetchData();
         // if(!isRunning){
         //     enqueueSnackbar("Create/Connect First", {variant:'warning'})
         //     navigate('/')
@@ -105,7 +115,7 @@ const Run = () => {
         //     setShowPosMenu(false);
         //     setShowPowMenu(false);
         // }
-    }, [isRunning, loadingAuth, consensus])
+    }, [isRunning, loadingAuth, consensus]);
 
     const addTransaction= async()=>{
         setShowTxMenu1(false);
@@ -758,6 +768,12 @@ def function_name(parameter1, parameter2, parameter3, state):
         enqueueSnackbar("Miner added successfully", {variant:'success'});
     }
 
+    interface Miner{
+        name:string,
+        node_id:string,
+        public_key:string
+    }
+
     const addMinerPopup=()=>{
         if(!showAddMinerPopup)
             return null;
@@ -770,7 +786,7 @@ def function_name(parameter1, parameter2, parameter3, state):
                     </div>
                     <div className="content p-5 flex flex-col gap-5 items-center">
                         <select name="nlaminers" id="nlaminers_opts" className='border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96' onChange={(e)=>{setAddNodeId(e.target.value)}}>
-                            {nlaminers.map((nlaminer)=>(
+                            {nlaminers.map((nlaminer: Miner)=>(
                                 <option key={nlaminer.name} value={nlaminer.node_id}>{nlaminer.name}</option>
                             ))}
                         </select>
@@ -843,7 +859,7 @@ def function_name(parameter1, parameter2, parameter3, state):
                     </div>
                     <div className="content p-5 flex flex-col gap-5 items-center">
                         <select name="laminers" id="laminers_opts" className='border-2 border-gray-500 bg-white px-4 py-2 w-[70vw] md:w-96' onChange={(e)=>{setRemoveNodeId(e.target.value)}}>
-                            {laminers.map((laminer)=>(
+                            {laminers.map((laminer: Miner)=>(
                                 <option key={laminer.name} value={laminer.node_id}>{laminer.name}</option>
                             ))}
                         </select>
@@ -931,9 +947,11 @@ def function_name(parameter1, parameter2, parameter3, state):
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewKnownPeersPage}>
                     View Known Peers
                 </div>
-                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/stakes')}>
-                    View Current Stakes
-                </div>
+                { consensus == "pos" &&
+                    <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/stakes')}>
+                        View Current Stakes
+                    </div>
+                }
                 { consensus == "poa" &&
                     <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/miners')}>
                         View Current Miners

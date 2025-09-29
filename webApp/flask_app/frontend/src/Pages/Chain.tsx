@@ -55,12 +55,12 @@ const Chain = () => {
         miner: string;
         transactions: Transaction[];
         files: File[];
-        stakes: Stake[];
+        stakes?: Stake[];
         staked_amt?:number;
         vrf_proof?:string;
         seed?:string;
-        miner_node_id: string;
-        miner_public_key: string;
+        miner_node_id?: string;
+        miner_public_key?: string;
     }
 
     type ChainViewerProps = {

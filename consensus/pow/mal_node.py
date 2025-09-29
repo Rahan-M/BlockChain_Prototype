@@ -974,7 +974,7 @@ class Peer:
                     else:
                         transaction_list.append(transaction)
 
-                if(len(transaction_list)<=0 and len(self.name_to_public_key_dict)<=1):
+                if(len(transaction_list)<=0 or len(self.name_to_public_key_dict)<=1):
                     continue
 
                 # pk=None

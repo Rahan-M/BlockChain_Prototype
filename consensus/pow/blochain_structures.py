@@ -93,15 +93,11 @@ class Block:
 def valid_chain_length(i):
     valid_chain_len=i # because we use zero indexing4
 
-    if valid_chain_len>=50:
-        valid_chain_len-=10
-    elif valid_chain_len>=25:
-        valid_chain_len-=5
-    elif valid_chain_len>=10:
-        valid_chain_len-=3
-    elif valid_chain_len>=5:
-        valid_chain_len-=2
-    return valid_chain_len 
+    if(valid_chain_len<250):
+        valid_chain_len=valid_chain_len-(valid_chain_len//5)
+    else:
+        valid_chain_len-=50
+    return valid_chain_len  
 
 class Chain:
     instance =None #Class Variable
@@ -194,8 +190,9 @@ class Chain:
             print("Hash Problem")
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
+        
+        mem_pool:List[Transaction]=[]
         for transaction in block.transactions:
-
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
                 return False
@@ -206,11 +203,22 @@ class Chain:
             except:
                 print("\nInvalid signature on transaction\n")
                 return False
+            
+            amount = 0
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool): 
+                # we have to make sure the current transactions are included when checking for balance
+                print("\nInvalid Transactions, stake should be slashed\n")
+                return
+            mem_pool.append(transaction)
+
 
         #Verify Pow:
         if not block.hash.startswith("00000"):
             print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
-
             return False
 
         return True

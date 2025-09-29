@@ -39,7 +39,7 @@ def start_peer():
             mal = False
         
         if(not mal):
-            miner = None
+            miner = True
             miner_raw_input = input("Miner? ").strip().lower()
             if miner_raw_input == "true":
                 miner = True

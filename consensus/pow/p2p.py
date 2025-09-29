@@ -480,6 +480,8 @@ class Peer:
                 print("\nInvalid Block\n")
                 return
             
+
+            
             for transaction in newBlock.transactions:
                 if transaction.receiver == "invoke":
                     if not self.valid_invoke_transaction(transaction.payload):

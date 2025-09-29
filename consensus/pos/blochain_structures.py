@@ -156,17 +156,13 @@ class Block:
 def valid_chain_length(i):
     valid_chain_len=i # because we use zero indexing4
 
-    if valid_chain_len>=50:
-        valid_chain_len-=10
-    elif valid_chain_len>=25:
-        valid_chain_len-=5
-    elif valid_chain_len>=10:
-        valid_chain_len-=3
-    elif valid_chain_len>=5:
-        valid_chain_len-=2
+    if(valid_chain_len<250):
+        valid_chain_len=valid_chain_len-(valid_chain_len//5)
+    else:
+        valid_chain_len-=50
     return valid_chain_len  
 
-def calc_balance_block_list(block_list:List[Block], publicKey, i):
+def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[Transaction]=None):
     bal=0
     valid_chain_len=valid_chain_length(i)
 
@@ -187,6 +183,15 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i):
         if block_list[i].creator==publicKey:
             bal+=6 #Miner reward
     
+    for transaction in mem_pool:
+        if transaction.sender==publicKey:
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                bal-=transaction.payload[-1]
+            else:
+                bal-=transaction.payload
+        elif transaction.receiver==publicKey:
+            bal+=transaction.payload
+
     for stake in block_list[i].stakers:
         if stake.staker==publicKey:
             bal-=stake.amt
@@ -201,7 +206,7 @@ class Chain:
 
     def __init__(self, publicKey:str=None, privatekey=None, blockList: List[Block]=None):
         """
-            If we are the first node, we mine the genesis block for ouself
+            If we are the first node, we mine the genesis block for ourself
             otherwise we receive blockList from the bootstrap node and
             we assign that to be the chain
         """
@@ -263,6 +268,10 @@ class Chain:
             print("Hash Problem")
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
+        mem_pool=[] 
+        # if we don't store this then a person can send two valid transaction 
+        # less than his acc balance but the sum of it could be greater 
+        # than his account balance
         for transaction in block.transactions:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
@@ -274,6 +283,17 @@ class Chain:
             except:
                 print("\nFake Transactions\n")
                 return False
+            
+            amount = 0
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool,current_stakes=block.stakers): 
+                # we have to make sure the current transactions are included when checking for balance
+                print("\nInvalid Transactions, stake should be slashed\n")
+                return
+            mem_pool.append(transaction)
         return True
  
     def calc_balance(self, publicKey, pending_transactions:List[Transaction]=None, current_stakes:List[Stake]=None):
@@ -393,6 +413,7 @@ def isvalidChain(blockList:List[Block]):
             print("\nFalsified vrf\n")
             return False
 
+        mem_pool=[]
         for transaction in blockList[i].transactions:
             sign=transaction.sign
             vk_tx=VerifyingKey.from_pem(transaction.sender)
@@ -408,10 +429,11 @@ def isvalidChain(blockList:List[Block]):
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
+            if(calc_balance_block_list(blockList, transaction.sender, i, mem_pool) < amount):
                 return False
+            mem_pool.append(transaction)
         
-        if(calc_balance_block_list(blockList, blockList[i].creator, i)<0):
+        if(calc_balance_block_list(blockList, blockList[i].creator, i, mem_pool)<0):
             return False
         
         if (blockList[i].prevHash!=blockList[i-1].hash):

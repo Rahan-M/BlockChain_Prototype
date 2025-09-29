@@ -1014,10 +1014,6 @@ class Peer:
                 newBlock1.miner=self.wallet.public_key
                 newBlock2.miner=self.wallet.public_key
 
-                if not Chain.instance.isValidBlock(newBlock1) or not Chain.instance.isValidBlock(newBlock1):
-                    print("\n Invalid Block \n")
-                    continue
-
                 Chain.instance.chain.append(newBlock1)
                 print("\nBlock Appended \n")
 

@@ -5,7 +5,7 @@ from consensus.pow.p2p import Peer as PoWPeer
 from consensus.pow.mal_node import Peer as PowMalPeer
 
 def start_peer():
-    host = "localhost"
+    host = input("Enter Host: ")
     port = int(input("Enter Port: "))
     name = input("Enter Name: ")
     consensus = input("Enter Consensus[poa/pos/pow] (default : pow): ")
@@ -24,26 +24,26 @@ def start_peer():
         peer.node_id_to_name_dict[peer.node_id] = peer.name.lower()
     elif consensus == "pos":
         staker = None
-        staker_raw_input = input("Staker? ").strip().lower()
-        if staker_raw_input == "true":
+        staker_raw_input = input("Staker? (y/n) ").strip().lower()
+        if staker_raw_input == "y":
             staker = True
-        elif staker_raw_input == "false":
+        elif staker_raw_input == "n":
             staker = False
         peer = PoSPeer(host, port, name, staker, activate_disk_load, activate_disk_save)
     else:        
         mal=False
-        mal_raw_input = input("Malcious? ").strip().lower()
-        if mal_raw_input == "true":
+        mal_raw_input = input("Malcious? (y/n) ").strip().lower()
+        if mal_raw_input == "y":
             mal = True
-        elif mal_raw_input == "false":
+        elif mal_raw_input == "n":
             mal = False
         
         if(not mal):
             miner = True
-            miner_raw_input = input("Miner? ").strip().lower()
-            if miner_raw_input == "true":
+            miner_raw_input = input("Miner? (y/n) ").strip().lower()
+            if miner_raw_input == "y":
                 miner = True
-            elif miner_raw_input == "false":
+            elif miner_raw_input == "n":
                 miner = False
             peer = PoWPeer(host, port, name, miner, activate_disk_load, activate_disk_save)
         else:

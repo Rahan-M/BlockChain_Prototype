@@ -540,17 +540,19 @@ class Peer:
 
             if not isvalidChain(block_list):
                 print("\nInvalid Chain\n")
+                return
 
             #If chain doesn't already exist we assign this as the chain
             if not Chain.instance:
                 self.chain=Chain(blockList=block_list)
                 if self.activate_disk_save == "y":
                     self.save_chain_to_disk()
+                    print("\nInitialized Chain\n")
                 return            
 
             elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
-                print("\nCurrent chain replaced by longer chain")
+                print("\nCurrent chain replaced by longer chain\n")
                 if self.activate_disk_save == "y":
                     self.save_chain_to_disk()
             

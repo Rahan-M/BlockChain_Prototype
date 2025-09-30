@@ -21,7 +21,7 @@ class Transaction:
             "payload":self.payload,
             "sender":self.sender,
             "receiver":self.receiver,
-            "timestamp":self.ts,
+            "ts":self.ts,
         }
         return dict
     

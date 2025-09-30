@@ -276,7 +276,7 @@ class Peer:
 
         transactions=[]
         for transaction_dict in block_dict["transactions"]:
-            transaction=Transaction(transaction_dict["payload"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["timestamp"])
+            transaction=Transaction(transaction_dict["payload"], transaction_dict["sender"], transaction_dict["receiver"], transaction_dict["id"], transaction_dict["ts"])
             if(transaction.sender!="Genesis"):
                 transaction.sign=base64.b64decode(transaction_dict["sign"])
             transactions.append(transaction)
@@ -601,7 +601,7 @@ class Peer:
         elif t=="new_tx":
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
-            transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['timestamp'])
+            transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return

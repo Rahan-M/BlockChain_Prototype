@@ -1,8 +1,7 @@
 # flask_app/__init__.py
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
-import asyncio, os
-from blockchain.pow import p2p
+import os
 
 consensus=''
 def set_consensus(str):
@@ -66,5 +65,8 @@ def create_app(config_class=None):
 
     from .routes.pos_routes import pos_bp
     app.register_blueprint(pos_bp, url_prefix='/api/pos')
+
+    from .routes.poa_routes import poa_bp
+    app.register_blueprint(poa_bp, url_prefix='/api/poa')
  
     return app

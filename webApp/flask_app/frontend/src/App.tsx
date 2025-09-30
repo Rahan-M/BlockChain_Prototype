@@ -29,7 +29,7 @@ function App() {
       "persistent_load":loadEnabled,
       "persistent_save":saveEnabled
     })
-    login(consensus)
+    login(consensus, true)
     if(res.data.success){
       enqueueSnackbar("Chain Started", {variant:'success'})
       navigate('/run')

@@ -10,6 +10,7 @@ import RootLayout from './layouts/RootLayout.tsx'
 import {AuthProvider} from './contexts/AuthContext.tsx'
 import {createBrowserRouter, RouterProvider} from 'react-router-dom'
 import Stakes from './Pages/Stakes.tsx'
+import Miners from './Pages/Miners.tsx'
 
 const NotFound = () => (
   <div className="min-h-screen bg-black flex items-center justify-center">
@@ -30,6 +31,7 @@ const router = createBrowserRouter([
           { path: '/pending', element: <Mempool /> },
           { path: '/peers', element: <Peers /> },
           { path: '/stakes', element: <Stakes /> },
+          { path: '/miners', element: <Miners /> },
           { path: "*", element: <NotFound /> }
       ],
   },

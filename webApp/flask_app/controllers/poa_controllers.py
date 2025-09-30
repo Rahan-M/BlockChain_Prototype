@@ -355,8 +355,6 @@ async def remove_miner():
 
 def get_latest_miners():
     global peer_instance
-    if(not request.is_json):
-        return jsonify({"success":False, "error": "Request must be JSON"})
     
     miners_node_id_list = None
     if peer_instance.miners:
@@ -382,8 +380,6 @@ def get_latest_miners():
 
 def get_not_latest_miners():
     global peer_instance
-    if(not request.is_json):
-        return jsonify({"success":False, "error": "Request must be JSON"})
     
     miners_node_id_list = None
     if peer_instance.miners:

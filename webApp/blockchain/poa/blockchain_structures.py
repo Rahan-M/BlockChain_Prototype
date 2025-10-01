@@ -227,6 +227,7 @@ class Chain:
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
         
+        mem_pool=[]
         for transaction in block.transactions:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
@@ -238,6 +239,16 @@ class Chain:
             except:
                 print("\nInvalid Signature On Transaction\n")
                 return False
+            
+            amount = 0
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool) or amount<=0: 
+                # we have to make sure the current transactions are included when checking for balance
+                return False
+            mem_pool.append(transaction)
 
         if block.miner_public_key != reqd_miner_public_key:
             print("Invalid miner public key")
@@ -290,6 +301,17 @@ class Wallet:
         self.public_key = self.private_key.get_verifying_key().to_pem().decode()
 
 
+def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
+    for i in range(idx-1):
+        currBlock=blockList[i]
+        for transaction in currBlock:
+            if(transaction.id==transaction_tc.id): 
+                # We sign the id of the transaction, 
+                # if it was truly a duplicate transaction
+                # meant to reuse a sign then id must be the same
+                # otherwise we'll get the invalid sign error
+                return False
+
 # Is valid chain function
 def isvalidChain(blockList:List[Block]):
     for i in range(len(blockList)):
@@ -301,19 +323,25 @@ def isvalidChain(blockList:List[Block]):
         if(i<=0):
             continue
 
-
+        mem_pool=[]
         for transaction in blockList[i].transactions:
             sign=transaction.sign
             if not transaction.is_valid_signature():
                 return False
 
+            if(transaction_exists_in_block_list(blockList, transaction, i)):
+                print("Duplicate transaction(s)")
+                return False
+            
             amount = 0
             if(transaction.receiver == "deploy" or transaction.receiver == "invoke"):
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
+            if(calc_balance_block_list(blockList, transaction.sender, i, mem_pool) < amount  or amount<=0):
                 return False
+            
+            mem_pool.append(transaction)
                
         if (blockList[i].prevHash!=blockList[i-1].hash):
             return False

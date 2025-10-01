@@ -1355,7 +1355,6 @@ class Peer:
             acc_bal=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool)
             payload=acc_bal*0.75
 
-            values_iter = iter(self.name_to_public_key_dict.values())
             transaction1=Transaction(payload, self.wallet.public_key_pem, pk1)
             transaction1_str=str(transaction1)
             signature=self.wallet.private_key.sign(transaction1_str.encode())

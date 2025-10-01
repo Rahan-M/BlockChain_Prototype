@@ -138,7 +138,7 @@ def valid_chain_length(i):
 
     return valid_chain_len
 
-def calc_balance_block_list(block_list:List[Block], publicKey, i):
+def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[Transaction]=None):
     bal=0
     valid_chain_len=valid_chain_length(i)
 
@@ -154,6 +154,13 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i):
                 
         if block_list[i].miner_public_key==publicKey:
             bal+=6 #Miner reward
+    
+    for transaction in mem_pool:
+        if transaction.sender==publicKey:
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                bal-=transaction.payload[-1]
+            else:
+                bal-=transaction.payload
 
     # Since these transactions are not part of the chain we don't add
     # the money they gained yet because it could be invalid, but we subtract
@@ -227,6 +234,7 @@ class Chain:
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
         
+        mem_pool=[]
         for transaction in block.transactions:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
@@ -238,6 +246,16 @@ class Chain:
             except:
                 print("\nInvalid Signature On Transaction\n")
                 return False
+            
+            amount = 0
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool) or amount<=0: 
+                # we have to make sure the current transactions are included when checking for balance
+                return False
+            mem_pool.append(transaction)
 
         if block.miner_public_key != reqd_miner_public_key:
             print("Invalid miner public key")
@@ -301,7 +319,7 @@ def isvalidChain(blockList:List[Block]):
         if(i<=0):
             continue
 
-
+        mem_pool=[]
         for transaction in blockList[i].transactions:
             sign=transaction.sign
             if not transaction.is_valid_signature():
@@ -312,8 +330,10 @@ def isvalidChain(blockList:List[Block]):
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
+            if(calc_balance_block_list(blockList, transaction.sender, i, mem_pool) < amount  or amount<=0):
                 return False
+            
+            mem_pool.append(transaction)
                
         if (blockList[i].prevHash!=blockList[i-1].hash):
             return False

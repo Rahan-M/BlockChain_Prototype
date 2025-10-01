@@ -189,8 +189,6 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[
                 bal-=transaction.payload[-1]
             else:
                 bal-=transaction.payload
-        elif transaction.receiver==publicKey:
-            bal+=transaction.payload
 
     if currStakes:
         for stake in currStakes:
@@ -290,7 +288,7 @@ class Chain:
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool,current_stakes=block.stakers) or amount<0: 
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool,current_stakes=block.stakers) or amount<=0: 
                 # we have to make sure the current transactions are included when checking for balance
                 return False
             mem_pool.append(transaction)

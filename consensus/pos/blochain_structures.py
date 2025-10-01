@@ -383,6 +383,17 @@ class Wallet:
 
         self.public_key_pem = self.public_key.to_pem().decode()
 
+def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
+    for i in range(idx-1):
+        currBlock=blockList[i]
+        for transaction in currBlock:
+            if(transaction.id==transaction_tc.id): 
+                # We sign the id of the transaction, 
+                # if it was truly a duplicate transaction
+                # meant to reuse a sign then id must be the same
+                # otherwise we'll get the invalid sign error
+                return False
+
 def isvalidChain(blockList:List[Block]):
     for i in range(len(blockList)):
         currBlock=blockList[i]
@@ -403,6 +414,10 @@ def isvalidChain(blockList:List[Block]):
         
         if(str(currBlock.seed)!=str(blockList[valid_chain_length(i)-1].hash)):
             print("\nInvalid Seed\n")
+            return False
+
+        if(transaction_exists_in_block_list(blockList, transaction, i)):
+            print("Duplicate transaction(s)")
             return False
 
         total_stake=0

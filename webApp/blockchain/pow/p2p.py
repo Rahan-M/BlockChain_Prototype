@@ -537,6 +537,7 @@ class Peer:
 
             if not isvalidChain(block_list):
                 print("\nInvalid Chain\n")
+                return
 
             #If chain doesn't already exist we assign this as the chain
             if not Chain.instance:

@@ -263,6 +263,10 @@ class Chain:
             print("Hash Problem")
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
+        mem_pool=[] 
+        # if we don't store this then a person can send two valid transaction 
+        # less than his acc balance but the sum of it could be greater 
+        # than his account balance
         for transaction in block.transactions:
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
@@ -274,6 +278,28 @@ class Chain:
             except:
                 print("\nFake Transactions\n")
                 return False
+            
+            amount = 0
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool,current_stakes=block.stakers) or amount<=0: 
+                # we have to make sure the current transactions are included when checking for balance
+                return False
+            mem_pool.append(transaction)
+
+        currStakes=[]
+        for stake in block.stakers:
+            vk=VerifyingKey.from_pem(stake.staker)
+            try:
+                vk.verify(stake.sign, str(stake).encode())
+            except BadSignatureError:
+                print("\nInvalid signature on stake\n")
+                return False
+            if(stake.amt<=0 or stake.amt>Chain.instance.calc_balance(stake.staker, mem_pool, currStakes)):
+                return False
+            currStakes.append(stake)
         return True
  
     def calc_balance(self, publicKey, pending_transactions:List[Transaction]=None, current_stakes:List[Stake]=None):
@@ -353,6 +379,17 @@ class Wallet:
 
         self.public_key_pem = self.public_key.to_pem().decode()
 
+def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
+    for i in range(idx-1):
+        currBlock=blockList[i]
+        for transaction in currBlock:
+            if(transaction.id==transaction_tc.id): 
+                # We sign the id of the transaction, 
+                # if it was truly a duplicate transaction
+                # meant to reuse a sign then id must be the same
+                # otherwise we'll get the invalid sign error
+                return False
+
 def isvalidChain(blockList:List[Block]):
     for i in range(len(blockList)):
         currBlock=blockList[i]
@@ -383,6 +420,8 @@ def isvalidChain(blockList:List[Block]):
             except BadSignatureError:
                 print("\nInvalid signature on stake\n")
                 return False
+            if(stake.amt<=0):
+                return False
             total_stake+=stake.amt
 
         vrf_output=hashlib.sha256(currBlock.vrf_proof).hexdigest()
@@ -393,6 +432,7 @@ def isvalidChain(blockList:List[Block]):
             print("\nFalsified vrf\n")
             return False
 
+        mem_pool=[]
         for transaction in blockList[i].transactions:
             sign=transaction.sign
             vk_tx=VerifyingKey.from_pem(transaction.sender)
@@ -403,21 +443,35 @@ def isvalidChain(blockList:List[Block]):
                 print("\nInvalid signature on transaction\n")
                 return False
 
+            if(transaction_exists_in_block_list(blockList, transaction, i)):
+                print("Duplicate transaction(s)")
+                return False
+
             amount = 0
             if(transaction.receiver == "deploy" or transaction.receiver == "invoke"):
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
+            if(calc_balance_block_list(blockList, transaction.sender, i, mem_pool, currBlock.stakers) < amount or amount<=0):
                 return False
+            mem_pool.append(transaction)
         
-        if(calc_balance_block_list(blockList, blockList[i].creator, i)<0):
+        # we use a currStakes list because if we just pass currBlock.stakers then the stake 
+        # which we are processing will already be there
+        currStakes=[]
+        for stake in currBlock.stakers:
+            if stake.amt>calc_balance_block_list(blockList, stake.staker, i, mem_pool, currStakes):
+                return False
+            currStakes.append(stake)
+
+        if(calc_balance_block_list(blockList, blockList[i].creator, i, mem_pool)<0):
             return False
         
         if (blockList[i].prevHash!=blockList[i-1].hash):
             return False
 
     return True
+
 
 def weight_of_chain(block_list:List[Block]):
     total_weight=0

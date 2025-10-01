@@ -2,8 +2,9 @@ import asyncio
 from consensus.poa.p2p import Peer as PoAPeer
 from consensus.pos.p2p import Peer as PoSPeer
 from consensus.pow.p2p import Peer as PoWPeer
-from consensus.pow.mal_node import Peer as PowMalPeer
+from consensus.poa.mal_node import Peer as PoaMalPeer
 from consensus.pos.mal_node import Peer as PosMalPeer
+from consensus.pow.mal_node import Peer as PowMalPeer
 
 def start_peer():
     host = input("Enter Host: ")
@@ -20,9 +21,17 @@ def start_peer():
         bootstrap_port = int(input("Enter port to connect: "))
     peer = None
     if consensus == "poa":
-        peer = PoAPeer(host, port, name, activate_disk_load, activate_disk_save)
-        peer.name_to_node_id_dict[peer.name.lower()] = peer.node_id
-        peer.node_id_to_name_dict[peer.node_id] = peer.name.lower()
+        mal=False
+        mal_raw_input = input("Malcious? (y/n) ").strip().lower()
+        if mal_raw_input == "y":
+            mal = True
+        elif mal_raw_input == "n":
+            mal = False
+        if(not mal):
+            peer = PoAPeer(host, port, name, activate_disk_load, activate_disk_save)
+        else:
+            peer = PoaMalPeer(host, port, name, activate_disk_load, activate_disk_save)
+
     elif consensus == "pos":
         mal=False
         mal_raw_input = input("Malcious? (y/n) ").strip().lower()

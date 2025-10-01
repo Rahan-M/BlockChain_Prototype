@@ -630,15 +630,6 @@ class Peer:
                 print(f"\nInvalid Block (VRF_OUTPUT>THRESHOLD), Stake should be slashed {e}\n")
                 return
             
-            for transaction in newBlock.transactions:
-                amount = 0
-                if transaction.receiver == "deploy" or transaction.receiver == "invoke":
-                    amount = transaction.payload[-1]
-                else:
-                    amount = transaction.payload
-                if amount>Chain.instance.calc_balance(publicKey=transaction.sender,current_stakes=newBlock.stakers):
-                    print("\nInvalid Transactions, stake should be slashed\n")
-                    return
                 
             for transaction in newBlock.transactions:
                 if transaction.receiver == "invoke":
@@ -738,6 +729,7 @@ class Peer:
                 block_list.append(block)
 
             if(not isvalidChain(block_list)):
+                print("\nInvalid Chain\n")
                 return
 
             #If chain doesn't already exist we assign this as the chain

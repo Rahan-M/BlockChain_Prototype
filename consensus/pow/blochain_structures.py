@@ -93,15 +93,11 @@ class Block:
 def valid_chain_length(i):
     valid_chain_len=i # because we use zero indexing4
 
-    if valid_chain_len>=50:
-        valid_chain_len-=10
-    elif valid_chain_len>=25:
-        valid_chain_len-=5
-    elif valid_chain_len>=10:
-        valid_chain_len-=3
-    elif valid_chain_len>=5:
-        valid_chain_len-=2
-    return valid_chain_len 
+    if(valid_chain_len<250):
+        valid_chain_len=valid_chain_len-(valid_chain_len//5)
+    else:
+        valid_chain_len-=50
+    return valid_chain_len  
 
 class Chain:
     instance =None #Class Variable
@@ -190,12 +186,18 @@ class Chain:
         return False
                 
     def isValidBlock(self, block: Block):
+        #Verify Pow:
+        if not block.hash.startswith("00000"):
+            print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
+            return False
+
         if self.lastBlock.hash!=block.prevHash:
             print("Hash Problem")
             print(f"Actual prev hash: {self.lastBlock.hash}\nMy prev hash: {block.prevHash}")
             return False
+        
+        mem_pool:List[Transaction]=[]
         for transaction in block.transactions:
-
             if Chain.instance.transaction_exists_in_chain(transaction):
                 print("Duplicate transaction(s)")
                 return False
@@ -206,12 +208,16 @@ class Chain:
             except:
                 print("\nInvalid signature on transaction\n")
                 return False
-
-        #Verify Pow:
-        if not block.hash.startswith("00000"):
-            print(f"Problem with pow hash = {block.hash} nonce={block.nonce}")
-
-            return False
+            
+            amount = 0
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                amount = transaction.payload[-1]
+            else:
+                amount = transaction.payload
+            if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool or amount<0): 
+                # we have to make sure the current transactions are included when checking for balance
+                return False
+            mem_pool.append(transaction)
 
         return True
 
@@ -266,7 +272,7 @@ class Wallet:
         Chain.instance.addBlock(transactions, self.public_key, signature)
         return transaction
 
-def calc_balance_block_list(block_list:List[Block], publicKey, i):
+def calc_balance_block_list(block_list:List[Block], publicKey, i, pending_transactions:List[Transaction]=None):
     bal=0
     valid_chain_len=valid_chain_length(i)
 
@@ -281,8 +287,28 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i):
                 bal+=transaction.payload
         if block_list[i].miner==publicKey:
             bal+=6 #Miner reward
-        
+
+    if pending_transactions:
+        for transaction in pending_transactions:
+            if transaction.sender==publicKey:
+                if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                    bal-=transaction.payload[-1]
+                else:
+                    bal-=transaction.payload
     return bal
+        
+
+def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
+    for i in range(idx-1):
+        currBlock=blockList[i]
+        for transaction in currBlock:
+            if(transaction.id==transaction_tc.id): 
+                # We sign the id of the transaction, 
+                # if it was truly a duplicate transaction
+                # meant to reuse a sign then id must be the same
+                # otherwise we'll get the invalid sign error
+                return False
+
 
 def isvalidChain(blockList:List[Block]):
     for i in range(len(blockList)):
@@ -291,11 +317,23 @@ def isvalidChain(blockList:List[Block]):
             continue
    
         if not currBlock.hash.startswith("00000"):
+            print("\nNo POW\n")
             return False
+        print("\nPow Done  and ")
+        
+        if(currBlock.prevHash!=blockList[i-1].hash):
+            print("\n but Prev hash is incorrect\n")
+            return False
+        
+        print("Prev hash is correct ")
 
+        mem_pool=[]
         for transaction in blockList[i].transactions:
             sign=transaction.sign
             vk_tx=VerifyingKey.from_pem(transaction.sender.encode())
+            if(transaction_exists_in_block_list(blockList, transaction, i)):
+                print("Duplicate transaction(s)")
+                return False
             try:
                 vk_tx.verify(sign, str(transaction).encode())
             except:
@@ -307,12 +345,11 @@ def isvalidChain(blockList:List[Block]):
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if(calc_balance_block_list(blockList, transaction.sender, i) < amount):
+            if(calc_balance_block_list(blockList, transaction.sender, i, mem_pool) < amount or amount<=0):
                 return False
+            mem_pool.append(transaction)
         
-        if (blockList[i].prevHash!=blockList[i-1].hash):
-            return False
-
+    print("No Duplicate transactions, No Inalid Signatures, No transactions with an invalid amount\n")
     return True
 
 

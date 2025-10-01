@@ -2,9 +2,12 @@ import asyncio
 from consensus.poa.p2p import Peer as PoAPeer
 from consensus.pos.p2p import Peer as PoSPeer
 from consensus.pow.p2p import Peer as PoWPeer
+from consensus.poa.mal_node import Peer as PoaMalPeer
+from consensus.pos.mal_node import Peer as PosMalPeer
+from consensus.pow.mal_node import Peer as PowMalPeer
 
 def start_peer():
-    host = "localhost"
+    host = input("Enter Host: ")
     port = int(input("Enter Port: "))
     name = input("Enter Name: ")
     consensus = input("Enter Consensus[poa/pos/pow] (default : pow): ")
@@ -18,25 +21,55 @@ def start_peer():
         bootstrap_port = int(input("Enter port to connect: "))
     peer = None
     if consensus == "poa":
-        peer = PoAPeer(host, port, name, activate_disk_load, activate_disk_save)
-        peer.name_to_node_id_dict[peer.name.lower()] = peer.node_id
-        peer.node_id_to_name_dict[peer.node_id] = peer.name.lower()
+        mal=False
+        mal_raw_input = input("Malcious? (y/n) ").strip().lower()
+        if mal_raw_input == "y":
+            mal = True
+        elif mal_raw_input == "n":
+            mal = False
+        if(not mal):
+            peer = PoAPeer(host, port, name, activate_disk_load, activate_disk_save)
+        else:
+            peer = PoaMalPeer(host, port, name, activate_disk_load, activate_disk_save)
+
     elif consensus == "pos":
-        staker = None
-        staker_raw_input = input("Staker? ").strip().lower()
-        if staker_raw_input == "true":
+        mal=False
+        mal_raw_input = input("Malcious? (y/n) ").strip().lower()
+        if mal_raw_input == "y":
+            mal = True
+        elif mal_raw_input == "n":
+            mal = False
+        
+        if(not mal):
             staker = True
-        elif staker_raw_input == "false":
-            staker = False
-        peer = PoSPeer(host, port, name, staker, activate_disk_load, activate_disk_save)
-    else:
-        miner = None
-        miner_raw_input = input("Miner? ").strip().lower()
-        if miner_raw_input == "true":
+            staker_raw_input = input("Staker? (y/n) ").strip().lower()
+            if staker_raw_input == "y":
+                staker = True
+            elif staker_raw_input == "n":
+                staker = False
+            peer = PoSPeer(host, port, name, staker, activate_disk_load, activate_disk_save)
+        else:
+            peer = PosMalPeer(host, port, name, True, activate_disk_load, activate_disk_save)
+
+    else:        
+        mal=False
+        mal_raw_input = input("Malcious? (y/n) ").strip().lower()
+        if mal_raw_input == "y":
+            mal = True
+        elif mal_raw_input == "n":
+            mal = False
+        
+        if(not mal):
             miner = True
-        elif miner_raw_input == "false":
-            miner = False
-        peer = PoWPeer(host, port, name, miner, activate_disk_load, activate_disk_save)
+            miner_raw_input = input("Miner? (y/n) ").strip().lower()
+            if miner_raw_input == "y":
+                miner = True
+            elif miner_raw_input == "n":
+                miner = False
+            peer = PoWPeer(host, port, name, miner, activate_disk_load, activate_disk_save)
+        else:
+            peer = PowMalPeer(host, port, name, True, activate_disk_load, activate_disk_save)
+
 
     try:
         asyncio.run(peer.start(bootstrap_host, bootstrap_port))

@@ -1082,9 +1082,6 @@ class Peer:
                 
                 try:
                     amt=int(amt)
-                    if(amt>Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes))):
-                        print("\nInsufficient bank balance\n")
-                        continue
 
                     await self.send_stake_announcements(amt)
                     self.staked_amt=amt
@@ -1328,6 +1325,11 @@ class Peer:
                 self.current_stakes.clear()
             return
         
+
+        if(len(self.name_to_public_key_dict)<=1):
+            print("\nDoesn't know enough ppl\n")
+            return
+        
         print("\nRunning vrf\n")
         async with self.curr_stakers_condition:# So that no new stakes don't comes in
             seed=Chain.instance.epoch_seed()
@@ -1346,15 +1348,15 @@ class Peer:
             #The following code is for the winner
             print("\nYou won\n")
             
-
+            values_iter = iter(self.name_to_public_key_dict.values())
             # Get the first two values, with a default of None if they don't exist
             pk1 = next(values_iter, None)
             pk2 = next(values_iter, None)
-            acc_bal=Chain.instance.calc_balance(self.wallet.public_key, self.mem_pool)
+            acc_bal=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool)
             payload=acc_bal*0.75
 
             values_iter = iter(self.name_to_public_key_dict.values())
-            transaction1=Transaction(payload, self.wallet.public_key, pk1)
+            transaction1=Transaction(payload, self.wallet.public_key_pem, pk1)
             transaction1_str=str(transaction1)
             signature=self.wallet.private_key.sign(transaction1_str.encode())
             transaction1.sign=signature
@@ -1362,7 +1364,7 @@ class Peer:
             newBlock1=Block(Chain.instance.lastBlock.hash, pending_transactions)
 
             pending_transactions.pop()
-            transaction2=Transaction(payload, self.wallet.public_key, pk2)
+            transaction2=Transaction(payload, self.wallet.public_key_pem, pk2)
             transaction2_str=str(transaction2)
             signature=self.wallet.private_key.sign(transaction2_str.encode())
             transaction2.sign=signature

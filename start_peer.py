@@ -3,6 +3,7 @@ from consensus.poa.p2p import Peer as PoAPeer
 from consensus.pos.p2p import Peer as PoSPeer
 from consensus.pow.p2p import Peer as PoWPeer
 from consensus.pow.mal_node import Peer as PowMalPeer
+from consensus.pos.mal_node import Peer as PosMalPeer
 
 def start_peer():
     host = input("Enter Host: ")
@@ -23,13 +24,24 @@ def start_peer():
         peer.name_to_node_id_dict[peer.name.lower()] = peer.node_id
         peer.node_id_to_name_dict[peer.node_id] = peer.name.lower()
     elif consensus == "pos":
-        staker = None
-        staker_raw_input = input("Staker? (y/n) ").strip().lower()
-        if staker_raw_input == "y":
+        mal=False
+        mal_raw_input = input("Malcious? (y/n) ").strip().lower()
+        if mal_raw_input == "y":
+            mal = True
+        elif mal_raw_input == "n":
+            mal = False
+        
+        if(not mal):
             staker = True
-        elif staker_raw_input == "n":
-            staker = False
-        peer = PoSPeer(host, port, name, staker, activate_disk_load, activate_disk_save)
+            staker_raw_input = input("Staker? (y/n) ").strip().lower()
+            if staker_raw_input == "y":
+                staker = True
+            elif staker_raw_input == "n":
+                staker = False
+            peer = PoSPeer(host, port, name, staker, activate_disk_load, activate_disk_save)
+        else:
+            peer = PosMalPeer(host, port, name, True, activate_disk_load, activate_disk_save)
+
     else:        
         mal=False
         mal_raw_input = input("Malcious? (y/n) ").strip().lower()

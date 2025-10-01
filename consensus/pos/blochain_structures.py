@@ -162,7 +162,7 @@ def valid_chain_length(i):
         valid_chain_len-=50
     return valid_chain_len  
 
-def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[Transaction]=None):
+def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[Transaction]=None, currStakes:List[Stake]=None):
     bal=0
     valid_chain_len=valid_chain_length(i)
 
@@ -192,9 +192,10 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[
         elif transaction.receiver==publicKey:
             bal+=transaction.payload
 
-    for stake in block_list[i].stakers:
-        if stake.staker==publicKey:
-            bal-=stake.amt
+    if currStakes:
+        for stake in currStakes:
+            if stake.staker==publicKey:
+                bal-=stake.amt
     # Since these transactions are not part of the chain we don't add
     # the money they gained yet because it could be invalid, but we subtract
     # the amount they have given to prevent double spending before the
@@ -293,6 +294,18 @@ class Chain:
                 # we have to make sure the current transactions are included when checking for balance
                 return False
             mem_pool.append(transaction)
+
+        currStakes=[]
+        for stake in block.stakers:
+            vk=VerifyingKey.from_pem(stake.staker)
+            try:
+                vk.verify(stake.sign, str(stake).encode())
+            except BadSignatureError:
+                print("\nInvalid signature on stake\n")
+                return False
+            if(stake.amt<=0 or stake.amt>Chain.instance.calc_balance(stake.staker, mem_pool, currStakes)):
+                return False
+            currStakes.append(stake)
         return True
  
     def calc_balance(self, publicKey, pending_transactions:List[Transaction]=None, current_stakes:List[Stake]=None):
@@ -402,6 +415,8 @@ def isvalidChain(blockList:List[Block]):
             except BadSignatureError:
                 print("\nInvalid signature on stake\n")
                 return False
+            if(stake.amt<=0):
+                return False
             total_stake+=stake.amt
 
         vrf_output=hashlib.sha256(currBlock.vrf_proof).hexdigest()
@@ -428,9 +443,18 @@ def isvalidChain(blockList:List[Block]):
                 amount = transaction.payload[-1]
             else:
                 amount = transaction.payload
-            if(calc_balance_block_list(blockList, transaction.sender, i, mem_pool) < amount):
+            if(calc_balance_block_list(blockList, transaction.sender, i, mem_pool, currBlock.stakers) < amount or amount<=0):
                 return False
             mem_pool.append(transaction)
+        
+        # we use a currStakes list because if we just pass currBlock.stakers then the stake 
+        # which we are processing will already be there
+        currStakes=[]
+        for stake in currBlock.stakers:
+            if stake.amt>calc_balance_block_list(blockList, stake.staker, i, mem_pool, currStakes):
+                return False
+            currStakes.append(stake)
+
         
         if(calc_balance_block_list(blockList, blockList[i].creator, i, mem_pool)<0):
             return False

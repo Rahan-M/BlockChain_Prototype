@@ -13,9 +13,9 @@ A web and terminal blockchain implementation in Python from scratch
 - Command line & web interface
 
 ## Contents
-- [Theory](#-theory)
-- [About this project](#-about-this-project)
-- [How to run this project](#-how-to-run-this-project)
+- [Theory](#theory)
+- [About this project](#about-this-project)
+- [How to run this project](#how-to-run-this-project)
 
 ## Theory
 ### What is blockchain?

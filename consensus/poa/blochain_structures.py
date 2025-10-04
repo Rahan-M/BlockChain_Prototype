@@ -311,7 +311,7 @@ class Wallet:
 def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
     for i in range(idx-1):
         currBlock=blockList[i]
-        for transaction in currBlock:
+        for transaction in currBlock.transactions:
             if(transaction.id==transaction_tc.id): 
                 # We sign the id of the transaction, 
                 # if it was truly a duplicate transaction

@@ -31,6 +31,8 @@ def start_peer():
             peer = PoAPeer(host, port, name, activate_disk_load, activate_disk_save)
         else:
             peer = PoaMalPeer(host, port, name, activate_disk_load, activate_disk_save)
+        peer.name_to_node_id_dict[peer.name.lower()] = peer.node_id
+        peer.node_id_to_name_dict[peer.node_id] = peer.name.lower()
 
     elif consensus == "pos":
         mal=False

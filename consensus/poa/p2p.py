@@ -754,7 +754,7 @@ class Peer:
             async with self.mem_pool_condition:
                 for transaction in list(self.mem_pool):
                     if Chain.instance.transaction_exists_in_chain(transaction):
-                        self.mem_pool.discard(transaction)
+                        self.mem_pool.remove(transaction)
 
             async with self.file_hashes_lock:
                 for hash in list(self.file_hashes.keys()):

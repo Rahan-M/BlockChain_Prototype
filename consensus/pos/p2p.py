@@ -378,15 +378,12 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         elif t == "pong":
-            # print("Received Pong")
             self.got_pong[websocket] = True
             if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket] = True
-            # print(f"[Sent peer]")
 
         elif t == 'peer_info':
-            # print("Received Peer Info")
             data = msg.get("data")
             if not data:
                 return
@@ -473,7 +470,6 @@ class Peer:
             self.seen_message_ids.add(new_peer_msg_id)
 
         elif t == "known_peers":
-            # print("Received Known Peers")
             peers = msg.get("peers")
             if not peers:
                 return
@@ -1524,7 +1520,6 @@ class Peer:
                     self.deploy_contract(transaction)
 
             newBlock.stakers=list(self.current_stakes)
-            # print(f"\n{newBlock.to_dict_with_stakers()}\n")
 
             self.staked_amt=0
             self.current_stakers.clear()

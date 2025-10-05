@@ -324,7 +324,6 @@ class Peer:
         self.seen_message_ids.add(id)
         print(f"\n{t}\n")
         if t=="ping":
-            # print("Received Ping")
             pkt={
                 "type":"pong",
                 "id":str(uuid.uuid4())
@@ -333,15 +332,12 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         if t=="pong":
-            # print("Received Pong")
             self.got_pong[websocket]=True
             if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket]=True
-            # print(f"[Sent peer]")
 
         elif t =='peer_info':
-            # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
@@ -394,7 +390,6 @@ class Peer:
             self.seen_message_ids.add(msg["new_peer_msg_id"])
 
         elif t=="known_peers":
-            # print("Received Known Peers")
             peers=msg["peers"]
             for peer in peers:
                 normalized_self=normalize_endpoint((self.host, self.port))
@@ -843,8 +838,6 @@ class Peer:
         while True:
             await asyncio.sleep(30)
             async with self.mem_pool_condition: # Works the same as lock
-                # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
-                # We check the about condition in lambda every time we get notified after a new transaction has been added
                 if(len(self.mem_pool)<=0):
                     continue
                 transaction_list=[]

@@ -452,30 +452,17 @@ class Peer:
             await self.send_message(websocket, pkt, False)
 
         elif t=="pong":
-            # print("Received Pong")
             self.got_pong[websocket]=True
             if not self.have_sent_peer_info.get(websocket, True):
                 message = self.get_peer_info_message()
                 await self.send_message(websocket, message, True)
                 self.have_sent_peer_info[websocket]=True
-            # print(f"[Sent peer]")
 
         elif t =="peer_info":
-            # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
             if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
-                # if t =='peer_info':
-                #     proposed_name = self.get_unique_name(data["name"])
-                #     if proposed_name != data["name"]:
-                #         pkt={
-                #             "type":"change_name",
-                #             "id":str(uuid.uuid4()),
-                #             "new_name": proposed_name
-                #         }
-                #         await self.send_message(websocket, pkt, False)
-                #         data["name"] = proposed_name
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
                 if self.activate_disk_save == "y":
                     self.save_known_peers_to_disk()
@@ -483,8 +470,6 @@ class Peer:
                 self.node_id_to_name_dict[data["node_id"]]=data["name"].lower()
                 self.name_to_node_id_dict[data["name"].lower()]=data["node_id"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
-                # if t == 'add_peer':
-                #     await self.broadcast_message(msg)
                 message = self.get_known_peers_message()
                 await self.send_message(websocket, message, False)
 
@@ -550,7 +535,6 @@ class Peer:
             self.seen_message_ids.add(msg["new_peer_msg_id"])
 
         elif t=="known_peers":
-            # print("Received Known Peers")
             peers=msg["peers"]
             new_peer_found = False
             for peer in peers:
@@ -645,7 +629,6 @@ class Peer:
 
             async with self.mem_pool_condition:
                 self.mem_pool.append(transaction)
-                # self.mem_pool_condition.notify_all()
             await self.broadcast_message(msg)
 
         elif t=="new_block":
@@ -823,7 +806,6 @@ class Peer:
         transaction.sign=signature
         async with self.mem_pool_condition:
                 self.mem_pool.append(transaction)
-                # self.mem_pool_condition.notify_all()
 
         print("Transaction Created", transaction)
         print("\n")
@@ -1017,8 +999,6 @@ class Peer:
                         for _ in range(3):
                             await asyncio.sleep(5)
                     async with self.mem_pool_condition: # Works the same as lock
-                        # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
-                        # We check the about condition in lambda every time we get notified after a new transaction has been added
                         if(len(self.mem_pool)>0):
                             transaction_list=[]
                             for transaction in self.mem_pool:

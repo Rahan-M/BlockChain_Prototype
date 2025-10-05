@@ -369,7 +369,6 @@ class Peer:
         self.seen_message_ids.add(id)
 
         if t=="ping":
-            # print("Received Ping")
             pkt={
                 "type":"pong",
                 "id":str(uuid.uuid4())
@@ -378,15 +377,12 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         elif t=="pong":
-            # print("Received Pong")
             self.got_pong[websocket]=True
             if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket]=True
-            # print(f"[Sent peer]")
 
         elif t =='peer_info':
-            # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
@@ -451,7 +447,6 @@ class Peer:
             self.seen_message_ids.add(msg["new_peer_msg_id"])
 
         elif t=="known_peers":
-            # print("Received Known Peers")
             peers=msg["peers"]
             new_peer_found = False
             for peer in peers:
@@ -1378,7 +1373,6 @@ class Peer:
             newBlock2=Block(Chain.instance.lastBlock.hash, pending_transactions)
 
 
-            # newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
             newBlock1.files=self.file_hashes.copy()
             newBlock1.seed=seed
             newBlock1.vrf_proof=vrf_proof
@@ -1406,7 +1400,6 @@ class Peer:
 
             newBlock1.stakers=list(self.current_stakes)
             newBlock2.stakers=list(self.current_stakes)
-            # print(f"\n{newBlock.to_dict_with_stakers()}\n")
 
             self.staked_amt=0
             self.current_stakers.clear()
@@ -1422,7 +1415,6 @@ class Peer:
             sign_b64_1=base64.b64encode(sign1).decode()
             sign_b64_2=base64.b64encode(sign2).decode()
 
-            # print(f"\n{newBlock1.to_dict_with_stakers()}\n")
             pkt1={
                 "type":"new_block",
                 "id":str(uuid.uuid4()),
@@ -1442,7 +1434,6 @@ class Peer:
             self.seen_message_ids.add(pkt1["id"])
             self.seen_message_ids.add(pkt2["id"])
 
-            # await self.broadcast_message(pkt)
             if self.activate_disk_save == "y":
                 self.save_chain_to_disk()
 

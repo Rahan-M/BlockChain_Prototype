@@ -4,7 +4,7 @@ from typing import Set, Dict, List, Tuple
 import copy
 import threading
 import socket
-from consensus.poa.blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
+from consensus.poa.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor

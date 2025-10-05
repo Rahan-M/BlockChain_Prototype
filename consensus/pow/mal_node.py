@@ -3,7 +3,7 @@ import json, uuid, base64
 import threading, socket
 import os, subprocess
 from typing import Set, Dict, List, Tuple
-from consensus.pow.blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
+from consensus.pow.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor

@@ -1,7 +1,7 @@
 from flask import Flask, Response
 from collections import OrderedDict
 import json
-from consensus.poa.blochain_structures import Chain, txs_to_json_digestable_form
+from consensus.poa.blockchain_structures import Chain, txs_to_json_digestable_form
 
 
 def create_flask_app(peer):

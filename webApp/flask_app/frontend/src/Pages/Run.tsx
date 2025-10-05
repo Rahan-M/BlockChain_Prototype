@@ -876,7 +876,7 @@ def function_name(parameter1, parameter2, parameter3, state):
 
     const commonMenu=()=>{
         return(
-                <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
+                <div className="menu mt-5 mb-5 flex flex-col items-center min-h-[90vh] gap-5">
                     {txMenu()}
                     {fileMenu()}
                     {scMenu()}
@@ -907,7 +907,7 @@ def function_name(parameter1, parameter2, parameter3, state):
                 {commonMenu()}
             </div>
             <div className='bg-tertiary w-2'></div>
-            <div className='status w-full relative flex flex-col p-5 pt-20 gap-3'>
+            <div className='status w-full relative flex flex-col p-5 gap-3'>
                 <IoReloadSharp className='absolute top-5 right-5 text-2xl cursor-pointer' onClick={fetchData}/>
                 <div>
                     Name : {name}

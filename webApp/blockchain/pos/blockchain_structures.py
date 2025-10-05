@@ -382,15 +382,16 @@ class Wallet:
 def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
     for i in range(idx-1):
         currBlock=blockList[i]
-        for transaction in currBlock:
+        for transaction in currBlock.transactions:
             if(transaction.id==transaction_tc.id): 
                 # We sign the id of the transaction, 
                 # if it was truly a duplicate transaction
                 # meant to reuse a sign then id must be the same
                 # otherwise we'll get the invalid sign error
                 return False
-
 def isvalidChain(blockList:List[Block]):
+    EPOCH_TIME = 60  # Add this constant or pass it as a parameter
+    
     for i in range(len(blockList)):
         currBlock=blockList[i]
         vk=VerifyingKey.from_pem(currBlock.creator)
@@ -401,6 +402,52 @@ def isvalidChain(blockList:List[Block]):
         
         if(i<=0):
             continue
+
+        # Timestamp validation
+        try:
+            # Convert Unix timestamp to datetime
+            if isinstance(currBlock.ts, (int, float)):
+                block_time = datetime.fromtimestamp(currBlock.ts)
+            elif isinstance(currBlock.ts, str):
+                block_time = datetime.fromisoformat(currBlock.ts)
+            elif isinstance(currBlock.ts, datetime):
+                block_time = currBlock.ts
+            else:
+                print("\nInvalid Block timestamp format\n")
+                return False
+
+            # Get previous block time
+            prev_block_ts = blockList[i-1].ts
+            if isinstance(prev_block_ts, (int, float)):
+                prev_block_time = datetime.fromtimestamp(prev_block_ts)
+            elif isinstance(prev_block_ts, str):
+                prev_block_time = datetime.fromisoformat(prev_block_ts)
+            elif isinstance(prev_block_ts, datetime):
+                prev_block_time = prev_block_ts
+            else:
+                print("\nInvalid previous block timestamp format\n")
+                return False
+
+            # Check block isn't from the future (allow some tolerance for clock skew)
+            current_time = datetime.now()
+            if block_time > current_time + timedelta(seconds=10):
+                print(f"\nBlock {i} timestamp in future\n")
+                return False
+
+            # Check blocks are in chronological order
+            if block_time < prev_block_time:
+                print(f"\nBlock {i} timestamp before previous block\n")
+                return False
+
+            # Verify minimum time between blocks (staking registration period)
+            time_diff = (block_time - prev_block_time).total_seconds()
+            if time_diff < EPOCH_TIME * 5/6:
+                print(f"\nBlocks {i-1} and {i} too close together: {time_diff}s < {EPOCH_TIME * 5/6}s\n")
+                return False
+
+        except (ValueError, AttributeError, TypeError, OSError) as e:
+            print(f"\nTimestamp validation error on block {i}: {e}\n")
+            return False
 
         try:
             vk.verify(currBlock.vrf_proof, currBlock.seed.encode())
@@ -434,6 +481,10 @@ def isvalidChain(blockList:List[Block]):
 
         mem_pool=[]
         for transaction in blockList[i].transactions:
+            if(transaction_exists_in_block_list(blockList, transaction, i)):
+                print("Duplicate transaction(s)")
+                return False
+            
             sign=transaction.sign
             vk_tx=VerifyingKey.from_pem(transaction.sender)
 
@@ -441,10 +492,6 @@ def isvalidChain(blockList:List[Block]):
                 vk_tx.verify(sign, str(transaction).encode())
             except BadSignatureError:
                 print("\nInvalid signature on transaction\n")
-                return False
-
-            if(transaction_exists_in_block_list(blockList, transaction, i)):
-                print("Duplicate transaction(s)")
                 return False
 
             amount = 0
@@ -464,6 +511,7 @@ def isvalidChain(blockList:List[Block]):
                 return False
             currStakes.append(stake)
 
+        
         if(calc_balance_block_list(blockList, blockList[i].creator, i, mem_pool)<0):
             return False
         
@@ -471,7 +519,6 @@ def isvalidChain(blockList:List[Block]):
             return False
 
     return True
-
 
 def weight_of_chain(block_list:List[Block]):
     total_weight=0

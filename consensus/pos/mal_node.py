@@ -584,13 +584,13 @@ class Peer:
                 try:
                     vk.verify(vrf_proof, Chain.instance.epoch_seed().encode())
                 except BadSignatureError as e:
-                    print(f"\nInvalid Block (VRF_PROOF Signature Error), Stake should be slashed {e}\n")
+                    print(f"\nInvalid Block (VRF_PROOF Signature Error) {e}\n")
                     return
 
                 try:
                     vk.verify(sign, str(newBlock).encode())
                 except BadSignatureError as e:
-                    print(f"\nInvalid Block (Block Signature Error), Stake should be slashed {e}\n")
+                    print(f"\nInvalid Block (Block Signature Error) {e}\n")
                     return
                 
                 if(newBlock.seed!=Chain.instance.epoch_seed()):
@@ -610,7 +610,7 @@ class Peer:
                         print(f"\n{str(stake)}\n")
                         vk.verify(stake.sign, str(stake).encode())
                     except BadSignatureError as e:
-                        print(f"\nInvalid Block (Stake Signature Error), Stake should be slashed {e}\n")
+                        print(f"\nInvalid Block (Stake Signature Error) {e}\n")
                         return
 
                     total_amt_staked_2+=stake.amt
@@ -627,7 +627,7 @@ class Peer:
                 newBlock.vrf_proof=vrf_proof
  
             except VrfThresholdException as e:
-                print(f"\nInvalid Block (VRF_OUTPUT>THRESHOLD), Stake should be slashed {e}\n")
+                print(f"\nInvalid Block (VRF_OUTPUT>THRESHOLD) {e}\n")
                 return
             
                 
@@ -677,6 +677,8 @@ class Peer:
             block2=self.block_dict_to_block(block2_dict)
             block2.sign=base64.b64decode(msg.get("block2_sign"))
 
+            pos=msg.get("pos")
+
             block1_exists=Chain.instance.chain[msg["pos"]].is_equal(block1)
             block2_exists=Chain.instance.chain[msg["pos"]].is_equal(block2)
             if not (block1_exists or block2_exists):
@@ -696,17 +698,22 @@ class Peer:
                 err2=True
 
             if(err1 and err2):
-                Chain.instance.chain[pos].is_valid=False
-
+                print(f"\nInvalid Slashing Evidence")
+                return
+            
             elif not(err1 or err2): # Both Signatures are correct
+                print(f"\nBlock {pos} slashed\n")
                 Chain.instance.chain[pos].is_valid=False
                 Chain.instance.chain[pos].slash_creator=True
+                self.broadcast_message(msg)
 
             # Fork still exists but longest chain will win
 
             elif (err1 and not err2 and block1_exists) or (err2 and not err1 and block2_exists):
                 Chain.instance.chain=Chain.instance.chain[:pos]
                 # We trim the chain, eventually when a longer chain arrives it will replace this, but this is unlikely too since we don't share slash_announcement in such cases
+                # hmm this means err1 exists but block1 also exists so we trim back to before that block
+                # :pos is not included
 
         elif t=="chain_request":
             if(not Chain.instance):
@@ -1352,7 +1359,7 @@ class Peer:
             # Get the first two values, with a default of None if they don't exist
             pk1 = next(values_iter, None)
             pk2 = next(values_iter, None)
-            acc_bal=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool)
+            acc_bal=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes))
             payload=acc_bal*0.75
 
             transaction1=Transaction(payload, self.wallet.public_key_pem, pk1)

@@ -223,6 +223,7 @@ async def stake():
             peer_instance.staked_amt=0
             peer_instance.current_stakers.clear()
             peer_instance.current_stakes.clear()
+            time_since = timedelta(seconds=0)
         
         else:
             return jsonify({"success":False, "error": f"Stake registration period closed, try again in the next epoch, time till next epoch : {EPOCH_TIME-time_since.seconds}"})

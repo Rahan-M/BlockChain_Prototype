@@ -1,0 +1,449 @@
+(newEnv) rahanm@192:~/Desktop/Projects/SupplyChainManagement_Blockchain$ python start_peer.py 
+Enter Host: localhost
+Enter Port: 5000
+Enter Name: Rahan
+Enter Consensus[poa/pos/pow] (default : pow): pos
+Do you like to load saved data if any(y/n): 
+Do you like to continuously backup data to disk(y/n): 
+Enter 'create' to create a network and 'connect' to connect to a network (default: create): 
+Malcious? (y/n) 
+Staker? (y/n) 
+Initializing Chain...
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+
+Sent out chain requests...
+Enter Your Choice:  * Serving Flask app 'consensus.pos.flask_app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5020
+ * Running on http://192.168.1.10:5020
+Press CTRL+C to quit
+Inbound Connection from 127.0.0.1:52986
+Registered peer jefin localhost:6000
+
+Sent out chain requests...
+Received a Chain
+
+Current Chain heavier than received chain
+
+Outbound connection formed to 127.0.0.1:6000
+Inbound Connection from 127.0.0.1:56832
+Registered peer elias localhost:7000
+Outbound connection formed to 127.0.0.1:7000
+
+Sent out chain requests...
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+Inbound Connection from 127.0.0.1:45468
+Registered peer veda localhost:8000
+1
+
+Enter Receiver's Name or Public Key: Elias
+
+Enter Amount to send: 10
+Transaction Created {"id": "c3eb6ccf-eb6e-42e5-ad2f-59587f16bfd2", "payload": 10.0, "sender": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n", "receiver": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r\n8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==\n-----END PUBLIC KEY-----\n", "ts": 1759651169.329628}
+
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 1
+
+Enter Receiver's Name or Public Key: Veda
+
+Enter Amount to send: 10
+Transaction Created {"id": "26c9e965-a797-4249-9207-2bfc2540bd55", "payload": 10.0, "sender": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n", "receiver": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEcYI6gC80rm3zzPrioy2sQhH9icpp72pdTYZfl/E36HEo\n9unm0Cdf8LoPBKD5dX3jsvkDnZGRlr4hKn5/z70nXg==\n-----END PUBLIC KEY-----\n", "ts": 1759651171.94425}
+
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 1
+
+Enter Receiver's Name or Public Key: Jefin
+
+Enter Amount to send: 10
+Transaction Created {"id": "0e32d4b8-2018-4fbe-bfab-dab0cac909b2", "payload": 10.0, "sender": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n", "receiver": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEfpKbYYuKa/qwdes2/1+gwG6E1+H6WlB03kGbPzx6Q+Gz\nYKAxiUIOf5kPSuYhMKACtgHOq7XcvScY2WJg2Uo1Cg==\n-----END PUBLIC KEY-----\n", "ts": 1759651175.05188}
+
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 9
+
+Stake registration period closed, try again in the next epoch, time till next epoch : 10
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 5
+
+
+
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 9
+
+Stake registration period closed, try again in the next epoch, time till next epoch : 7
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 9
+
+Stake registration period closed, try again in the next epoch, time till next epoch : 2
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 9
+
+Stake registration period closed, try again in the next epoch, time till next epoch : 1
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 9Outbound connection formed to 127.0.0.1:8000
+9
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 9
+
+Stake registration period closed, try again in the next epoch, time till next epoch : -6
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 9
+
+Stake registration period closed, try again in the next epoch, time till next epoch : -8
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: 9
+
+Enter Amount to stake: 5
+Stake Created
+Creating block in -10 seconds
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+
+Running vrf
+
+
+You won
+Enter Your Choice: 
+Block Appended
+
+{'id': 'b86e5b96-37bd-4fae-8127-3c90db7b9362', 'prevHash': '31b72f20176a113b3ad2a4fb610ab3553e1940c0c7ef6d7b5827f7c2fcc0d018', 'transactions': [{'id': 'c3eb6ccf-eb6e-42e5-ad2f-59587f16bfd2', 'payload': 10.0, 'sender': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n', 'receiver': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r\n8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==\n-----END PUBLIC KEY-----\n', 'ts': 1759651169.329628, 'sign': 'hG2pd9AHH6vHDklm/rJlhqyqAt3v5SwJekCWXhhg13LRoEtwS9dHi+japWrNk5fjNPMduf/jJ3nqz2w4BielSQ=='}, {'id': '26c9e965-a797-4249-9207-2bfc2540bd55', 'payload': 10.0, 'sender': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n', 'receiver': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEcYI6gC80rm3zzPrioy2sQhH9icpp72pdTYZfl/E36HEo\n9unm0Cdf8LoPBKD5dX3jsvkDnZGRlr4hKn5/z70nXg==\n-----END PUBLIC KEY-----\n', 'ts': 1759651171.94425, 'sign': 'Y4cYK7eyrXiZqoUHqJ2v63Y4B6HRHDS5tYijgtxD1ZIXiRNGbUxF3QZzGRhzecDUj6CBh06wcK+WFiLatNoMLA=='}, {'id': '0e32d4b8-2018-4fbe-bfab-dab0cac909b2', 'payload': 10.0, 'sender': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n', 'receiver': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEfpKbYYuKa/qwdes2/1+gwG6E1+H6WlB03kGbPzx6Q+Gz\nYKAxiUIOf5kPSuYhMKACtgHOq7XcvScY2WJg2Uo1Cg==\n-----END PUBLIC KEY-----\n', 'ts': 1759651175.05188, 'sign': 'sR3Eu7+DOXRWdoz1eTZMw+Y5/ocHOLZh3FPXbUURJ/qFPKNptQrUgHydz6JVmyRBVP2YNxUs4oZZ2VKV92ejNw=='}], 'ts': 1759651200.946828, 'creator': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n', 'staked_amt': 5, 'files': {}, 'stakers': [{'id': '9b727ef1-1e0d-4973-ae24-ad1f8b86feb8', 'staker': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n', 'amt': 5, 'ts': 1759651200.942651, 'sign': 'K2ZhHJuyGT87VWEmfw2zW/JT6xv0tDsaZ/DIny8Urde62YfIRWfajYCUC1M+sb+5ltnj1iTCHwDCgX9VfLAuGA=='}], 'vrf_proof_b64': 'A3WWwj3v/5Oh1RLCehMUV3TtHUYtfcFe6eeigxII/Xg83e7lrn0B/4wV/5NqVA6oGIW5dqJu4tK5cokobJ1Zzw==', 'seed': '31b72f20176a113b3ad2a4fb610ab3553e1940c0c7ef6d7b5827f7c2fcc0d018'}
+
+
+Sent out chain requests...
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+1
+
+Enter Receiver's Name or Public Key: Elias
+
+Enter Amount to send: 5
+Transaction Created {"id": "d887e029-440c-4402-ac44-0eec1e195960", "payload": 5.0, "sender": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n", "receiver": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r\n8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==\n-----END PUBLIC KEY-----\n", "ts": 1759651244.383523}
+
+
+Block Chain Menu
+***************
+0) Quit
+1) Add Transaction
+2) View balance
+3) Print Chain
+4) Print Pending Transactions
+5) Print Current Stakers
+6) Time since last epoch
+7) Send Files
+8) Download Files
+9) Stake
+
+Enter Your Choice: New stake : -----BEGIN PUBLIC KEY-----
+MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r
+8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==
+-----END PUBLIC KEY-----
+:5
+
+{'id': '1ef6a770-cdaf-4382-8eac-aea439bf1309', 'prevHash': 'f7dad9d48f688c73a8f12c6e85f29de6e63fdca1fbd79563d1c9616e69aa6a88', 'transactions': [{'id': 'd887e029-440c-4402-ac44-0eec1e195960', 'payload': 5.0, 'sender': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n', 'receiver': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r\n8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==\n-----END PUBLIC KEY-----\n', 'ts': 1759651244.383523, 'sign': '4CDDBU7FICLXkH1Lm3hBUrLOtbZzKYxsNJmUToI9OZ2BW1sUB7h+8suHjWEiSkjqiMXf+q4ZHc4bJR8uYpUM3g=='}, {'id': '3967402b-a982-45d5-ac99-69a2297fc79d', 'payload': 3.75, 'sender': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r\n8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==\n-----END PUBLIC KEY-----\n', 'receiver': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEkbLRK/Nt9tmnpgw16G/CDthaNrQGMv4bPaL9jHekJSjO\nDmwtu8OKZpRMQQPdnxkbA7DJr43NX1whaNfaV2Px/Q==\n-----END PUBLIC KEY-----\n', 'ts': 1759651261.718115, 'sign': 'l/GNu3ZsCI3yzn4FusdDnYY8HKtBfzti+WOEmWmMAEeTFoD8NzYN33srNmnDIwctF48QftJc3i8gex3sScoESA=='}], 'ts': 1759651261.71805, 'creator': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r\n8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==\n-----END PUBLIC KEY-----\n', 'staked_amt': 5, 'files': {}, 'stakers': [{'id': '24af9ba1-8611-49b3-8aef-0638465a9699', 'staker': '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r\n8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==\n-----END PUBLIC KEY-----\n', 'amt': 5, 'ts': 1759651248.710336, 'sign': 'LsMkIUh4jEnek8Ij+whbG+/KqUcoyj9IXrngPWTBZ7/bmk7YTtSP539HeIyM6ZptuWQrf52wUbsqd61mMZAHlg=='}], 'vrf_proof_b64': 'LxtYKwIzpdqsr6ULLgXd4A9wHdjmFPWpRCSx0yugf98T68Tey03rNEhGxW+6g44TVwTEMWGNyk4a6dpy06rm1w==', 'seed': 'f7dad9d48f688c73a8f12c6e85f29de6e63fdca1fbd79563d1c9616e69aa6a88'}
+
+
+{"id": "24af9ba1-8611-49b3-8aef-0638465a9699", "staker": "-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEm294teREYhOEveTg5yX72NSg5mubo3iJpjNQJ3qCbd7r\n8v6owqyXjGeoFVgNKlTO2Ff070xaH+tOhjt7pfAtbQ==\n-----END PUBLIC KEY-----\n", "amt": 5, "ts": 1759651248.710336}
+
+
+
+ Block Appended 
+
+
+Hash Problem
+Actual prev hash: 7fb48c70c77457efe9ea37a81ed76837daf02cb1d25affbf6bf72752578e0d5a
+My prev hash: f7dad9d48f688c73a8f12c6e85f29de6e63fdca1fbd79563d1c9616e69aa6a88
+
+Invalid Block
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain
+
+
+Sent out chain requests...
+Received a Chain
+Received a Chain
+
+Current Chain heavier than received chain
+
+Received a Chain
+
+Current Chain heavier than received chain

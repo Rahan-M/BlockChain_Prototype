@@ -575,6 +575,54 @@ class Peer:
                 print("\nInvalid Block\n")
                 return
             
+            try:
+                # Convert Unix timestamp to datetime
+                if isinstance(newBlock.ts, (int, float)):
+                    block_time = datetime.fromtimestamp(newBlock.ts)
+                elif isinstance(newBlock.ts, str):
+                    block_time = datetime.fromisoformat(newBlock.ts)
+                elif isinstance(newBlock.ts, datetime):
+                    block_time = newBlock.ts
+                else:
+                    print("\nInvalid Block (unknown timestamp format)\n")
+                    return
+
+                current_time = datetime.now()
+
+                # Check block isn't from the future (with tolerance for clock skew)
+                if block_time > current_time + timedelta(seconds=10):
+                    print("\nInvalid Block (timestamp in future)\n")
+                    return
+
+                # Check block isn't too old
+                if block_time < current_time - timedelta(seconds=EPOCH_TIME * 2):
+                    print("\nInvalid Block (timestamp too old)\n")
+                    return
+
+                # Verify minimum time since last block
+                if len(Chain.instance.chain) > 0:
+                    last_block_ts = Chain.instance.lastBlock.ts
+                    # Handle the same types for lastBlock timestamp
+                    if isinstance(last_block_ts, (int, float)):
+                        last_block_time = datetime.fromtimestamp(last_block_ts)
+                    elif isinstance(last_block_ts, str):
+                        last_block_time = datetime.fromisoformat(last_block_ts)
+                    elif isinstance(last_block_ts, datetime):
+                        last_block_time = last_block_ts
+                    else:
+                        print("\nInvalid Block (cannot validate timing against last block)\n")
+                        return
+                        
+                    time_diff = (block_time - last_block_time).total_seconds()
+                    
+                    # Blocks shouldn't come faster than the staking registration period
+                    if time_diff < EPOCH_TIME * 5/6:
+                        print(f"\nInvalid Block (created too quickly: {time_diff}s < {EPOCH_TIME * 5/6}s)\n")
+                        return
+            except (ValueError, AttributeError, TypeError, OSError) as e:
+                print(f"\nInvalid Block (bad timestamp format): {e}\n")
+                return
+            
             vk=VerifyingKey.from_pem(msg["block"]["creator"])
             vrf_proof=base64.b64decode(msg["vrf_proof"])
             sign=base64.b64decode(msg.get("sign"))
@@ -584,13 +632,13 @@ class Peer:
                 try:
                     vk.verify(vrf_proof, Chain.instance.epoch_seed().encode())
                 except BadSignatureError as e:
-                    print(f"\nInvalid Block (VRF_PROOF Signature Error), Stake should be slashed {e}\n")
+                    print(f"\nInvalid Block (VRF_PROOF Signature Error) {e}\n")
                     return
 
                 try:
                     vk.verify(sign, str(newBlock).encode())
                 except BadSignatureError as e:
-                    print(f"\nInvalid Block (Block Signature Error), Stake should be slashed {e}\n")
+                    print(f"\nInvalid Block (Block Signature Error) {e}\n")
                     return
                 
                 if(newBlock.seed!=Chain.instance.epoch_seed()):
@@ -610,7 +658,7 @@ class Peer:
                         print(f"\n{str(stake)}\n")
                         vk.verify(stake.sign, str(stake).encode())
                     except BadSignatureError as e:
-                        print(f"\nInvalid Block (Stake Signature Error), Stake should be slashed {e}\n")
+                        print(f"\nInvalid Block (Stake Signature Error) {e}\n")
                         return
 
                     total_amt_staked_2+=stake.amt
@@ -625,9 +673,9 @@ class Peer:
                 newBlock.seed=Chain.instance.epoch_seed()
                 newBlock.vrf_output=vrf_output
                 newBlock.vrf_proof=vrf_proof
- 
+
             except VrfThresholdException as e:
-                print(f"\nInvalid Block (VRF_OUTPUT>THRESHOLD), Stake should be slashed {e}\n")
+                print(f"\nInvalid Block (VRF_OUTPUT>THRESHOLD), {e}\n")
                 return
             
                 
@@ -677,6 +725,8 @@ class Peer:
             block2=self.block_dict_to_block(block2_dict)
             block2.sign=base64.b64decode(msg.get("block2_sign"))
 
+            pos=msg.get("pos")
+
             block1_exists=Chain.instance.chain[msg["pos"]].is_equal(block1)
             block2_exists=Chain.instance.chain[msg["pos"]].is_equal(block2)
             if not (block1_exists or block2_exists):
@@ -695,18 +745,23 @@ class Peer:
                 print("\nBad signature on block 2\n")
                 err2=True
 
-            if(err1 and err2):
-                Chain.instance.chain[pos].is_valid=False
-
-            elif not(err1 or err2): # Both Signatures are correct
+            if(err1 and err2): 
+                print(f"\nInvalid Slashing Evidence")
+                return
+            
+            elif not(err1 or err2) and Chain.instance.chain[pos].is_valid: # Both Signatures are correct and not slashed yet
+                print(f"\nBlock {pos} slashed\n")
                 Chain.instance.chain[pos].is_valid=False
                 Chain.instance.chain[pos].slash_creator=True
+                await self.broadcast_message(msg)
 
             # Fork still exists but longest chain will win
 
             elif (err1 and not err2 and block1_exists) or (err2 and not err1 and block2_exists):
                 Chain.instance.chain=Chain.instance.chain[:pos]
                 # We trim the chain, eventually when a longer chain arrives it will replace this, but this is unlikely too since we don't share slash_announcement in such cases
+                # hmm this means err1 exists but block1 also exists so we trim back to before that block
+                # :pos is not included
 
         elif t=="chain_request":
             if(not Chain.instance):
@@ -756,12 +811,12 @@ class Peer:
                         
                 elif(weight_of_chain(Chain.instance.chain)<weight_of_chain(block_list)):
                     Chain.instance.rewrite(block_list)
-                    print("\nCurrent chain replaced by longer chain\n")
+                    print("\nCurrent chain replaced by heavier chain\n")
                     if self.activate_disk_save == "y":
                         self.save_chain_to_disk()
                 
                 else:
-                    print("\nCurrent Chain Longer than received chain\n")
+                    print("\nCurrent Chain heavier than received chain\n")
 
             async with self.mem_pool_lock:
                 for transaction in self.mem_pool:
@@ -1078,6 +1133,7 @@ class Peer:
                         self.staked_amt=0
                         self.current_stakers.clear()
                         self.current_stakes.clear()
+                        time_since = timedelta(seconds=0)
 
                     else:
                         print(F"\nStake registration period closed, try again in the next epoch, time till next epoch : {EPOCH_TIME-time_since.seconds}\n")
@@ -1091,6 +1147,10 @@ class Peer:
                     amt=int(amt)
                     if(amt>Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes))):
                         print("\nInsufficient bank balance\n")
+                        continue
+
+                    if(amt<=0):
+                        print("\nInvalid amount\n")
                         continue
 
                     await self.send_stake_announcements(amt)

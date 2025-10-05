@@ -347,580 +347,580 @@ class Peer:
                 return new_name
             counter += 1
 
-async def handle_messages(self, websocket, msg):
-    """
-        This is a function to handle messages as the name suggests
-        It faciliates the handshake between client and server. 
-        It also accepts transactions, blocks and chains in the format
-        in which we send them. Then this function recreates these and
-        performs the necessary operations
-    """
-    # Read the handshake protocol within readme to understand the flow of messages
+    async def handle_messages(self, websocket, msg):
+        """
+            This is a function to handle messages as the name suggests
+            It faciliates the handshake between client and server. 
+            It also accepts transactions, blocks and chains in the format
+            in which we send them. Then this function recreates these and
+            performs the necessary operations
+        """
+        # Read the handshake protocol within readme to understand the flow of messages
 
-    t = msg.get("type")
-    id = msg.get("id")
-    # Every message has a type and an id
+        t = msg.get("type")
+        id = msg.get("id")
+        # Every message has a type and an id
 
-    if not t or not id:
-        return
-    if id in self.seen_message_ids:
-        return
-    
-    self.seen_message_ids.add(id)
-
-    if t == "ping":
-        # print("Received Ping")
-        pkt = {
-            "type": "pong",
-            "id": str(uuid.uuid4())
-        }
-        self.seen_message_ids.add(pkt["id"])
-        await websocket.send(json.dumps(pkt))
-
-    elif t == "pong":
-        # print("Received Pong")
-        self.got_pong[websocket] = True
-        if not self.have_sent_peer_info.get(websocket, True):
-            await self.send_peer_info(websocket)
-            self.have_sent_peer_info[websocket] = True
-        # print(f"[Sent peer]")
-
-    elif t == 'peer_info':
-        # print("Received Peer Info")
-        data = msg.get("data")
-        if not data:
+        if not t or not id:
+            return
+        if id in self.seen_message_ids:
             return
         
-        if not all(k in data for k in ['host', 'port', 'name', 'public_key']):
-            return
-        
-        normalized_self = normalize_endpoint((self.host, self.port))
-        normalized_endpoint = normalize_endpoint((data['host'], data['port']))
-        if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
-            self.known_peers[normalized_endpoint] = (data['name'], data['public_key'])
-            if self.activate_disk_save == "y":
-                self.save_known_peers_to_disk()
-            self.name_to_public_key_dict[data['name'].lower()] = data['public_key']
-            print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
-            await self.send_known_peers(websocket)
+        self.seen_message_ids.add(id)
 
-    elif t == "add_peer":
-        data = msg.get("data")
-        if not data:
-            return
-        
-        if not all(k in data for k in ['host', 'port', 'name', 'public_key']):
-            return
-        
-        normalized_self = normalize_endpoint((self.host, self.port))
-        normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
-        new_peer_msg_id = str(uuid.uuid4())
-        if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
-            proposed_name = self.get_unique_name(data["name"])
-            if proposed_name != data["name"]:
-                pkt = {
-                    "type": "change_name",
-                    "id": str(uuid.uuid4()),
-                    "new_peer_msg_id": new_peer_msg_id,
-                    "new_name": proposed_name
-                }
-                await websocket.send(json.dumps(pkt))
-                data["name"] = proposed_name
-            self.known_peers[normalized_endpoint] = (data["name"], data["public_key"])
-            if self.activate_disk_save == "y":
-                self.save_known_peers_to_disk()
-            self.name_to_public_key_dict[data["name"].lower()] = data["public_key"]
-            print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
-            await self.send_known_peers(websocket)
+        if t == "ping":
+            # print("Received Ping")
             pkt = {
-                "type": "new_peer",
-                "id": new_peer_msg_id,
-                "data": {
-                    "host": data["host"],
-                    "port": data["port"],
-                    "name": data["name"],
-                    "public_key": data["public_key"]
-                }
+                "type": "pong",
+                "id": str(uuid.uuid4())
             }
             self.seen_message_ids.add(pkt["id"])
-            await self.broadcast_message(pkt)
+            await websocket.send(json.dumps(pkt))
 
-    elif t == "new_peer":
-        data = msg.get("data")
-        if not data:
-            return
-        
-        if not all(k in data for k in ['host', 'port', 'name', 'public_key']):
-            return
-        
-        normalized_self = normalize_endpoint((self.host, self.port))
-        normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
-        if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
-            self.known_peers[normalized_endpoint] = (data["name"], data["public_key"])
-            if self.activate_disk_save == "y":
-                self.save_known_peers_to_disk()
-            self.name_to_public_key_dict[data["name"].lower()] = data["public_key"]
-            print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
-            await self.broadcast_message(msg)
+        elif t == "pong":
+            # print("Received Pong")
+            self.got_pong[websocket] = True
+            if not self.have_sent_peer_info.get(websocket, True):
+                await self.send_peer_info(websocket)
+                self.have_sent_peer_info[websocket] = True
+            # print(f"[Sent peer]")
 
-    elif t == "change_name":
-        new_name = msg.get("new_name")
-        new_peer_msg_id = msg.get("new_peer_msg_id")
-        if not new_name or not new_peer_msg_id:
-            return
-        
-        self.name = new_name
-        self.seen_message_ids.add(new_peer_msg_id)
-
-    elif t == "known_peers":
-        # print("Received Known Peers")
-        peers = msg.get("peers")
-        if not peers:
-            return
-        
-        new_peer_found = False
-        for peer in peers:
-            if not all(k in peer for k in ['host', 'port', 'name', 'public_key']):
-                continue
+        elif t == 'peer_info':
+            # print("Received Peer Info")
+            data = msg.get("data")
+            if not data:
+                return
+            
+            if not all(k in data for k in ['host', 'port', 'name', 'public_key']):
+                return
             
             normalized_self = normalize_endpoint((self.host, self.port))
-            normalized_endpoint = normalize_endpoint((peer['host'], peer['port']))
+            normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
-                print(f"Discovered peer {peer['name']} at {peer['host']}:{peer['port']}")
-                new_peer_found = True
-                self.known_peers[normalized_endpoint] = (peer['name'], peer['public_key'])
-                self.name_to_public_key_dict[peer['name'].lower()] = peer['public_key']
-        if new_peer_found:
-            if self.activate_disk_save == "y":
-                self.save_known_peers_to_disk()
-        pkt = {
-            "type": "chain_request",
-            "id": str(uuid.uuid4())
-        }
-        await websocket.send(json.dumps(pkt))
+                self.known_peers[normalized_endpoint] = (data['name'], data['public_key'])
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
+                self.name_to_public_key_dict[data['name'].lower()] = data['public_key']
+                print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
+                await self.send_known_peers(websocket)
 
-    elif t == "file":
-        cid = msg.get("cid")
-        desc = msg.get("desc")
-        if not cid or not desc:
-            return
-        
-        async with self.file_hashes_lock:
-            self.file_hashes[cid] = desc
-
-        await self.broadcast_message(msg)
-
-    elif t == "new_tx":
-        tx_str = msg.get("transaction")
-        sender_pem = msg.get("sender_pem")
-        sign = msg.get("sign")
-        
-        if not tx_str or not sender_pem or not sign:
-            return
-        
-        try:
-            tx = json.loads(tx_str)
-        except json.JSONDecodeError:
-            return
-        
-        if not all(k in tx for k in ['payload', 'sender', 'receiver', 'id', 'ts']):
-            return
-        
-        amount = 0
-        if tx['receiver'] == "deploy" or tx['receiver'] == "invoke":
-            if not isinstance(tx['payload'], list) or len(tx['payload']) == 0:
-                return
-            amount = tx['payload'][-1]
-        else:
-            amount = tx['payload']
-        
-        if amount <= 0:
-            print("\nInvalid Transaction, amount<=0\n")
-            return
-        
-        transaction = Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
-        if Chain.instance.transaction_exists_in_chain(transaction):
-            print(f"{self.name} Transaction already exists in chain")
-            return
-        
-        try:
-            sign_bytes = base64.b64decode(sign)
-        except Exception:
-            print("Invalid signature encoding")
-            return
-
-        if transaction.receiver == "deploy":
-            if not self.valid_deploy_transaction(transaction.payload):
-                return
-        if transaction.receiver == "invoke":
-            if not self.valid_invoke_transaction(transaction.payload):
+        elif t == "add_peer":
+            data = msg.get("data")
+            if not data:
                 return
             
-        if amount > Chain.instance.calc_balance(transaction.sender, self.mem_pool, list(self.current_stakes)):
-            print("\nAttempt to spend more than one has, Invalid transaction\n")
-            return
-
-        try:
-            public_key = VerifyingKey.from_pem(sender_pem.encode())
-            public_key.verify(
-                sign_bytes,
-                tx_str.encode()
-            )
-        except BadSignatureError as e:
-            print("Invalid Signature")
-            return
-        
-        transaction.sign = sign_bytes
-        
-        print("\nValid Transaction")
-        print(f"\n{msg['type']}: {msg['transaction']}")
-        print("\n")
-
-        async with self.mem_pool_lock:
-            self.mem_pool.append(transaction)
-        await self.broadcast_message(msg)
-
-    elif t == "stake_announcement":
-        stake_dict = msg.get("stake")
-        if not stake_dict:
-            return
-        
-        if not all(k in stake_dict for k in ["staker", "amt", "ts", "id", "sign"]):
-            return
-        
-        stake = Stake(stake_dict["staker"], stake_dict["amt"], stake_dict["ts"])
-        stake.id = stake_dict.get("id")
-
-        pid = stake.staker
-        amt = stake.amt
-
-        if pid and amt:
-            if amt <= 0:
+            if not all(k in data for k in ['host', 'port', 'name', 'public_key']):
                 return
             
-            try:
-                sign = base64.b64decode(stake_dict["sign"])
-            except Exception:
-                print("\nInvalid signature encoding\n")
-                return
+            normalized_self = normalize_endpoint((self.host, self.port))
+            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            new_peer_msg_id = str(uuid.uuid4())
+            if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
+                proposed_name = self.get_unique_name(data["name"])
+                if proposed_name != data["name"]:
+                    pkt = {
+                        "type": "change_name",
+                        "id": str(uuid.uuid4()),
+                        "new_peer_msg_id": new_peer_msg_id,
+                        "new_name": proposed_name
+                    }
+                    await websocket.send(json.dumps(pkt))
+                    data["name"] = proposed_name
+                self.known_peers[normalized_endpoint] = (data["name"], data["public_key"])
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
+                self.name_to_public_key_dict[data["name"].lower()] = data["public_key"]
+                print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
+                await self.send_known_peers(websocket)
+                pkt = {
+                    "type": "new_peer",
+                    "id": new_peer_msg_id,
+                    "data": {
+                        "host": data["host"],
+                        "port": data["port"],
+                        "name": data["name"],
+                        "public_key": data["public_key"]
+                    }
+                }
+                self.seen_message_ids.add(pkt["id"])
+                await self.broadcast_message(pkt)
 
-            try:
-                vk = VerifyingKey.from_pem(pid)
-                vk.verify(sign, str(stake).encode())
-            except BadSignatureError:
-                print("\nWrong signature\n")
+        elif t == "new_peer":
+            data = msg.get("data")
+            if not data:
                 return
-
-            if stake.amt > Chain.instance.calc_balance(stake.staker, self.mem_pool, list(self.current_stakes)):
-                print("\nInvalid stake, staked more than available\n")
+            
+            if not all(k in data for k in ['host', 'port', 'name', 'public_key']):
                 return
+            
+            normalized_self = normalize_endpoint((self.host, self.port))
+            normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
+            if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
+                self.known_peers[normalized_endpoint] = (data["name"], data["public_key"])
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
+                self.name_to_public_key_dict[data["name"].lower()] = data["public_key"]
+                print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
+                await self.broadcast_message(msg)
 
-            async with self.curr_stakers_condition:
-                self.current_stakes.add(stake)
-                self.current_stakers[pid] = int(amt)
-                print(f"New stake : {pid}:{amt}")
+        elif t == "change_name":
+            new_name = msg.get("new_name")
+            new_peer_msg_id = msg.get("new_peer_msg_id")
+            if not new_name or not new_peer_msg_id:
+                return
+            
+            self.name = new_name
+            self.seen_message_ids.add(new_peer_msg_id)
+
+        elif t == "known_peers":
+            # print("Received Known Peers")
+            peers = msg.get("peers")
+            if not peers:
+                return
+            
+            new_peer_found = False
+            for peer in peers:
+                if not all(k in peer for k in ['host', 'port', 'name', 'public_key']):
+                    continue
+                
+                normalized_self = normalize_endpoint((self.host, self.port))
+                normalized_endpoint = normalize_endpoint((peer['host'], peer['port']))
+                if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
+                    print(f"Discovered peer {peer['name']} at {peer['host']}:{peer['port']}")
+                    new_peer_found = True
+                    self.known_peers[normalized_endpoint] = (peer['name'], peer['public_key'])
+                    self.name_to_public_key_dict[peer['name'].lower()] = peer['public_key']
+            if new_peer_found:
+                if self.activate_disk_save == "y":
+                    self.save_known_peers_to_disk()
+            pkt = {
+                "type": "chain_request",
+                "id": str(uuid.uuid4())
+            }
+            await websocket.send(json.dumps(pkt))
+
+        elif t == "file":
+            cid = msg.get("cid")
+            desc = msg.get("desc")
+            if not cid or not desc:
+                return
+            
+            async with self.file_hashes_lock:
+                self.file_hashes[cid] = desc
+
             await self.broadcast_message(msg)
 
-    elif t == "new_block":
-        new_block_dict = msg.get("block")
-        vrf_proof_str = msg.get("vrf_proof")
-        sign_str = msg.get("sign")
-        
-        if not new_block_dict or not vrf_proof_str or not sign_str:
-            return
-        
-        if "creator" not in new_block_dict:
-            return
-        
-        newBlock = self.block_dict_to_block(new_block_dict)
-
-        if not Chain.instance.isValidBlock(newBlock):
-            print("\nInvalid Block\n")
-            return
-        
-        try:
-            # Convert Unix timestamp to datetime
-            if isinstance(newBlock.ts, (int, float)):
-                block_time = datetime.fromtimestamp(newBlock.ts)
-            elif isinstance(newBlock.ts, str):
-                block_time = datetime.fromisoformat(newBlock.ts)
-            elif isinstance(newBlock.ts, datetime):
-                block_time = newBlock.ts
+        elif t == "new_tx":
+            tx_str = msg.get("transaction")
+            sender_pem = msg.get("sender_pem")
+            sign = msg.get("sign")
+            
+            if not tx_str or not sender_pem or not sign:
+                return
+            
+            try:
+                tx = json.loads(tx_str)
+            except json.JSONDecodeError:
+                return
+            
+            if not all(k in tx for k in ['payload', 'sender', 'receiver', 'id', 'ts']):
+                return
+            
+            amount = 0
+            if tx['receiver'] == "deploy" or tx['receiver'] == "invoke":
+                if not isinstance(tx['payload'], list) or len(tx['payload']) == 0:
+                    return
+                amount = tx['payload'][-1]
             else:
-                print("\nInvalid Block (unknown timestamp format)\n")
+                amount = tx['payload']
+            
+            if amount <= 0:
+                print("\nInvalid Transaction, amount<=0\n")
                 return
-
-            current_time = datetime.now()
-
-            # Check block isn't from the future (with tolerance for clock skew)
-            if block_time > current_time + timedelta(seconds=10):
-                print("\nInvalid Block (timestamp in future)\n")
+            
+            transaction = Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
+            if Chain.instance.transaction_exists_in_chain(transaction):
+                print(f"{self.name} Transaction already exists in chain")
                 return
-
-            # Check block isn't too old
-            if block_time < current_time - timedelta(seconds=EPOCH_TIME * 2):
-                print("\nInvalid Block (timestamp too old)\n")
-                return
-
-            # Verify minimum time since last block
-            if len(Chain.instance.chain) > 0:
-                last_block_ts = Chain.instance.lastBlock.ts
-                # Handle the same types for lastBlock timestamp
-                if isinstance(last_block_ts, (int, float)):
-                    last_block_time = datetime.fromtimestamp(last_block_ts)
-                elif isinstance(last_block_ts, str):
-                    last_block_time = datetime.fromisoformat(last_block_ts)
-                elif isinstance(last_block_ts, datetime):
-                    last_block_time = last_block_ts
-                else:
-                    print("\nInvalid Block (cannot validate timing against last block)\n")
-                    return
-                    
-                time_diff = (block_time - last_block_time).total_seconds()
-                
-                # Blocks shouldn't come faster than the staking registration period
-                if time_diff < EPOCH_TIME * 5/6:
-                    print(f"\nInvalid Block (created too quickly: {time_diff}s < {EPOCH_TIME * 5/6}s)\n")
-                    return
-        except (ValueError, AttributeError, TypeError, OSError) as e:
-            print(f"\nInvalid Block (bad timestamp format): {e}\n")
-            return
-        
-        try:
-            vk = VerifyingKey.from_pem(new_block_dict["creator"])
-            vrf_proof = base64.b64decode(vrf_proof_str)
-            sign = base64.b64decode(sign_str)
-        except Exception as e:
-            print(f"\nInvalid Block (encoding error): {e}\n")
-            return
-
-        print(f"\n{new_block_dict}\n")
-        try:
+            
             try:
-                vk.verify(vrf_proof, Chain.instance.epoch_seed().encode())
-            except BadSignatureError as e:
-                print(f"\nInvalid Block (VRF_PROOF Signature Error) {e}\n")
+                sign_bytes = base64.b64decode(sign)
+            except Exception:
+                print("Invalid signature encoding")
                 return
 
-            try:
-                vk.verify(sign, str(newBlock).encode())
-            except BadSignatureError as e:
-                print(f"\nInvalid Block (Block Signature Error) {e}\n")
-                return
-            
-            if newBlock.seed != Chain.instance.epoch_seed():
-                print("\nSeed May Have Been Altered\n")
-                return
-
-            newBlock.sign = sign
-            vrf_output = hashlib.sha256(vrf_proof).hexdigest()
-            vrf_output_int = int(vrf_output, 16)
-            
-            creator_key = new_block_dict["creator"]
-            if creator_key not in self.current_stakers:
-                print("\nInvalid Block (creator not in current stakers)\n")
-                return
-            
-            staked_amt = self.current_stakers[creator_key]
-            total_amt_staked = sum(self.current_stakers.values())
-
-            total_amt_staked_2 = 0
-            for stake in newBlock.stakers:
-                vk = VerifyingKey.from_pem(stake.staker)
-                try:
-                    print(f"\n{str(stake)}\n")
-                    vk.verify(stake.sign, str(stake).encode())
-                except BadSignatureError as e:
-                    print(f"\nInvalid Block (Stake Signature Error) {e}\n")
-                    return
-
-                total_amt_staked_2 += stake.amt
-
-            if total_amt_staked > total_amt_staked_2:
-                print(f"\nSome stakes may have been ignored stakes_in_block 1:{total_amt_staked} 2:{total_amt_staked_2}\n")
-                return
-
-            threshold = (staked_amt / total_amt_staked_2) * MAX_OUTPUT
-            if vrf_output_int >= threshold:
-                raise VrfThresholdException("VRF_Output is not less than threshold")
-            newBlock.seed = Chain.instance.epoch_seed()
-            newBlock.vrf_output = vrf_output
-            newBlock.vrf_proof = vrf_proof
-
-        except VrfThresholdException as e:
-            print(f"\nInvalid Block (VRF_OUTPUT>THRESHOLD), {e}\n")
-            return
-        
-            
-        for transaction in newBlock.transactions:
-            if transaction.receiver == "invoke":
-                if not self.valid_invoke_transaction(transaction.payload):
-                    return
             if transaction.receiver == "deploy":
                 if not self.valid_deploy_transaction(transaction.payload):
                     return
+            if transaction.receiver == "invoke":
+                if not self.valid_invoke_transaction(transaction.payload):
+                    return
+                
+            if amount > Chain.instance.calc_balance(transaction.sender, self.mem_pool, list(self.current_stakes)):
+                print("\nAttempt to spend more than one has, Invalid transaction\n")
+                return
 
-        newBlock.creator = new_block_dict["creator"]
-        Chain.instance.chain.append(newBlock)
-        print("\n\n Block Appended \n\n")
-        self.last_epoch_end_ts = datetime.now()
+            try:
+                public_key = VerifyingKey.from_pem(sender_pem.encode())
+                public_key.verify(
+                    sign_bytes,
+                    tx_str.encode()
+                )
+            except BadSignatureError as e:
+                print("Invalid Signature")
+                return
+            
+            transaction.sign = sign_bytes
+            
+            print("\nValid Transaction")
+            print(f"\n{msg['type']}: {msg['transaction']}")
+            print("\n")
 
-        for transaction in newBlock.transactions:
-            if transaction.receiver == "deploy":
-                self.deploy_contract(transaction)
-
-        async with self.mem_pool_lock:
-            for transaction in self.mem_pool:
-                if newBlock.transaction_exists_in_block(transaction):
-                    self.mem_pool.remove(transaction)
-        
-        async with self.file_hashes_lock:
-            for hash in list(self.file_hashes.keys()):
-                if newBlock.cid_exists_in_block(hash):
-                    self.file_hashes.pop(hash, None)
-        
-        self.staked_amt = 0
-        async with self.curr_stakers_condition:
-            self.current_stakers.clear()
-            self.current_stakes.clear()
-
-        await self.broadcast_message(msg)
-        if self.activate_disk_save == "y":
-            self.save_chain_to_disk()
-
-    elif t == "slash_announcement":
-        block1_dict = msg.get("evidence1")
-        block1_sign = msg.get("block1_sign")
-        block2_dict = msg.get("evidence2")
-        block2_sign = msg.get("block2_sign")
-        pos = msg.get("pos")
-        
-        if not all([block1_dict, block1_sign, block2_dict, block2_sign, pos is not None]):
-            return
-        
-        block1 = self.block_dict_to_block(block1_dict)
-        try:
-            block1.sign = base64.b64decode(block1_sign)
-        except Exception:
-            return
-        
-        if not hasattr(block1, 'creator') or not block1.creator:
-            return
-        
-        vk = VerifyingKey.from_pem(block1.creator)
-        
-        block2 = self.block_dict_to_block(block2_dict)
-        try:
-            block2.sign = base64.b64decode(block2_sign)
-        except Exception:
-            return
-
-        if pos < 0 or pos >= len(Chain.instance.chain):
-            return
-
-        block1_exists = Chain.instance.chain[pos].is_equal(block1)
-        block2_exists = Chain.instance.chain[pos].is_equal(block2)
-        if not (block1_exists or block2_exists):
-            return
-
-        err1, err2 = False, False
-
-        try:
-            vk.verify(block1.sign, str(block1).encode())
-        except BadSignatureError:
-            print("\nBad signature on block 1\n")
-            err1 = True
-        try:
-            vk.verify(block2.sign, str(block2).encode())
-        except BadSignatureError:
-            print("\nBad signature on block 2\n")
-            err2 = True
-
-        if err1 and err2:
-            print(f"\nInvalid Slashing Evidence")
-            return
-        
-        elif not(err1 or err2) and Chain.instance.chain[pos].is_valid:  # Both Signatures are correct and not slashed yet
-            print(f"\nBlock {pos} slashed\n")
-            Chain.instance.chain[pos].is_valid = False
-            Chain.instance.chain[pos].slash_creator = True
+            async with self.mem_pool_lock:
+                self.mem_pool.append(transaction)
             await self.broadcast_message(msg)
 
-        # Fork still exists but longest chain will win
+        elif t == "stake_announcement":
+            stake_dict = msg.get("stake")
+            if not stake_dict:
+                return
+            
+            if not all(k in stake_dict for k in ["staker", "amt", "ts", "id", "sign"]):
+                return
+            
+            stake = Stake(stake_dict["staker"], stake_dict["amt"], stake_dict["ts"])
+            stake.id = stake_dict.get("id")
 
-        elif (err1 and not err2 and block1_exists) or (err2 and not err1 and block2_exists):
-            Chain.instance.chain = Chain.instance.chain[:pos]
-            # We trim the chain, eventually when a longer chain arrives it will replace this, but this is unlikely too since we don't share slash_announcement in such cases
-            # hmm this means err1 exists but block1 also exists so we trim back to before that block
-            # :pos is not included
+            pid = stake.staker
+            amt = stake.amt
 
-    elif t == "chain_request":
-        if not Chain.instance:
-            return
+            if pid and amt:
+                if amt <= 0:
+                    return
+                
+                try:
+                    sign = base64.b64decode(stake_dict["sign"])
+                except Exception:
+                    print("\nInvalid signature encoding\n")
+                    return
 
-        pkt = {
-            "type": "chain",
-            "id": str(uuid.uuid4()),
-            "chain": Chain.instance.to_block_dict_list()
-        }
-        await websocket.send(json.dumps(pkt))
+                try:
+                    vk = VerifyingKey.from_pem(pid)
+                    vk.verify(sign, str(stake).encode())
+                except BadSignatureError:
+                    print("\nWrong signature\n")
+                    return
 
-    elif t == "chain":
-        print("Received a Chain")
-        block_dict_list = msg.get("chain")
-        if not block_dict_list:
-            return
-        
-        block_list = []
+                if stake.amt > Chain.instance.calc_balance(stake.staker, self.mem_pool, list(self.current_stakes)):
+                    print("\nInvalid stake, staked more than available\n")
+                    return
 
-        for block_dict in block_dict_list:
-            block = self.block_dict_to_block(block_dict)
-            block_list.append(block)
+                async with self.curr_stakers_condition:
+                    self.current_stakes.add(stake)
+                    self.current_stakers[pid] = int(amt)
+                    print(f"New stake : {pid}:{amt}")
+                await self.broadcast_message(msg)
 
-        if not isvalidChain(block_list):
-            print("\nInvalid Chain\n")
-            return
+        elif t == "new_block":
+            new_block_dict = msg.get("block")
+            vrf_proof_str = msg.get("vrf_proof")
+            sign_str = msg.get("sign")
+            
+            if not new_block_dict or not vrf_proof_str or not sign_str:
+                return
+            
+            if "creator" not in new_block_dict:
+                return
+            
+            newBlock = self.block_dict_to_block(new_block_dict)
 
-        # If chain doesn't already exist we assign this as the chain
-        if not self.chain:
-            self.chain = Chain(blockList=block_list)
+            if not Chain.instance.isValidBlock(newBlock):
+                print("\nInvalid Block\n")
+                return
+            
+            try:
+                # Convert Unix timestamp to datetime
+                if isinstance(newBlock.ts, (int, float)):
+                    block_time = datetime.fromtimestamp(newBlock.ts)
+                elif isinstance(newBlock.ts, str):
+                    block_time = datetime.fromisoformat(newBlock.ts)
+                elif isinstance(newBlock.ts, datetime):
+                    block_time = newBlock.ts
+                else:
+                    print("\nInvalid Block (unknown timestamp format)\n")
+                    return
+
+                current_time = datetime.now()
+
+                # Check block isn't from the future (with tolerance for clock skew)
+                if block_time > current_time + timedelta(seconds=10):
+                    print("\nInvalid Block (timestamp in future)\n")
+                    return
+
+                # Check block isn't too old
+                if block_time < current_time - timedelta(seconds=EPOCH_TIME * 2):
+                    print("\nInvalid Block (timestamp too old)\n")
+                    return
+
+                # Verify minimum time since last block
+                if len(Chain.instance.chain) > 0:
+                    last_block_ts = Chain.instance.lastBlock.ts
+                    # Handle the same types for lastBlock timestamp
+                    if isinstance(last_block_ts, (int, float)):
+                        last_block_time = datetime.fromtimestamp(last_block_ts)
+                    elif isinstance(last_block_ts, str):
+                        last_block_time = datetime.fromisoformat(last_block_ts)
+                    elif isinstance(last_block_ts, datetime):
+                        last_block_time = last_block_ts
+                    else:
+                        print("\nInvalid Block (cannot validate timing against last block)\n")
+                        return
+                        
+                    time_diff = (block_time - last_block_time).total_seconds()
+                    
+                    # Blocks shouldn't come faster than the staking registration period
+                    if time_diff < EPOCH_TIME * 5/6:
+                        print(f"\nInvalid Block (created too quickly: {time_diff}s < {EPOCH_TIME * 5/6}s)\n")
+                        return
+            except (ValueError, AttributeError, TypeError, OSError) as e:
+                print(f"\nInvalid Block (bad timestamp format): {e}\n")
+                return
+            
+            try:
+                vk = VerifyingKey.from_pem(new_block_dict["creator"])
+                vrf_proof = base64.b64decode(vrf_proof_str)
+                sign = base64.b64decode(sign_str)
+            except Exception as e:
+                print(f"\nInvalid Block (encoding error): {e}\n")
+                return
+
+            print(f"\n{new_block_dict}\n")
+            try:
+                try:
+                    vk.verify(vrf_proof, Chain.instance.epoch_seed().encode())
+                except BadSignatureError as e:
+                    print(f"\nInvalid Block (VRF_PROOF Signature Error) {e}\n")
+                    return
+
+                try:
+                    vk.verify(sign, str(newBlock).encode())
+                except BadSignatureError as e:
+                    print(f"\nInvalid Block (Block Signature Error) {e}\n")
+                    return
+                
+                if newBlock.seed != Chain.instance.epoch_seed():
+                    print("\nSeed May Have Been Altered\n")
+                    return
+
+                newBlock.sign = sign
+                vrf_output = hashlib.sha256(vrf_proof).hexdigest()
+                vrf_output_int = int(vrf_output, 16)
+                
+                creator_key = new_block_dict["creator"]
+                if creator_key not in self.current_stakers:
+                    print("\nInvalid Block (creator not in current stakers)\n")
+                    return
+                
+                staked_amt = self.current_stakers[creator_key]
+                total_amt_staked = sum(self.current_stakers.values())
+
+                total_amt_staked_2 = 0
+                for stake in newBlock.stakers:
+                    vk = VerifyingKey.from_pem(stake.staker)
+                    try:
+                        print(f"\n{str(stake)}\n")
+                        vk.verify(stake.sign, str(stake).encode())
+                    except BadSignatureError as e:
+                        print(f"\nInvalid Block (Stake Signature Error) {e}\n")
+                        return
+
+                    total_amt_staked_2 += stake.amt
+
+                if total_amt_staked > total_amt_staked_2:
+                    print(f"\nSome stakes may have been ignored stakes_in_block 1:{total_amt_staked} 2:{total_amt_staked_2}\n")
+                    return
+
+                threshold = (staked_amt / total_amt_staked_2) * MAX_OUTPUT
+                if vrf_output_int >= threshold:
+                    raise VrfThresholdException("VRF_Output is not less than threshold")
+                newBlock.seed = Chain.instance.epoch_seed()
+                newBlock.vrf_output = vrf_output
+                newBlock.vrf_proof = vrf_proof
+
+            except VrfThresholdException as e:
+                print(f"\nInvalid Block (VRF_OUTPUT>THRESHOLD), {e}\n")
+                return
+            
+                
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "invoke":
+                    if not self.valid_invoke_transaction(transaction.payload):
+                        return
+                if transaction.receiver == "deploy":
+                    if not self.valid_deploy_transaction(transaction.payload):
+                        return
+
+            newBlock.creator = new_block_dict["creator"]
+            Chain.instance.chain.append(newBlock)
+            print("\n\n Block Appended \n\n")
+            self.last_epoch_end_ts = datetime.now()
+
+            for transaction in newBlock.transactions:
+                if transaction.receiver == "deploy":
+                    self.deploy_contract(transaction)
+
+            async with self.mem_pool_lock:
+                for transaction in self.mem_pool:
+                    if newBlock.transaction_exists_in_block(transaction):
+                        self.mem_pool.remove(transaction)
+            
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if newBlock.cid_exists_in_block(hash):
+                        self.file_hashes.pop(hash, None)
+            
+            self.staked_amt = 0
+            async with self.curr_stakers_condition:
+                self.current_stakers.clear()
+                self.current_stakes.clear()
+
+            await self.broadcast_message(msg)
             if self.activate_disk_save == "y":
                 self.save_chain_to_disk()
-            
-        else:
-            pos = Chain.instance.checkEquivalence(block_list)
-            if pos != -1:
-                block1 = Chain.instance.chain[pos]
-                block2 = block_list[pos]
 
-                if block1.creator != block2.creator:  # Non malicious fork
-                    l1 = len(Chain.instance.chain)
-                    l2 = len(block_list)
-                    if l2 > l1:
-                        Chain.instance.rewrite(block_list)
-                        if self.activate_disk_save == "y":
-                            self.save_chain_to_disk()
-                else:  # Malicious fork
-                    await self.verify_and_slash(block1, block2, pos, block_list)
-                    
-            elif weight_of_chain(Chain.instance.chain) < weight_of_chain(block_list):
-                Chain.instance.rewrite(block_list)
-                print("\nCurrent chain replaced by heavier chain\n")
+        elif t == "slash_announcement":
+            block1_dict = msg.get("evidence1")
+            block1_sign = msg.get("block1_sign")
+            block2_dict = msg.get("evidence2")
+            block2_sign = msg.get("block2_sign")
+            pos = msg.get("pos")
+            
+            if not all([block1_dict, block1_sign, block2_dict, block2_sign, pos is not None]):
+                return
+            
+            block1 = self.block_dict_to_block(block1_dict)
+            try:
+                block1.sign = base64.b64decode(block1_sign)
+            except Exception:
+                return
+            
+            if not hasattr(block1, 'creator') or not block1.creator:
+                return
+            
+            vk = VerifyingKey.from_pem(block1.creator)
+            
+            block2 = self.block_dict_to_block(block2_dict)
+            try:
+                block2.sign = base64.b64decode(block2_sign)
+            except Exception:
+                return
+
+            if pos < 0 or pos >= len(Chain.instance.chain):
+                return
+
+            block1_exists = Chain.instance.chain[pos].is_equal(block1)
+            block2_exists = Chain.instance.chain[pos].is_equal(block2)
+            if not (block1_exists or block2_exists):
+                return
+
+            err1, err2 = False, False
+
+            try:
+                vk.verify(block1.sign, str(block1).encode())
+            except BadSignatureError:
+                print("\nBad signature on block 1\n")
+                err1 = True
+            try:
+                vk.verify(block2.sign, str(block2).encode())
+            except BadSignatureError:
+                print("\nBad signature on block 2\n")
+                err2 = True
+
+            if err1 and err2:
+                print(f"\nInvalid Slashing Evidence")
+                return
+            
+            elif not(err1 or err2) and Chain.instance.chain[pos].is_valid:  # Both Signatures are correct and not slashed yet
+                print(f"\nBlock {pos} slashed\n")
+                Chain.instance.chain[pos].is_valid = False
+                Chain.instance.chain[pos].slash_creator = True
+                await self.broadcast_message(msg)
+
+            # Fork still exists but longest chain will win
+
+            elif (err1 and not err2 and block1_exists) or (err2 and not err1 and block2_exists):
+                Chain.instance.chain = Chain.instance.chain[:pos]
+                # We trim the chain, eventually when a longer chain arrives it will replace this, but this is unlikely too since we don't share slash_announcement in such cases
+                # hmm this means err1 exists but block1 also exists so we trim back to before that block
+                # :pos is not included
+
+        elif t == "chain_request":
+            if not Chain.instance:
+                return
+
+            pkt = {
+                "type": "chain",
+                "id": str(uuid.uuid4()),
+                "chain": Chain.instance.to_block_dict_list()
+            }
+            await websocket.send(json.dumps(pkt))
+
+        elif t == "chain":
+            print("Received a Chain")
+            block_dict_list = msg.get("chain")
+            if not block_dict_list:
+                return
+            
+            block_list = []
+
+            for block_dict in block_dict_list:
+                block = self.block_dict_to_block(block_dict)
+                block_list.append(block)
+
+            if not isvalidChain(block_list):
+                print("\nInvalid Chain\n")
+                return
+
+            # If chain doesn't already exist we assign this as the chain
+            if not self.chain:
+                self.chain = Chain(blockList=block_list)
                 if self.activate_disk_save == "y":
                     self.save_chain_to_disk()
-            
+                
             else:
-                print("\nCurrent Chain heavier than received chain\n")
+                pos = Chain.instance.checkEquivalence(block_list)
+                if pos != -1:
+                    block1 = Chain.instance.chain[pos]
+                    block2 = block_list[pos]
 
-        async with self.mem_pool_lock:
-            for transaction in self.mem_pool:
-                if Chain.instance.transaction_exists_in_chain(transaction):
-                    self.mem_pool.remove(transaction)
-        
-        async with self.file_hashes_lock:
-            for hash in list(self.file_hashes.keys()):
-                if Chain.instance.cid_exists_in_chain(hash):
-                    self.file_hashes.pop(hash, None)
+                    if block1.creator != block2.creator:  # Non malicious fork
+                        l1 = len(Chain.instance.chain)
+                        l2 = len(block_list)
+                        if l2 > l1:
+                            Chain.instance.rewrite(block_list)
+                            if self.activate_disk_save == "y":
+                                self.save_chain_to_disk()
+                    else:  # Malicious fork
+                        await self.verify_and_slash(block1, block2, pos, block_list)
+                        
+                elif weight_of_chain(Chain.instance.chain) < weight_of_chain(block_list):
+                    Chain.instance.rewrite(block_list)
+                    print("\nCurrent chain replaced by heavier chain\n")
+                    if self.activate_disk_save == "y":
+                        self.save_chain_to_disk()
+                
+                else:
+                    print("\nCurrent Chain heavier than received chain\n")
+
+            async with self.mem_pool_lock:
+                for transaction in self.mem_pool:
+                    if Chain.instance.transaction_exists_in_chain(transaction):
+                        self.mem_pool.remove(transaction)
+            
+            async with self.file_hashes_lock:
+                for hash in list(self.file_hashes.keys()):
+                    if Chain.instance.cid_exists_in_chain(hash):
+                        self.file_hashes.pop(hash, None)
 
     async def verify_and_slash(self, block1:Block, block2:Block, pos:int, block_list:List[Block]):
         vk=VerifyingKey.from_pem(block1.creator)

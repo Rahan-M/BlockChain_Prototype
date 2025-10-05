@@ -146,7 +146,16 @@ IPFS is integrated as a wrapper for the existing IPFS network. IPFS hashes of th
 ### Persistent Storage
 Persistent storage is implemented to enable nodes to reconnect to the network using there previous network data
 ### Malicious Node
+- To test the security and robustness of our networks we created a malicious node that attempts
+    1. Generate invalid transactions (amt>account balance or amount<=0)
+    2. Double Sign
+- We have tested our blockchain networks using this malicious nodes to verify that our protocols are working and that our network is functional
+ 
 ### Web Interface
+- We have debeloped a web interface for people uncomfortable with a CLI
+- We used hypercorn to run flask as an ASGI so that we can run the event loop
+- necessary to run our blockchain network's nodes.
+- We use react on the frontend and flask(ASGI) + Hypercorn in the backend
 
 ## How to run this project
 ### Prerequisites

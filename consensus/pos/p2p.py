@@ -1619,6 +1619,7 @@ class Peer:
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
+        sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
 
         await inp_task
@@ -1626,3 +1627,4 @@ class Peer:
         reset_task.cancel()
         disc_task.cancel()
         consensus_task.cancel()
+        sampler_task.cancel()

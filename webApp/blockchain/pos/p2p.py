@@ -164,6 +164,7 @@ class Peer:
         self.disc_task=None
         self.reset_task=None
         self.consensus_task=None
+        self.sampler_task=None
         self.server=None
         self.outgoing_conn_task=None
         self.keepalive_task=None
@@ -1432,6 +1433,7 @@ class Peer:
         reset_task=asyncio.create_task(self.restart_epoch())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
+        sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
         self.init_repo()
         self.configure_ports()
@@ -1443,6 +1445,7 @@ class Peer:
         self.consensus_task = asyncio.create_task(self.find_longest_chain())
         self.disc_task = asyncio.create_task(self.discover_peers())
         self.reset_task=asyncio.create_task(self.restart_epoch())
+        self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
         # Keep running until explicitly cancelled
         try:
@@ -1464,6 +1467,9 @@ class Peer:
 
         if self.reset_task:
             self.reset_task.cancel()
+
+        if self.sampler_task:
+            self.sampler_task.cancel()
 
         if self.server:
             print(f"\nServer : {self.server}\n")

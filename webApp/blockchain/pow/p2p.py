@@ -150,6 +150,7 @@ class Peer:
         self.mine_task=None
         self.disc_task=None
         self.consensus_task=None
+        self.sampler_task=None
         self.server=None
         self.outgoing_conn_task=None
         self.keepalive_task=None
@@ -946,6 +947,7 @@ class Peer:
 
         self.consensus_task=asyncio.create_task(self.find_longest_chain())
         self.disc_task=asyncio.create_task(self.discover_peers())
+        self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
         if self.miner:
             self.mine_task=asyncio.create_task(self.mine_blocks())
@@ -959,6 +961,7 @@ class Peer:
         # Start background tasks
         self.consensus_task = asyncio.create_task(self.find_longest_chain())
         self.disc_task = asyncio.create_task(self.discover_peers())
+        self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
         if self.miner:
             self.mine_task = asyncio.create_task(self.mine_blocks())
 
@@ -982,6 +985,9 @@ class Peer:
 
         if self.mine_task:
             self.mine_task.cancel()
+
+        if self.sampler_task:
+            self.sampler_task.cancel()
 
         if self.server:
             print(f"\nServer : {self.server}\n")

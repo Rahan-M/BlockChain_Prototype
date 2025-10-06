@@ -14,7 +14,7 @@ interface Peer {
 }
 
 const Run = () => {
-    const {isRunning, loadingAuth, consensus, admin}=useAuth();
+    const {isRunning, loadingAuth, consensus, admin, logout}=useAuth();
     // const [showPowMenu, setShowPowMenu]=useState(false)
     // const [showPosMenu, setShowPosMenu]=useState(false)
     // const [showPoaMenu, setShowPoaMenu]=useState(false)
@@ -130,9 +130,21 @@ const Run = () => {
         enqueueSnackbar("Added transaction succesfully", {variant:'success'});
     }   
 
+    const stopBlockChain= async()=>{
+        setShowTxMenu1(false);
+        setShowTxMenu2(false);
+        const res=await axios.get(`/api/${consensus}/stop`)
+        if(!res.data.success){
+            enqueueSnackbar("Failed to add transaction", {variant:'error'});
+        }
+        logout()
+        navigate('/');
+        enqueueSnackbar("Added transaction succesfully", {variant:'success'});
+    }   
+
     const uploadFile= async()=>{
         setShowUploadMenu(false);
-        const res=await axios.post(`/api/ipfs/uploadFile`,{
+        const res=await axios.post(`/api/${consensus}/uploadFile`,{
             "desc":fileDesc,
             "path":filePath
         })
@@ -144,7 +156,7 @@ const Run = () => {
 
     const downloadFile= async()=>{
         setShowDownloadMenu(false);
-        const res=await axios.post(`/api/ipfs/downloadFile`,{
+        const res=await axios.post(`/api/${consensus}/downloadFile`,{
             "cid":fileCid,
             "path":filePath,
             "name":fileName
@@ -247,15 +259,10 @@ const Run = () => {
                         <input
                         type="text"
                         onChange={(e)=>{
-                            let tempKey=`${e.target.value}\n`;  
-                            const length=tempKey.length
-                            if(length>50){
-                                tempKey=tempKey.substring(0,26)+'\n'+tempKey.substring(27, length-26)+'\n'+tempKey.substring(length-25);
-                            }
-                            enqueueSnackbar("Not a valid public address", {variant:'error'});
-                            // This is because the backend expects a newline charachter at 3 points in the public key.
-                            // The library we are using (ecdsa) will otherwise see this as an invalid key
-                            setPubKey(tempKey)
+                            let rec=e.target.value;
+                            // let rec_split = rec.split("\\n")
+                            // let rec_refined = rec_split.join('\n')  
+                            setPubKey(rec);
                         }}
                         className="border-2 border-gray-500 px-4 bg-white py-2 w-[70vw] md:w-96"
                         />
@@ -399,7 +406,7 @@ const Run = () => {
                     Are You Sure You Want to Stop Participating in this Blockchain?
                 </div>
                 <div className="buttons flex justify-around">
-                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{console.log('Hey')}}>
+                    <button className="account_tab bg-primary text-white p-5 rounded-2xl cursor-pointer m-3" onClick={stopBlockChain}>
                         Yes
                     </button>
                     <button className="account_tab bg-red-400 text-white p-5 rounded-2xl cursor-pointer m-3" onClick={()=>{setShowStopConfirmation(false)}}>

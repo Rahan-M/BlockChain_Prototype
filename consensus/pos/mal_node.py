@@ -705,7 +705,7 @@ class Peer:
                 print(f"\nBlock {pos} slashed\n")
                 Chain.instance.chain[pos].is_valid=False
                 Chain.instance.chain[pos].slash_creator=True
-                self.broadcast_message(msg)
+                await self.broadcast_message(msg)
 
             # Fork still exists but longest chain will win
 
@@ -752,10 +752,9 @@ class Peer:
                     block2=block_list[pos]
 
                     if(block1.creator!=block2.creator):# Non malicious fork
-                        l1=len(Chain.instance.chain)
-                        l2=len(block_list)
-                        if(l2>l1):
+                        if(weight_of_chain(Chain.instance.chain)<weight_of_chain(block_list)):
                             Chain.instance.rewrite(block_list)
+                            print("\nCurrent chain replaced by longer chain\n")
                             if self.activate_disk_save == "y":
                                 self.save_chain_to_disk()
                     else:# Malicious fork

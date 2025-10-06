@@ -949,6 +949,9 @@ def function_name(parameter1, parameter2, parameter3, state):
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewKnownPeersPage}>
                     View Known Peers
                 </div>
+                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/contracts')}>
+                    View Contracts
+                </div>
                 { consensus == "pos" &&
                     <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/stakes')}>
                         View Current Stakes

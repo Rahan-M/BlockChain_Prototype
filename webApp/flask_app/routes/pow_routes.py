@@ -27,6 +27,10 @@ async def add_tx():
 async def find_balance():
     return pow_controllers.account_balance()
 
+@pow_bp.route('/contracts', methods=['GET'])
+async def view_contracts():
+    return pow_controllers.get_contracts()
+
 @pow_bp.route('/status', methods=['GET'])
 def return_status():
     return pow_controllers.get_status()

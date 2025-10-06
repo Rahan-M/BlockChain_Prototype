@@ -274,6 +274,18 @@ def account_balance():
     except:
         return jsonify({"success":False, "error": "error while fetching account balance"}, 409)
 
+def get_contracts():
+    global peer_instance
+
+    contracts = []
+    for contract_id in peer_instance.contractsDB.contracts:
+        contracts.append({
+            "id": contract_id,
+            "code": peer_instance.contractsDB.contracts[contract_id],
+        })
+
+    return jsonify({"success":True, "message":"succesful request", "contracts": contracts})
+
 def get_status():
     global peer_instance
     amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))

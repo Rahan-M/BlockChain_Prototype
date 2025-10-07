@@ -113,7 +113,7 @@ class Peer:
             I'll explain the handshake in README.md
         """
 
-        self.mem_pool: Set[Transaction]=set()
+        self.mem_pool: List[Transaction]=list()
 
         self.file_hashes: Dict[str, str]={}
         self.file_hashes_lock= asyncio.Lock()
@@ -461,7 +461,7 @@ class Peer:
             print("\n")
 
             async with self.mem_pool_condition:
-                self.mem_pool.add(transaction)
+                self.mem_pool.append(transaction)
             await self.broadcast_message(msg)
 
         elif t=="new_block":
@@ -493,9 +493,9 @@ class Peer:
                 print("New Block received Cancelled Mining...")
             
             async with self.mem_pool_condition:
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     if newBlock.transaction_exists_in_block(transaction):
-                        self.mem_pool.discard(transaction)
+                        self.mem_pool.remove(transaction)
 
             async with self.file_hashes_lock:
                 for hash in list(self.file_hashes.keys()):
@@ -551,9 +551,9 @@ class Peer:
                 print("\nCurrent Chain Longer than received chain")
 
             async with self.mem_pool_condition:
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     if Chain.instance.transaction_exists_in_chain(transaction):
-                        self.mem_pool.discard(transaction)
+                        self.mem_pool.remove(transaction)
 
             async with self.file_hashes_lock:
                 for hash in list(self.file_hashes.keys()):
@@ -634,7 +634,7 @@ class Peer:
             return
         
         async with self.mem_pool_condition:
-                self.mem_pool.add(transaction)
+                self.mem_pool.append(transaction)
 
         print("Transaction Created", transaction)
         print("\n")
@@ -842,9 +842,9 @@ class Peer:
                 if(len(self.mem_pool)<=0):
                     continue
                 transaction_list=[]
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     if Chain.instance.transaction_exists_in_chain(transaction):
-                        self.mem_pool.discard(transaction)
+                        self.mem_pool.remove(transaction)
                         continue
                     else:
                         transaction_list.append(transaction)
@@ -870,9 +870,9 @@ class Peer:
                     else:
                         print("\n Invalid Block \n")
 
-                    for transaction in list(self.mem_pool):
+                    for transaction in self.mem_pool:
                         if newBlock.transaction_exists_in_block(transaction):
-                            self.mem_pool.discard(transaction)
+                            self.mem_pool.remove(transaction)
                     
                     async with self.file_hashes_lock:
                         for hash in list(self.file_hashes.keys()):

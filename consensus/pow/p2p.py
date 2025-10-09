@@ -8,7 +8,6 @@ from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
 from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
-from consensus.pow.flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey
 from pathlib import Path
 import tempfile
@@ -1061,10 +1060,6 @@ class Peer:
         else:
             self.chain=Chain(publicKey=self.wallet.public_key)
 
-        # Create flask app
-        flask_app = create_flask_app(self)
-        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
-        flask_thread.start()
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())

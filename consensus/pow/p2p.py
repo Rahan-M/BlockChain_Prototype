@@ -3,12 +3,11 @@ import json, uuid, base64
 import threading, socket
 import os, subprocess
 from typing import Set, Dict, List, Tuple
-from consensus.pow.blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
+from consensus.pow.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
 from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
-from consensus.pow.flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey
 from pathlib import Path
 import tempfile
@@ -312,7 +311,6 @@ class Peer:
         self.seen_message_ids.add(id)
 
         if t=="ping":
-            # print("Received Ping")
             pkt={
                 "type":"pong",
                 "id":str(uuid.uuid4())
@@ -321,15 +319,12 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         if t=="pong":
-            # print("Received Pong")
             self.got_pong[websocket]=True
             if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket]=True
-            # print(f"[Sent peer]")
 
         elif t =='peer_info':
-            # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
@@ -394,7 +389,6 @@ class Peer:
             self.seen_message_ids.add(msg["new_peer_msg_id"])
 
         elif t=="known_peers":
-            # print("Received Known Peers")
             peers=msg["peers"]
             new_peer_found = False
             for peer in peers:
@@ -639,7 +633,6 @@ class Peer:
         
         async with self.mem_pool_condition:
                 self.mem_pool.append(transaction)
-                # self.mem_pool_condition.notify_all()
 
         transaction.sign=signature
         print("Transaction Created", transaction)
@@ -1067,13 +1060,10 @@ class Peer:
         else:
             self.chain=Chain(publicKey=self.wallet.public_key)
 
-        # Create flask app
-        flask_app = create_flask_app(self)
-        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
-        flask_thread.start()
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
+        sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
         if self.miner:
             self.mine_task=asyncio.create_task(self.mine_blocks())
@@ -1085,6 +1075,7 @@ class Peer:
 
         disc_task.cancel()
         consensus_task.cancel()
+        sampler_task.cancel()
 
         if self.daemon_process:
             self.stop_daemon()

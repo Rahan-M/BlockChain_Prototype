@@ -6,6 +6,8 @@ import Run from './Pages/Run.tsx'
 import Chain from './Pages/Chain.tsx'
 import Mempool from './Pages/Mempool.tsx'
 import Peers from './Pages/Peers.tsx'
+import Contracts from './Pages/Contracts.tsx'
+import States from './Pages/States.tsx'
 import RootLayout from './layouts/RootLayout.tsx'
 import {AuthProvider} from './contexts/AuthContext.tsx'
 import {createBrowserRouter, RouterProvider} from 'react-router-dom'
@@ -30,6 +32,8 @@ const router = createBrowserRouter([
           { path: '/chain', element: <Chain /> },
           { path: '/pending', element: <Mempool /> },
           { path: '/peers', element: <Peers /> },
+          { path: '/contracts', element: <Contracts /> },
+          { path: '/states', element: <States /> },
           { path: '/stakes', element: <Stakes /> },
           { path: '/miners', element: <Miners /> },
           { path: "*", element: <NotFound /> }

@@ -419,7 +419,7 @@ const Run = () => {
     }
 
     const invokeContract=async()=>{
-        setShowDepMenu(false);
+        setShowInvokeMenu(false)
         const res=await axios.post(`/api/${consensus}/transaction`,{
             "public_key":'invoke',
             "payload":[contractId, funcName, args]
@@ -883,7 +883,7 @@ def function_name(parameter1, parameter2, parameter3, state):
 
     const commonMenu=()=>{
         return(
-                <div className="menu flex flex-col justify-center items-center h-[90vh] gap-5">
+                <div className="menu mt-5 mb-5 flex flex-col items-center min-h-[90vh] gap-5">
                     {txMenu()}
                     {fileMenu()}
                     {scMenu()}
@@ -914,7 +914,7 @@ def function_name(parameter1, parameter2, parameter3, state):
                 {commonMenu()}
             </div>
             <div className='bg-tertiary w-2'></div>
-            <div className='status w-full relative flex flex-col p-5 pt-20 gap-3'>
+            <div className='status w-full relative flex flex-col p-5 gap-3'>
                 <IoReloadSharp className='absolute top-5 right-5 text-2xl cursor-pointer' onClick={fetchData}/>
                 <div>
                     Name : {name}
@@ -955,6 +955,12 @@ def function_name(parameter1, parameter2, parameter3, state):
                 </div>
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={viewKnownPeersPage}>
                     View Known Peers
+                </div>
+                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/contracts')}>
+                    View Contracts
+                </div>
+                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/states')}>
+                    View Contract States
                 </div>
                 { consensus == "pos" &&
                     <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/stakes')}>

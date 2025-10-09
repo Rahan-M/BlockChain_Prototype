@@ -101,6 +101,7 @@ async def connect_to_blockchain():
         peer_instance.consensus_task=asyncio.create_task(peer_instance.find_longest_chain())
         peer_instance.disc_task=asyncio.create_task(peer_instance.discover_peers())
         peer_instance.reset_task=asyncio.create_task(peer_instance.restart_epoch())
+        peer_instance.sampler_task = asyncio.create_task(peer_instance.gossip_peer_sampler())
 
         peer_instance.init_repo()
         peer_instance.configure_ports()
@@ -272,6 +273,18 @@ def account_balance():
         return jsonify({"success":True, "message":"succesful request", "account_balance": amt})
     except:
         return jsonify({"success":False, "error": "error while fetching account balance"}, 409)
+
+def get_contracts():
+    global peer_instance
+
+    contracts = []
+    for contract_id in peer_instance.contractsDB.contracts:
+        contracts.append({
+            "id": contract_id,
+            "code": peer_instance.contractsDB.contracts[contract_id],
+        })
+
+    return jsonify({"success":True, "message":"succesful request", "contracts": contracts})
 
 def get_status():
     global peer_instance

@@ -164,6 +164,7 @@ class Peer:
         self.disc_task=None
         self.reset_task=None
         self.consensus_task=None
+        self.sampler_task=None
         self.server=None
         self.outgoing_conn_task=None
         self.keepalive_task=None
@@ -388,7 +389,6 @@ class Peer:
         self.seen_message_ids.add(id)
 
         if t == "ping":
-            # print("Received Ping")
             pkt = {
                 "type": "pong",
                 "id": str(uuid.uuid4())
@@ -397,15 +397,12 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         elif t == "pong":
-            # print("Received Pong")
             self.got_pong[websocket] = True
             if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket] = True
-            # print(f"[Sent peer]")
 
         elif t == 'peer_info':
-            # print("Received Peer Info")
             data = msg.get("data")
             if not data:
                 return
@@ -492,7 +489,6 @@ class Peer:
             self.seen_message_ids.add(new_peer_msg_id)
 
         elif t == "known_peers":
-            # print("Received Known Peers")
             peers = msg.get("peers")
             if not peers:
                 return
@@ -1068,217 +1064,6 @@ class Peer:
                 if transaction.receiver == "invoke" and transaction.payload[0] == contract_id:
                     return transaction.payload[3]
         return {}
-
-    # async def user_input_handler(self):
-    #     """
-    #         A function to constantly take input from the user 
-    #         about whom to send and how much
-    #     """
-    #     while True:
-    #         print("Block Chain Menu\n***************")
-    #         if(self.staker):
-    #             print("0) Quit\n1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\n5) Print Current Stakers\n6) Time since last epoch\n7) Send Files\n8) Download Files\n9) Stake\n")
-    #         else:
-    #             print("0) Quit\n1) Add Transaction\n2) View balance\n3) Print Chain\n4) Print Pending Transactions\5) Print Current Stakers\n6) Time since last epoch\n7) Send Files\n8) Download Files\n")
-
-    #         ch= await asyncio._get_running_loop().run_in_executor(
-    #             None, input, "Enter Your Choice: "
-    #         )
-    #         try:
-    #             ch=int(ch)
-    #         except:
-    #             print("\nPlease enter a valid number!!!\n")
-
-    #         if ch==1:
-    #             rec = await asyncio._get_running_loop().run_in_executor(
-    #                 None, input, "\nEnter Receiver's Name or Public Key: "
-    #             )
-
-    #             if rec == "deploy":
-    #                 contract_code = get_contract_code_from_notepad()
-    #                 if not contract_code:
-    #                     print("Contract code field is empty")
-    #                     continue
-    #                 gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
-    #                 amount = gas_used * GAS_PRICE
-    #                 payload = [contract_code, amount]
-
-    #                 if amount<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
-    #                     await self.create_and_broadcast_tx(rec, payload)
-    #                 else:
-    #                     print("Insufficient Account Balance")
-    #             elif rec == "invoke":
-    #                 contract_id = await asyncio._get_running_loop().run_in_executor(
-    #                     None, input, "\nEnter Contract Id: "
-    #                 )
-    #                 if contract_id not in self.contractsDB.contracts:
-    #                     print("No such contract found...")
-    #                     continue
-
-    #                 func_name = await asyncio._get_running_loop().run_in_executor(
-    #                     None, input, "\nEnter Function Name: "
-    #                 )
-
-    #                 args = []
-    #                 loop = asyncio.get_running_loop()
-    #                 arg_number = 1
-    #                 while True:
-    #                     arg = await loop.run_in_executor(None, input, f"Enter argument {arg_number} (or \\q to finish): ")
-    #                     if arg.strip() == "\\q":
-    #                         break
-    #                     try:
-    #                         parsed_arg = ast.literal_eval(arg)
-    #                     except Exception:
-    #                         parsed_arg = arg
-    #                     args.append(parsed_arg)
-    #                     arg_number += 1
-
-    #                 response = self.run_contract([contract_id, func_name, args])
-    #                 if(response["error"] != None):
-    #                     print("Error: ", response["error"])
-    #                     continue
-    #                 state = response["state"]
-    #                 gas_used = response["gas_used"]
-    #                 amount = gas_used * GAS_PRICE
-
-    #                 payload = [contract_id, func_name, args, state, amount]
-
-    #                 if amount<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
-    #                     await self.create_and_broadcast_tx(rec, payload)
-    #                 else:
-    #                     print("Insufficient Account Balance")
-    #             else:
-    #                 amt= await asyncio._get_running_loop().run_in_executor(
-    #                     None, input, "\nEnter Amount to send: "
-    #                 )
-
-    #                 receiver_public_key = self.name_to_public_key_dict.get(rec.lower().strip())
-
-                    # if receiver_public_key is None: #then name is not present
-                    #     # This converts any literal \n sequences into actual newlines (\n).
-                    #     # Meaning: if the input was a public key pasted with escaped newlines,
-                    #     #  it turns it into a properly formatted PEM block.
-
-                    #     rec_split = rec.split("\\n")
-                    #     rec_refined = "\n".join(rec_split)
-                    #     exist = 0
-    #                     for (nme, pk) in self.name_to_public_key_dict.items():
-    #                         if pk == rec_refined:
-    #                             receiver_public_key = pk
-    #                             exist = 1
-    #                             break
-    #                     if exist == 0:
-    #                         print("No person available in directory with provided name or public key...")
-    #                         continue
-                    
-    #                 try:
-    #                     amt=float(amt)
-    #                 except ValueError:
-    #                     print("Amount must be a number")
-    #                     continue
-
-    #                 if(amt<=0):
-    #                     print("\nAmount must be positive\n")
-    #                     continue
-
-    #                 if amt<=Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)):
-    #                     await self.create_and_broadcast_tx(receiver_public_key, amt)
-    #                 else:
-    #                     print("Insufficient Account Balance")
-            
-    #         elif ch==2:
-    #             print("Account Balance =",Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes)))
-
-    #         elif ch==3:
-    #             i=0
-    #             # We print all the blocks
-    #             if(not Chain.instance):
-    #                 print("\nChain hasn't been initialized yet\n")
-    #                 continue
-    #             for block in Chain.instance.chain:
-    #                 print(f"block{i}: {block}\n")
-    #                 i+=1
-
-    #         elif ch==4:
-    #             i=0
-    #             for transaction in self.mem_pool:
-    #                 print(f"transaction{i}: {transaction}\n\n")
-    #                 i+=1
-
-    #         elif ch==5:
-    #             async with self.curr_stakers_condition:
-    #                 print("\n")
-    #                 for key in self.current_stakers:
-    #                     print(f"{key}:{self.current_stakers[key]}\n")
-    #                 print("\n")
-
-    #         elif ch==6:
-    #             print(f"\n{(datetime.now()-self.last_epoch_end_ts).seconds}\n")
-
-    #         elif ch==7:
-    #             desc= await asyncio._get_running_loop().run_in_executor(
-    #                 None, input, "\nEnter description of file: "
-    #             )
-    #             path= await asyncio._get_running_loop().run_in_executor(
-    #                 None, input, "\nEnter path of file: "
-    #             )
-    #             pkt=await self.uploadFile(desc, path)
-    #             await self.broadcast_message(pkt)
-
-    #         elif ch==8:
-    #             cid= await asyncio._get_running_loop().run_in_executor(
-    #                 None, input, "\nEnter cid of file: "
-    #             )
-    #             path= await asyncio._get_running_loop().run_in_executor(
-    #                 None, input, "\nEnter path to download the file: "
-    #             )
-    #             download_ipfs_file_subprocess(cid, path)
-
-    #         elif ch==9:
-    #             if(not self.staker):
-    #                 continue
-
-    #             currTime=datetime.now()
-    #             time_since=currTime-self.last_epoch_end_ts
-    #             if(self.staked_amt>0):
-    #                 print("Can't sent multiple stakes in one epoch")
-    #                 continue
-
-    #             if(time_since>timedelta(seconds=EPOCH_TIME*5/6)):
-    #                 if(time_since>timedelta(seconds=EPOCH_TIME*7/6)):
-    #                     self.last_epoch_end_ts=datetime.now()
-    #                     self.staked_amt=0
-    #                     self.current_stakers.clear()
-    #                     self.current_stakes.clear()
-
-    #                 else:
-    #                     print(F"\nStake registration period closed, try again in the next epoch, time till next epoch : {EPOCH_TIME-time_since.seconds}\n")
-    #                     continue
-
-    #             amt= await asyncio._get_running_loop().run_in_executor(
-    #                 None, input, "\nEnter Amount to stake: "
-    #             )
-                
-    #             try:
-    #                 amt=int(amt)
-    #                 if(amt>Chain.instance.calc_balance(self.wallet.public_key_pem, self.mem_pool, list(self.current_stakes))):
-    #                     print("\nInsufficient bank balance\n")
-    #                     continue
-
-    #                 await self.send_stake_announcements(amt)
-    #                 self.staked_amt=amt
-    #                 time_left=EPOCH_TIME-time_since.seconds
-    #                 print(f"Creating block in {time_left} seconds")
-    #                 asyncio.create_task(self.create_blocks(time_left))
-
-    #             except ValueError as e:
-    #                 print("\nPlease enter a valid number!!!\n", e)
-    #             except Exception as e:
-    #                 print("\nUnexpected error occured!!!\n", e)
-
-    #         elif ch==0:
-    #             print("Quitting...")
-    #             break
     
     async def uploadFile(self, desc: str, path:str):
         file_path=Path(path)
@@ -1542,7 +1327,6 @@ class Peer:
                     self.deploy_contract(transaction)
 
             newBlock.stakers=list(self.current_stakes)
-            # print(f"\n{newBlock.to_dict_with_stakers()}\n")
 
             self.staked_amt=0
             self.current_stakers.clear()
@@ -1649,6 +1433,7 @@ class Peer:
         reset_task=asyncio.create_task(self.restart_epoch())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
+        sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
         self.init_repo()
         self.configure_ports()
@@ -1660,6 +1445,7 @@ class Peer:
         self.consensus_task = asyncio.create_task(self.find_longest_chain())
         self.disc_task = asyncio.create_task(self.discover_peers())
         self.reset_task=asyncio.create_task(self.restart_epoch())
+        self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
         # Keep running until explicitly cancelled
         try:
@@ -1681,6 +1467,9 @@ class Peer:
 
         if self.reset_task:
             self.reset_task.cancel()
+
+        if self.sampler_task:
+            self.sampler_task.cancel()
 
         if self.server:
             print(f"\nServer : {self.server}\n")

@@ -4,12 +4,11 @@ from typing import Set, Dict, List, Tuple
 import copy
 import threading
 import socket
-from consensus.poa.blochain_structures import Transaction, Block, Wallet, Chain, isvalidChain
+from consensus.poa.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
 from storage.storage_manager import save_node_id, load_node_id, save_key, load_key, save_chain, load_chain, save_peers, load_peers
-from consensus.poa.flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey
 import binascii
 import os
@@ -477,16 +476,6 @@ class Peer:
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
             if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
-                # if t =='peer_info':
-                #     proposed_name = self.get_unique_name(data["name"])
-                #     if proposed_name != data["name"]:
-                #         pkt={
-                #             "type":"change_name",
-                #             "id":str(uuid.uuid4()),
-                #             "new_name": proposed_name
-                #         }
-                #         await self.send_message(websocket, pkt, False)
-                #         data["name"] = proposed_name
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
                 if self.activate_disk_save == "y":
                     self.save_known_peers_to_disk()
@@ -494,8 +483,6 @@ class Peer:
                 self.node_id_to_name_dict[data["node_id"]]=data["name"].lower()
                 self.name_to_node_id_dict[data["name"].lower()]=data["node_id"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
-                # if t == 'add_peer':
-                #     await self.broadcast_message(msg)
                 message = self.get_known_peers_message()
                 await self.send_message(websocket, message, False)
 
@@ -656,7 +643,6 @@ class Peer:
 
             async with self.mem_pool_condition:
                 self.mem_pool.append(transaction)
-                # self.mem_pool_condition.notify_all()
             await self.broadcast_message(msg)
 
         elif t=="new_block":
@@ -834,7 +820,6 @@ class Peer:
         transaction.sign=signature
         async with self.mem_pool_condition:
                 self.mem_pool.append(transaction)
-                # self.mem_pool_condition.notify_all()
 
         print("Transaction Created", transaction)
         print("\n")
@@ -1226,8 +1211,6 @@ class Peer:
                         for _ in range(3):
                             await asyncio.sleep(5)
                     async with self.mem_pool_condition: # Works the same as lock
-                        # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
-                        # We check the about condition in lambda every time we get notified after a new transaction has been added
                         if(len(self.mem_pool)<=0):
                             continue
                         transaction_list=[]
@@ -1434,10 +1417,6 @@ class Peer:
             self.admin_id = self.node_id
             await self.update_role(True)
 
-        # Create flask app
-        flask_app = create_flask_app(self)
-        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
-        flask_thread.start()
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())

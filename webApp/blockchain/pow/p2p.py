@@ -969,12 +969,6 @@ class Peer:
         if self.miner:
             self.mine_task = asyncio.create_task(self.mine_blocks())
 
-        # Keep running until explicitly cancelled
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            print(f"[{self.name}] run_forever cancelled")
-            await self.stop()
 
     async def stop(self):
         if self.disc_task:

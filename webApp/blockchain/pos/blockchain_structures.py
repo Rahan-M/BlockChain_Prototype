@@ -24,6 +24,10 @@ class Transaction:
             "receiver":self.receiver,
             "ts":self.ts
         }
+        if(self.receiver!="deploy" or self.receiver!="invoke"):
+            dict["amount"]=self.payload
+        else:
+            dict["amount"]=self.payload[-1]
         return dict
     
     def __eq__(self, other):
@@ -166,7 +170,7 @@ def valid_chain_length(i):
         valid_chain_len-=2
     return valid_chain_len  
 
-def calc_balance_block_list(block_list:List[Block], publicKey, i):
+def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[Transaction]=None, currStakes:List[Stake]=None):
     bal=0
     valid_chain_len=valid_chain_length(i)
 
@@ -187,9 +191,17 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i):
         if block_list[i].creator==publicKey:
             bal+=6 #Miner reward
     
-    for stake in block_list[i].stakers:
-        if stake.staker==publicKey:
-            bal-=stake.amt
+    for transaction in mem_pool:
+        if transaction.sender==publicKey:
+            if transaction.receiver == "deploy" or transaction.receiver == "invoke":
+                bal-=transaction.payload[-1]
+            else:
+                bal-=transaction.payload
+
+    if currStakes:
+        for stake in currStakes:
+            if stake.staker==publicKey:
+                bal-=stake.amt
     # Since these transactions are not part of the chain we don't add
     # the money they gained yet because it could be invalid, but we subtract
     # the amount they have given to prevent double spending before the

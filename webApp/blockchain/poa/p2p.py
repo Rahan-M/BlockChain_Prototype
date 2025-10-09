@@ -1137,13 +1137,6 @@ class Peer:
         self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
         self.round_task = asyncio.create_task(self.round_calculator())
 
-        # Keep running until explicitly cancelled
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            print(f"[{self.name}] run_forever cancelled")
-            await self.stop()
-
     async def stop(self):
         if self.disc_task:
             self.disc_task.cancel()

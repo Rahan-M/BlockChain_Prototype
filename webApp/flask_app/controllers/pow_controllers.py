@@ -168,13 +168,23 @@ async def add_transaction():
         payload = [contract_id, func_name, args, state, amount]
 
     else:
+        print("\n\n\nHere is the public key")
+        print(repr(public_key))
         curve=curves.SECP256k1
         try:
             vk=VerifyingKey.from_pem(public_key)
             if(vk.curve!=curve):
                 return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
         except (MalformedPointError, ValueError, Exception) as e:
-            return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
+            # If parsing fails, try converting spaces to newlines (second format)
+            try:
+                public_key_normalized = public_key.replace(' ', '\n')
+                vk=VerifyingKey.from_pem(public_key_normalized)
+                if(vk.curve!=curve):
+                    return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
+                public_key = public_key_normalized  # Use the normalized version
+            except (MalformedPointError, ValueError, Exception):
+                return jsonify({"success":False, "error": "Invalid Public Key Conversion failed"}, 409)
         
         try:
             amount = float(payload)
@@ -190,7 +200,8 @@ async def add_transaction():
     
     await peer_instance.create_and_broadcast_tx(public_key, payload)
     return jsonify({"success":True, "message": "Transaction Added"})
-    
+
+
 def account_balance():
     global peer_instance
     if not peer_instance:

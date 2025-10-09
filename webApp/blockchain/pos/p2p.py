@@ -1646,9 +1646,9 @@ class Peer:
             self.chain=Chain(publicKey=self.wallet.public_key_pem, privatekey=self.wallet.private_key)
             self.last_epoch_end_ts=datetime.now()
 
-        reset_task=asyncio.create_task(self.restart_epoch())
-        consensus_task=asyncio.create_task(self.find_longest_chain())
-        disc_task=asyncio.create_task(self.discover_peers())
+        self.reset_task=asyncio.create_task(self.restart_epoch())
+        self.consensus_task=asyncio.create_task(self.find_longest_chain())
+        self.disc_task=asyncio.create_task(self.discover_peers())
 
         self.init_repo()
         self.configure_ports()
@@ -1662,11 +1662,7 @@ class Peer:
         self.reset_task=asyncio.create_task(self.restart_epoch())
 
         # Keep running until explicitly cancelled
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            print(f"[{self.name}] run_forever cancelled")
-            await self.stop()
+
 
     async def stop(self):
         if self.disc_task:

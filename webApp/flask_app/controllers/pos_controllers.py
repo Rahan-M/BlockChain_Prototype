@@ -174,13 +174,25 @@ async def add_transaction():
             if(vk.curve!=curve):
                 return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
         except (MalformedPointError, ValueError, Exception) as e:
-            public_key_split = public_key.split("\\n")
-            public_key_refined = "\n".join(public_key_split)
+            # Normalize the public key format
+            public_key_normalized = public_key.strip()
+            # Replace literal \n strings with actual newlines
+            public_key_normalized = public_key_normalized.replace("\\n", "\n")
+            # Also handle space-separated format by replacing spaces between PEM parts with newlines
+            if "-----BEGIN PUBLIC KEY-----" in public_key_normalized and "\n" not in public_key_normalized:
+                # Split by the BEGIN marker, process the content, then rejoin
+                parts = public_key_normalized.split("-----BEGIN PUBLIC KEY-----")
+                if len(parts) == 2:
+                    content = parts[1].replace("-----END PUBLIC KEY-----", "")
+                    content = content.strip()
+                    # Remove all whitespace and rebuild with proper newlines
+                    content_clean = ''.join(content.split())
+                    public_key_normalized = f"-----BEGIN PUBLIC KEY-----\n{content_clean}\n-----END PUBLIC KEY-----"
             try:
-                vk=VerifyingKey.from_pem(public_key_refined)
+                vk=VerifyingKey.from_pem(public_key_normalized)
                 if(vk.curve!=curve):
                     return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
-
+            
             except (MalformedPointError, ValueError, Exception) as e:
                 return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
                 

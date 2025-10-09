@@ -11,6 +11,7 @@ import States from './Pages/States.tsx'
 import RootLayout from './layouts/RootLayout.tsx'
 import {AuthProvider} from './contexts/AuthContext.tsx'
 import {createBrowserRouter, RouterProvider} from 'react-router-dom'
+import { SnackbarProvider } from 'notistack'
 import Stakes from './Pages/Stakes.tsx'
 import Miners from './Pages/Miners.tsx'
 
@@ -44,7 +45,9 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <RouterProvider router={router} />
+      <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+        <RouterProvider router={router} />
+      </SnackbarProvider>
     </AuthProvider>
   </StrictMode>,
 )

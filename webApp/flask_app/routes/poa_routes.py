@@ -31,6 +31,10 @@ async def find_balance():
 async def view_contracts():
     return poa_controllers.get_contracts()
 
+@poa_bp.route('/states', methods=['GET'])
+async def view_states():
+    return poa_controllers.get_states()
+
 @poa_bp.route('/status', methods=['GET'])
 def return_status():
     return poa_controllers.get_status()

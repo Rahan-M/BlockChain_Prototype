@@ -412,7 +412,7 @@ const Run = () => {
     }
 
     const invokeContract=async()=>{
-        setShowDepMenu(false);
+        setShowInvokeMenu(false)
         const res=await axios.post(`/api/${consensus}/transaction`,{
             "public_key":'invoke',
             "payload":[contractId, funcName, args]
@@ -951,6 +951,9 @@ def function_name(parameter1, parameter2, parameter3, state):
                 </div>
                 <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/contracts')}>
                     View Contracts
+                </div>
+                <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/states')}>
+                    View Contract States
                 </div>
                 { consensus == "pos" &&
                     <div className='cursor-pointer bg-primary p-3 w-[15vw] text-center text-white rounded-xl' onClick={()=>navigate('/stakes')}>

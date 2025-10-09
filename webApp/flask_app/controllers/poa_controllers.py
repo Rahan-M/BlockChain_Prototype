@@ -222,6 +222,18 @@ def get_contracts():
 
     return jsonify({"success":True, "message":"succesful request", "contracts": contracts})
 
+def get_states():
+    global peer_instance
+
+    states = []
+    for contract_id in peer_instance.contractsDB.contracts:
+        states.append({
+            "id": contract_id,
+            "state": peer_instance.get_contract_state(contract_id),
+        })
+
+    return jsonify({"success":True, "message":"succesful request", "states": states})
+
 def get_status():
     global peer_instance
     amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key, list(peer_instance.mem_pool))

@@ -113,7 +113,7 @@ class Peer:
             I'll explain the handshake in README.md
         """
 
-        self.mem_pool: Set[Transaction]=set()
+        self.mem_pool: List[Transaction]=list()
 
         self.file_hashes: Dict[str, str]={}
         self.file_hashes_lock= asyncio.Lock()
@@ -150,6 +150,7 @@ class Peer:
         self.mine_task=None
         self.disc_task=None
         self.consensus_task=None
+        self.sampler_task=None
         self.server=None
         self.outgoing_conn_task=None
         self.keepalive_task=None
@@ -324,7 +325,6 @@ class Peer:
         self.seen_message_ids.add(id)
         print(f"\n{t}\n")
         if t=="ping":
-            # print("Received Ping")
             pkt={
                 "type":"pong",
                 "id":str(uuid.uuid4())
@@ -333,15 +333,12 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         if t=="pong":
-            # print("Received Pong")
             self.got_pong[websocket]=True
             if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket]=True
-            # print(f"[Sent peer]")
 
         elif t =='peer_info':
-            # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
@@ -394,7 +391,6 @@ class Peer:
             self.seen_message_ids.add(msg["new_peer_msg_id"])
 
         elif t=="known_peers":
-            # print("Received Known Peers")
             peers=msg["peers"]
             for peer in peers:
                 normalized_self=normalize_endpoint((self.host, self.port))
@@ -465,7 +461,7 @@ class Peer:
             print("\n")
 
             async with self.mem_pool_condition:
-                self.mem_pool.add(transaction)
+                self.mem_pool.append(transaction)
             await self.broadcast_message(msg)
 
         elif t=="new_block":
@@ -497,9 +493,9 @@ class Peer:
                 print("New Block received Cancelled Mining...")
             
             async with self.mem_pool_condition:
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     if newBlock.transaction_exists_in_block(transaction):
-                        self.mem_pool.discard(transaction)
+                        self.mem_pool.remove(transaction)
 
             async with self.file_hashes_lock:
                 for hash in list(self.file_hashes.keys()):
@@ -555,9 +551,9 @@ class Peer:
                 print("\nCurrent Chain Longer than received chain")
 
             async with self.mem_pool_condition:
-                for transaction in list(self.mem_pool):
+                for transaction in self.mem_pool:
                     if Chain.instance.transaction_exists_in_chain(transaction):
-                        self.mem_pool.discard(transaction)
+                        self.mem_pool.remove(transaction)
 
             async with self.file_hashes_lock:
                 for hash in list(self.file_hashes.keys()):
@@ -638,7 +634,7 @@ class Peer:
             return
         
         async with self.mem_pool_condition:
-                self.mem_pool.add(transaction)
+                self.mem_pool.append(transaction)
 
         print("Transaction Created", transaction)
         print("\n")
@@ -842,48 +838,52 @@ class Peer:
         """
         while True:
             await asyncio.sleep(30)
-            async with self.mem_pool_condition: # Works the same as lock
-                # await self.mem_pool_condition.wait_for(lambda: len(self.mem_pool) >= 3)
-                # We check the about condition in lambda every time we get notified after a new transaction has been added
-                if(len(self.mem_pool)<=0):
-                    continue
-                transaction_list=[]
-                for transaction in list(self.mem_pool):
-                    if Chain.instance.transaction_exists_in_chain(transaction):
-                        self.mem_pool.discard(transaction)
-                        continue
-                    else:
-                        transaction_list.append(transaction)
+            async with self.mem_pool_condition:
+                if(len(self.mem_pool)>0):
+                    transaction_list=[]
+                    for transaction in self.mem_pool:
+                        if Chain.instance.transaction_exists_in_chain(transaction):
+                            self.mem_pool.remove(transaction)
+                            continue
+                        else:
+                            transaction_list.append(transaction)
 
-                if(len(transaction_list)>0):
-                    newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                    newBlock.files=self.file_hashes.copy()
+                    if(len(transaction_list)>0):
+                        newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
+                        newBlock.files=self.file_hashes.copy()
 
-                    await asyncio.to_thread(Chain.instance.mine, newBlock)
-                    newBlock.miner=self.wallet.public_key_pem
+                        await asyncio.to_thread(Chain.instance.mine, newBlock)
+                        newBlock.miner=self.wallet.public_key_pem
 
-                    if Chain.instance.isValidBlock(newBlock):
-                        Chain.instance.chain.append(newBlock)
-                        print("\nBlock Appended \n")
-                        pkt={
-                            "type":"new_block",
-                            "id":str(uuid.uuid4()),
-                            "block":newBlock.to_dict(),
-                            "miner":self.wallet.public_key_pem
-                        }
-                        self.seen_message_ids.add(pkt["id"])
-                        await self.broadcast_message(pkt)
-                    else:
-                        print("\n Invalid Block \n")
+                        if Chain.instance.isValidBlock(newBlock):
+                            Chain.instance.chain.append(newBlock)
+                            print("\nBlock Appended \n")
 
-                    for transaction in list(self.mem_pool):
-                        if newBlock.transaction_exists_in_block(transaction):
-                            self.mem_pool.discard(transaction)
-                    
-                    async with self.file_hashes_lock:
-                        for hash in list(self.file_hashes.keys()):
-                            if newBlock.cid_exists_in_block(hash):
-                                self.file_hashes.pop(hash, None)
+                            for transaction in newBlock.transactions:
+                                if transaction.receiver == "deploy":
+                                    self.deploy_contract(transaction)
+                            
+                            async with self.file_hashes_lock:
+                                for hash in list(self.file_hashes.keys()):
+                                    if newBlock.cid_exists_in_block(hash):
+                                        self.file_hashes.pop(hash, None)
+
+                            for transaction in self.mem_pool:
+                                if newBlock.transaction_exists_in_block(transaction):
+                                    self.mem_pool.remove(transaction)
+                                        
+                            pkt={
+                                "type":"new_block",
+                                "id":str(uuid.uuid4()),
+                                "block":newBlock.to_dict(),
+                                "miner":self.wallet.public_key_pem
+                            }
+                            self.seen_message_ids.add(pkt["id"])
+                            await self.broadcast_message(pkt)
+                            if self.activate_disk_save == "y":
+                                self.save_chain_to_disk()
+                        else:
+                            print("\n Invalid Block \n")
 
     def calculate_contract_id(self, sender, timestamp):
         data = f"{sender}:{timestamp}"
@@ -953,6 +953,7 @@ class Peer:
 
         self.consensus_task=asyncio.create_task(self.find_longest_chain())
         self.disc_task=asyncio.create_task(self.discover_peers())
+        self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
         if self.miner:
             self.mine_task=asyncio.create_task(self.mine_blocks())
@@ -966,6 +967,7 @@ class Peer:
         # Start background tasks
         self.consensus_task = asyncio.create_task(self.find_longest_chain())
         self.disc_task = asyncio.create_task(self.discover_peers())
+        self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
         if self.miner:
             self.mine_task = asyncio.create_task(self.mine_blocks())
 
@@ -983,6 +985,9 @@ class Peer:
 
         if self.mine_task:
             self.mine_task.cancel()
+
+        if self.sampler_task:
+            self.sampler_task.cancel()
 
         if self.server:
             print(f"\nServer : {self.server}\n")

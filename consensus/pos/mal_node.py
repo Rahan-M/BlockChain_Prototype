@@ -3,12 +3,11 @@ import argparse, json, uuid, base64
 import threading, socket, os, subprocess
 from datetime import datetime, timedelta
 from typing import Set, Dict, List, Tuple, Any
-from consensus.pos.blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
+from consensus.pos.blockchain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
 from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
-from consensus.pos.flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey, BadSignatureError
 import tempfile
 from pathlib import Path
@@ -369,7 +368,6 @@ class Peer:
         self.seen_message_ids.add(id)
 
         if t=="ping":
-            # print("Received Ping")
             pkt={
                 "type":"pong",
                 "id":str(uuid.uuid4())
@@ -378,15 +376,12 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         elif t=="pong":
-            # print("Received Pong")
             self.got_pong[websocket]=True
             if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket]=True
-            # print(f"[Sent peer]")
 
         elif t =='peer_info':
-            # print("Received Peer Info")
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
@@ -451,7 +446,6 @@ class Peer:
             self.seen_message_ids.add(msg["new_peer_msg_id"])
 
         elif t=="known_peers":
-            # print("Received Known Peers")
             peers=msg["peers"]
             new_peer_found = False
             for peer in peers:
@@ -1377,7 +1371,6 @@ class Peer:
             newBlock2=Block(Chain.instance.lastBlock.hash, pending_transactions)
 
 
-            # newBlock=Block(Chain.instance.lastBlock.hash, pending_transactions)
             newBlock1.files=self.file_hashes.copy()
             newBlock1.seed=seed
             newBlock1.vrf_proof=vrf_proof
@@ -1405,7 +1398,6 @@ class Peer:
 
             newBlock1.stakers=list(self.current_stakes)
             newBlock2.stakers=list(self.current_stakes)
-            # print(f"\n{newBlock.to_dict_with_stakers()}\n")
 
             self.staked_amt=0
             self.current_stakers.clear()
@@ -1421,7 +1413,6 @@ class Peer:
             sign_b64_1=base64.b64encode(sign1).decode()
             sign_b64_2=base64.b64encode(sign2).decode()
 
-            # print(f"\n{newBlock1.to_dict_with_stakers()}\n")
             pkt1={
                 "type":"new_block",
                 "id":str(uuid.uuid4()),
@@ -1441,7 +1432,6 @@ class Peer:
             self.seen_message_ids.add(pkt1["id"])
             self.seen_message_ids.add(pkt2["id"])
 
-            # await self.broadcast_message(pkt)
             if self.activate_disk_save == "y":
                 self.save_chain_to_disk()
 
@@ -1549,15 +1539,12 @@ class Peer:
             self.chain=Chain(publicKey=self.wallet.public_key_pem, privatekey=self.wallet.private_key)
             self.last_epoch_end_ts=datetime.now()
 
-        # Create flask app
-        flask_app = create_flask_app(self)
-        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
-        flask_thread.start()
 
         reset_task=asyncio.create_task(self.restart_epoch())
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
+        sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
 
         await inp_task
@@ -1565,3 +1552,4 @@ class Peer:
         reset_task.cancel()
         disc_task.cancel()
         consensus_task.cancel()
+        sampler_task.cancel()

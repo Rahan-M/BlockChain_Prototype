@@ -351,20 +351,3 @@ def isvalidChain(blockList:List[Block]):
         
     print("No Duplicate transactions, No Inalid Signatures, No transactions with an invalid amount\n")
     return True
-
-
-# Chain()
-
-# rahan=Wallet()
-# jefin=Wallet()
-# elias=Wallet()
-
-# tx1=rahan.sendMoney(50, jefin.public_key)
-# tx2=jefin.sendMoney(30, elias.public_key)
-# tx3=elias.sendMoney(60, rahan.public_key)
-
-# print(tx1)
-# print("\n\n")
-# print(tranx)
-
-# print(tx1==tranx)

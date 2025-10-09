@@ -3,12 +3,11 @@ import argparse, json, uuid, base64
 import threading, socket, os, subprocess
 from datetime import datetime, timedelta
 from typing import Set, Dict, List, Tuple, Any
-from consensus.pos.blochain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
+from consensus.pos.blockchain_structures import Transaction, Stake, Block, Wallet, Chain, isvalidChain, weight_of_chain
 from ipfs.ipfs import addToIpfs, download_ipfs_file_subprocess
 from smart_contract.contracts_db import SmartContractDatabase
 from smart_contract.secure_executor import SecureContractExecutor
 from storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
-from consensus.pos.flask_app import create_flask_app, run_flask_app
 from ecdsa import VerifyingKey, BadSignatureError
 import tempfile
 from pathlib import Path
@@ -378,15 +377,12 @@ class Peer:
             await websocket.send(json.dumps(pkt))
 
         elif t == "pong":
-            # print("Received Pong")
             self.got_pong[websocket] = True
             if not self.have_sent_peer_info.get(websocket, True):
                 await self.send_peer_info(websocket)
                 self.have_sent_peer_info[websocket] = True
-            # print(f"[Sent peer]")
 
         elif t == 'peer_info':
-            # print("Received Peer Info")
             data = msg.get("data")
             if not data:
                 return
@@ -473,7 +469,6 @@ class Peer:
             self.seen_message_ids.add(new_peer_msg_id)
 
         elif t == "known_peers":
-            # print("Received Known Peers")
             peers = msg.get("peers")
             if not peers:
                 return
@@ -1524,7 +1519,6 @@ class Peer:
                     self.deploy_contract(transaction)
 
             newBlock.stakers=list(self.current_stakes)
-            # print(f"\n{newBlock.to_dict_with_stakers()}\n")
 
             self.staked_amt=0
             self.current_stakers.clear()
@@ -1615,15 +1609,12 @@ class Peer:
             self.chain=Chain(publicKey=self.wallet.public_key_pem, privatekey=self.wallet.private_key)
             self.last_epoch_end_ts=datetime.now()
 
-        # Create flask app
-        flask_app = create_flask_app(self)
-        flask_thread = threading.Thread(target=run_flask_app, args=(flask_app, self.port), daemon=True)
-        flask_thread.start()
 
         reset_task=asyncio.create_task(self.restart_epoch())
         inp_task=asyncio.create_task(self.user_input_handler())
         consensus_task=asyncio.create_task(self.find_longest_chain())
         disc_task=asyncio.create_task(self.discover_peers())
+        sampler_task = asyncio.create_task(self.gossip_peer_sampler())
 
 
         await inp_task
@@ -1631,3 +1622,4 @@ class Peer:
         reset_task.cancel()
         disc_task.cancel()
         consensus_task.cancel()
+        sampler_task.cancel()

@@ -2,48 +2,7 @@ import json, hashlib, uuid, base64
 from typing import List, Dict
 from datetime import datetime
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
-
-class Transaction:
-    def __init__(self, payload, sender: str, receiver: str, id=None, ts=None):
-        self.id=id or str(uuid.uuid4())
-        self.payload=payload   # amount or [code, amount] or [contract id, function_name, arguments, state, amount]
-        self.sender: str=sender  # Public Key
-        self.receiver: str=receiver   # Public Key or "deploy" or "invoke"
-        self.sign:bytes=None
-        self.ts=ts or datetime.now().timestamp()
-
-    def to_dict(self):
-        dict={
-            "id":self.id,
-            "payload":self.payload,
-            "sender":self.sender,
-            "receiver":self.receiver,
-            "ts":self.ts
-        }
-        return dict
-    
-    def __eq__(self, other):
-        return(
-            self.id==other.id and
-            self.sender==other.sender and
-            self.receiver==other.receiver and
-            self.ts==other.ts
-        )
-    
-    def __hash__(self):
-        return hash(self.id)
-
-    def __str__(self):
-        return json.dumps(self.to_dict())
-    
-def txs_to_json_digestable_form(transactions: List[Transaction]):
-    l=[]
-    for i in range(len(transactions)):
-        tx_dict=transactions[i].to_dict()
-        if(transactions[i].sender!="Genesis"):
-            tx_dict["sign"]=base64.b64encode(transactions[i].sign).decode()
-        l.append(tx_dict)
-    return l
+from blockchain.global_blockchain_structures import Transaction, txs_to_json_digestable_form, Wallet
 
 class Block:
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, nonce=None, id=None):
@@ -229,16 +188,6 @@ class Chain:
                     else:
                         bal-=transaction.payload
         return bal
-    
-class Wallet:
-    def __init__(self):
-        self.private_key = SigningKey.generate(curve=SECP256k1)
-        
-        self.private_key_pem = self.private_key.to_pem().decode()
-
-        self.public_key = self.private_key.get_verifying_key()
-
-        self.public_key_pem = self.public_key.to_pem().decode()
     
 def calc_balance_block_list(block_list:List[Block], publicKey, i, pending_transactions:List[Transaction]=None):
     bal=0

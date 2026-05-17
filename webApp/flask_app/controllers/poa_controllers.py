@@ -45,11 +45,11 @@ async def start_new_blockchain():
             import traceback
             traceback.print_exc()
         
-        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key)
+        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key_pem)
 
         # Genesis block data updation
         peer_instance.chain.chain[0].miner_node_id = peer_instance.node_id
-        peer_instance.chain.chain[0].miner_public_key = peer_instance.wallet.public_key
+        peer_instance.chain.chain[0].miner_public_key = peer_instance.wallet.public_key_pem
         peer_instance.chain.chain[0].miners_list = [peer_instance.node_id]
         peer_instance.sign_block(peer_instance.chain.chain[0])
         peer_instance.admin_id = peer_instance.node_id
@@ -188,7 +188,7 @@ async def add_transaction():
         if amount < 0:
             return jsonify({"success":False, "error": "Amount must be a positive value"})
 
-    bal=peer_instance.chain.calc_balance(peer_instance.wallet.public_key, peer_instance.mem_pool)
+    bal=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, peer_instance.mem_pool)
     if amount > bal:
         return jsonify({"success":False, "error": f"Insufficient Account Balance {amount}>{bal}"})
     
@@ -205,7 +205,7 @@ def account_balance():
     
     try:
         print()
-        amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key, list(peer_instance.mem_pool))
+        amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
         return jsonify({"success":True, "message":"succesful request", "account_balance": amt})
     except:
         return jsonify({"success":False, "error": "error while fetching account balance"}, 409)
@@ -236,7 +236,7 @@ def get_states():
 
 def get_status():
     global peer_instance
-    amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key, list(peer_instance.mem_pool))
+    amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
 
     return Response(
         json.dumps(OrderedDict([
@@ -245,7 +245,7 @@ def get_status():
             ("host", peer_instance.host),
             ("port", peer_instance.port),
             ("account_balance", amt),
-            ("public_key",peer_instance.wallet.public_key),
+            ("public_key",peer_instance.wallet.public_key_pem),
             ("private_key",peer_instance.wallet.private_key_pem),
             ("node_id", peer_instance.node_id),
             ("admin_id", peer_instance.admin_id),
@@ -310,7 +310,7 @@ def get_current_miners():
         name = peer_instance.node_id_to_name_dict[node_id]
         public_key = None
         if node_id == peer_instance.node_id:
-            public_key = peer_instance.wallet.public_key
+            public_key = peer_instance.wallet.public_key_pem
         else:
             public_key = peer_instance.name_to_public_key_dict[name]
         current_miners_list.append({
@@ -391,7 +391,7 @@ def get_latest_miners():
         name = peer_instance.node_id_to_name_dict[node_id]
         public_key = None
         if node_id == peer_instance.node_id:
-            public_key = peer_instance.wallet.public_key
+            public_key = peer_instance.wallet.public_key_pem
         else:
             public_key = peer_instance.name_to_public_key_dict[name]
         latest_miners_list.append({
@@ -417,7 +417,7 @@ def get_not_latest_miners():
             name = peer_instance.node_id_to_name_dict[node_id]
             public_key = None
             if node_id == peer_instance.node_id:
-                public_key = peer_instance.wallet.public_key
+                public_key = peer_instance.wallet.public_key_pem
             else:
                 public_key = peer_instance.name_to_public_key_dict[name]
             not_latest_miners_list.append({

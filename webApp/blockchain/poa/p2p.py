@@ -217,7 +217,7 @@ class Peer:
                 "host":self.host,
                 "port":self.port,
                 "name":self.name,
-                "public_key":self.wallet.public_key,
+                "public_key":self.wallet.public_key_pem,
                 "node_id":self.node_id
                 }
         }
@@ -233,7 +233,7 @@ class Peer:
         """
         peers=[{"host":h, "port":p, "name":n, "public_key":s, "node_id":i}
                for (h, p), (n, s, i) in self.known_peers.items()]
-        peers.append({"host":self.host, "port":self.port, "name":self.name, "public_key":self.wallet.public_key, "node_id":self.node_id})
+        peers.append({"host":self.host, "port":self.port, "name":self.name, "public_key":self.wallet.public_key_pem, "node_id":self.node_id})
         pkt={
             "type":"known_peers",
             "id":str(uuid.uuid4()),
@@ -783,7 +783,7 @@ class Peer:
         """
             Function to create and broadcast transactions
         """
-        transaction=Transaction(payload, self.wallet.public_key, receiver_public_key)
+        transaction=Transaction(payload, self.wallet.public_key_pem, receiver_public_key)
         transaction_str=str(transaction)
         
         signature=self.wallet.private_key.sign(transaction_str.encode())
@@ -796,7 +796,7 @@ class Peer:
             "id":str(uuid.uuid4()),
             "transaction":transaction_str,
             "sign":signature_b64,
-            "sender_pem":self.wallet.public_key # Already available as a pem string as defined in constructor
+            "sender_pem":self.wallet.public_key_pem # Already available as a pem string as defined in constructor
         }
         
         self.seen_message_ids.add(pkt["id"])
@@ -850,7 +850,7 @@ class Peer:
                         "host":self.host,
                         "port":self.port,
                         "name":self.name,
-                        "public_key":self.wallet.public_key,
+                        "public_key":self.wallet.public_key_pem,
                         "node_id":self.node_id
                     }
                 }
@@ -1013,12 +1013,12 @@ class Peer:
                                 print("Mining...")
                                 newBlock = Block(Chain.instance.lastBlock.hash, transaction_list)
                                 newBlock.miner_node_id = self.node_id
-                                newBlock.miner_public_key = self.wallet.public_key
+                                newBlock.miner_public_key = self.wallet.public_key_pem
                                 newBlock.miners_list = miners_list
                                 newBlock.files=self.file_hashes.copy()
                                 self.sign_block(newBlock)
 
-                                reqd_miner_pulic_key = self.wallet.public_key
+                                reqd_miner_pulic_key = self.wallet.public_key_pem
                                 if not Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
                                     print("\nInvalid Block\n")
                                     return

@@ -2,56 +2,10 @@ import json, hashlib, uuid, base64
 from typing import List,Dict
 from datetime import datetime, timedelta
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
+from blockchain.global_blockchain_structures import Transaction, Wallet, txs_to_json_digestable_form
 
 GAS_PRICE = 0.001 # coin per gas unit
 MAX_OUTPUT=2**256
-
-class Transaction:
-    def __init__(self, payload, sender: str, receiver: str, id=None, ts=None):
-        self.id=id or str(uuid.uuid4())
-        self.payload=payload # amount or [code, amount] or [contract id, function_name, arguments, state, amount]
-        self.sender: str=sender   # Public Key
-        self.receiver: str=receiver   # Public Key or "deploy" or "invoke"
-
-        self.sign: bytes=None
-        self.ts=ts or datetime.now().timestamp()
-
-    def to_dict(self):
-        dict={
-            "id":self.id,
-            "payload":self.payload,
-            "sender":self.sender,
-            "receiver":self.receiver,
-            "ts":self.ts
-        }
-        if(self.receiver!="deploy" or self.receiver!="invoke"):
-            dict["amount"]=self.payload
-        else:
-            dict["amount"]=self.payload[-1]
-        return dict
-    
-    def __eq__(self, other):
-        return(
-            self.id==other.id and
-            self.sender==other.sender and
-            self.receiver==other.receiver and
-            self.ts==other.ts
-        )
-    
-    def __hash__(self):
-        return hash(self.id)
-
-    def __str__(self):
-        return json.dumps(self.to_dict())
-    
-def txs_to_json_digestable_form(transactions: List[Transaction]):
-    l=[]
-    for i in range(len(transactions)):
-        tx_dict=transactions[i].to_dict()
-        if(transactions[i].sender!="Genesis"):
-            tx_dict["sign"]=base64.b64encode(transactions[i].sign).decode()
-        l.append(tx_dict)
-    return l
 
 class Stake:
     def __init__(self, staker:str, amt:int, ts=None):
@@ -378,18 +332,6 @@ class Chain:
                 return i
         return -1
 
-class Wallet:
-    def __init__(self, private_key_pem: str = None):
-        if not private_key_pem:
-            self.private_key = SigningKey.generate(curve=SECP256k1)
-        else:
-            self.private_key = SigningKey.from_pem(private_key_pem)
-            
-        self.private_key_pem = self.private_key.to_pem().decode()
-
-        self.public_key = self.private_key.get_verifying_key()
-
-        self.public_key_pem = self.public_key.to_pem().decode()
 
 def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
     for i in range(idx-1):

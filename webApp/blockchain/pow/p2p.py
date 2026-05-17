@@ -7,7 +7,7 @@ from blockchain.pow.blockchain_structures import Transaction, Block, Wallet, Cha
 from blockchain.pow.ipfs import addToIpfs, download_ipfs_file_subprocess
 from blockchain.smart_contract.contracts_db import SmartContractDatabase
 from blockchain.smart_contract.secure_executor import SecureContractExecutor
-from blockchain.storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
+from blockchain.storage.storage_manager import StorageManager
 from ecdsa import VerifyingKey, BadSignatureError
 from pathlib import Path
 
@@ -67,7 +67,7 @@ class Peer:
         self.name = name
         self.miner=miner
 
-        self.activate_disk_save = activate_disk_save
+        self.storage = StorageManager("pow", activate_disk_load, activate_disk_save);
 
         self.port = port
         self.ipfs_port = port + 50  # API port
@@ -87,7 +87,7 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        if activate_disk_load == "y":
+        if self.storage.get_disk_load_status() == "y":
             self.load_known_peers_from_disk()
         else:
             self.known_peers = None
@@ -124,16 +124,16 @@ class Peer:
         self.wallet=Wallet()
         self.chain: Chain=None
 
-        if activate_disk_load == "y":
+        if self.storage.get_disk_load_status() == "y":
             self.load_key_from_disk()
         else:
             self.wallet = None
         if not self.wallet:
             self.wallet=Wallet()
-            if self.activate_disk_save == "y":
+            if self.storage.get_disk_save_status() == "y":
                 self.save_key_to_disk()
         
-        if activate_disk_load == "y":
+        if self.storage.get_disk_load_status() == "y":
             self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
         else:
             self.chain = None
@@ -157,17 +157,17 @@ class Peer:
 
     def save_key_to_disk(self):
         key = self.wallet.private_key_pem
-        save_key(key, CONSENSUS)
+        self.storage.save_key(key)
 
     def load_key_from_disk(self):
-        key = load_key(CONSENSUS)
+        key = self.storage.load_key()
         if not key:
             self.wallet = None
             return
         self.wallet = Wallet(key)
 
     def load_chain_from_disk(self):
-        block_dict_list = load_chain(CONSENSUS)
+        block_dict_list = self.storage.load_chain()
         if not block_dict_list:
             self.chain = None
             return
@@ -181,16 +181,16 @@ class Peer:
 
     def save_chain_to_disk(self):
         chain = Chain.instance.to_block_dict_list()
-        save_chain(chain, CONSENSUS)
+        self.storage.save_chain(chain)
 
     def save_known_peers_to_disk(self):
         content = {}
         for key, value in self.known_peers.items():
             content[json.dumps(key)] = list(value)
-        save_peers(content, CONSENSUS)
+        self.storage.save_peers(content)
 
     def load_known_peers_from_disk(self):
-        content = load_peers(CONSENSUS)
+        content = self.storage.load_peers()
         if not content:
             self.known_peers = None
             return
@@ -344,7 +344,7 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
                 self.known_peers[normalized_endpoint]=(data['name'], data['public_key'])
-                if self.activate_disk_save == "y":
+                if self.storage.get_disk_save_status() == "y":
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data['name'].lower()]=data['public_key']
                 print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
@@ -367,7 +367,7 @@ class Peer:
                     await websocket.send(json.dumps(pkt))
                     data["name"] = proposed_name
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
-                if self.activate_disk_save == "y":
+                if self.storage.get_disk_save_status() == "y":
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
@@ -505,7 +505,7 @@ class Peer:
             if self.miner:
                 self.mine_task=asyncio.create_task(self.mine_blocks())
             await self.broadcast_message(msg)
-            if self.activate_disk_save == "y":
+            if self.storage.get_disk_save_status() == "y":
                 self.save_chain_to_disk()
 
 
@@ -538,14 +538,14 @@ class Peer:
             #If chain doesn't already exist we assign this as the chain
             if not Chain.instance:
                 self.chain=Chain(blockList=block_list)
-                if self.activate_disk_save == "y":
+                if self.storage.get_disk_save_status() == "y":
                     self.save_chain_to_disk()
                 return                 
 
             elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
                 print("\nCurrent chain replaced by longer chain")
-                if self.activate_disk_save == "y":
+                if self.storage.get_disk_save_status() == "y":
                     self.save_chain_to_disk()
             else:
                 print("\nCurrent Chain Longer than received chain")
@@ -880,7 +880,7 @@ class Peer:
                             }
                             self.seen_message_ids.add(pkt["id"])
                             await self.broadcast_message(pkt)
-                            if self.activate_disk_save == "y":
+                            if self.storage.get_disk_save_status() == "y":
                                 self.save_chain_to_disk()
                         else:
                             print("\n Invalid Block \n")

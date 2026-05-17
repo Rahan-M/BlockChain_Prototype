@@ -87,7 +87,7 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        if self.storage.get_disk_load_status() == "y":
+        if self.storage.get_disk_load_status():
             self.load_known_peers_from_disk()
         else:
             self.known_peers = None
@@ -124,16 +124,16 @@ class Peer:
         self.wallet=Wallet()
         self.chain: Chain=None
 
-        if self.storage.get_disk_load_status() == "y":
+        if self.storage.get_disk_load_status():
             self.load_key_from_disk()
         else:
             self.wallet = None
         if not self.wallet:
             self.wallet=Wallet()
-            if self.storage.get_disk_save_status() == "y":
+            if self.storage.get_disk_save_status():
                 self.save_key_to_disk()
         
-        if self.storage.get_disk_load_status() == "y":
+        if self.storage.get_disk_load_status():
             self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
         else:
             self.chain = None
@@ -344,7 +344,7 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
                 self.known_peers[normalized_endpoint]=(data['name'], data['public_key'])
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data['name'].lower()]=data['public_key']
                 print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
@@ -367,7 +367,7 @@ class Peer:
                     await websocket.send(json.dumps(pkt))
                     data["name"] = proposed_name
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
@@ -505,7 +505,7 @@ class Peer:
             if self.miner:
                 self.mine_task=asyncio.create_task(self.mine_blocks())
             await self.broadcast_message(msg)
-            if self.storage.get_disk_save_status() == "y":
+            if self.storage.get_disk_save_status():
                 self.save_chain_to_disk()
 
 
@@ -538,14 +538,14 @@ class Peer:
             #If chain doesn't already exist we assign this as the chain
             if not Chain.instance:
                 self.chain=Chain(blockList=block_list)
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_chain_to_disk()
                 return                 
 
             elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
                 print("\nCurrent chain replaced by longer chain")
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_chain_to_disk()
             else:
                 print("\nCurrent Chain Longer than received chain")
@@ -880,7 +880,7 @@ class Peer:
                             }
                             self.seen_message_ids.add(pkt["id"])
                             await self.broadcast_message(pkt)
-                            if self.storage.get_disk_save_status() == "y":
+                            if self.storage.get_disk_save_status():
                                 self.save_chain_to_disk()
                         else:
                             print("\n Invalid Block \n")

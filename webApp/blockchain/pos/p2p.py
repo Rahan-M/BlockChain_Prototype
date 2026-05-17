@@ -98,7 +98,7 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        if self.storage.get_disk_load_status() == "y":
+        if self.storage.get_disk_load_status():
             self.load_known_peers_from_disk()
         else:
             self.known_peers = None
@@ -140,16 +140,16 @@ class Peer:
         
         self.name_to_public_key_dict: Dict[str, str]={}
         
-        if self.storage.get_disk_load_status() == "y":
+        if self.storage.get_disk_load_status():
             self.load_key_from_disk()
         else:
             self.wallet = None
         if not self.wallet:
             self.wallet=Wallet()
-            if self.storage.get_disk_save_status() == "y":
+            if self.storage.get_disk_save_status():
                 self.save_key_to_disk()
         
-        if self.storage.get_disk_load_status() == "y":
+        if self.storage.get_disk_load_status():
             self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
         else:
             self.chain = None
@@ -413,7 +413,7 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
                 self.known_peers[normalized_endpoint] = (data['name'], data['public_key'])
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data['name'].lower()] = data['public_key']
                 print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
@@ -442,7 +442,7 @@ class Peer:
                     await websocket.send(json.dumps(pkt))
                     data["name"] = proposed_name
                 self.known_peers[normalized_endpoint] = (data["name"], data["public_key"])
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()] = data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
@@ -472,7 +472,7 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
             if normalized_endpoint not in self.known_peers and normalized_endpoint != normalized_self:
                 self.known_peers[normalized_endpoint] = (data["name"], data["public_key"])
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()] = data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
@@ -505,7 +505,7 @@ class Peer:
                     self.known_peers[normalized_endpoint] = (peer['name'], peer['public_key'])
                     self.name_to_public_key_dict[peer['name'].lower()] = peer['public_key']
             if new_peer_found:
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
             pkt = {
                 "type": "chain_request",
@@ -799,7 +799,7 @@ class Peer:
                 self.current_stakes.clear()
 
             await self.broadcast_message(msg)
-            if self.storage.get_disk_save_status() == "y":
+            if self.storage.get_disk_save_status():
                 self.save_chain_to_disk()
 
         elif t == "slash_announcement":
@@ -898,7 +898,7 @@ class Peer:
             # If chain doesn't already exist we assign this as the chain
             if not self.chain:
                 self.chain = Chain(blockList=block_list)
-                if self.storage.get_disk_save_status() == "y":
+                if self.storage.get_disk_save_status():
                     self.save_chain_to_disk()
                 
             else:
@@ -912,7 +912,7 @@ class Peer:
                         l2 = len(block_list)
                         if l2 > l1:
                             Chain.instance.rewrite(block_list)
-                            if self.storage.get_disk_save_status() == "y":
+                            if self.storage.get_disk_save_status():
                                 self.save_chain_to_disk()
                     else:  # Malicious fork
                         await self.verify_and_slash(block1, block2, pos, block_list)
@@ -920,7 +920,7 @@ class Peer:
                 elif weight_of_chain(Chain.instance.chain) < weight_of_chain(block_list):
                     Chain.instance.rewrite(block_list)
                     print("\nCurrent chain replaced by heavier chain\n")
-                    if self.storage.get_disk_save_status() == "y":
+                    if self.storage.get_disk_save_status():
                         self.save_chain_to_disk()
                 
                 else:
@@ -1348,7 +1348,7 @@ class Peer:
 
             self.seen_message_ids.add(pkt["id"])
             await self.broadcast_message(pkt)
-            if self.storage.get_disk_save_status() == "y":
+            if self.storage.get_disk_save_status():
                 self.save_chain_to_disk()
         self.last_epoch_end_ts=datetime.now()
 

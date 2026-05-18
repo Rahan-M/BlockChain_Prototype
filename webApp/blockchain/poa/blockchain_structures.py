@@ -3,21 +3,17 @@ from typing import List, Dict
 from datetime import datetime
 from ecdsa import SigningKey, SECP256k1, VerifyingKey
 import binascii
-from blockchain.global_blockchain_structures import Transaction, txs_to_json_digestable_form, Wallet
+from blockchain.shared_blockchain_structures import Transaction, BaseBlock, Wallet, txs_to_json_digestable_form
 
 GAS_PRICE = 0.001 # coin per gas unit
 
-class Block:
+class Block(BaseBlock):
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, id=None):
-        self.id=id or str(uuid.uuid4())
-        self.ts=ts or int(datetime.now().timestamp() * 1000)
-        self.prevHash=prevHash
-        self.transactions=transactions
+        super().__init__(prevHash, transactions, ts, id)
         self.miner_node_id= None
         self.miner_public_key= None
         self.signature = None # This will hold the digital signature from the miner
         self.miners_list = None # List of miner nodes
-        self.files: Dict[str: str] = {}
 
     def to_dict(self):
         return {
@@ -39,19 +35,7 @@ class Block:
     def hash(self):
         block_str=json.dumps(self.to_dict())
         return hashlib.sha256(block_str.encode()).hexdigest()
-    
-    def transaction_exists_in_block(self, transaction: Transaction):
-        for i in range(len(self.transactions)):
-            if self.transactions[i]==transaction:
-                return True
-        return False
-    
-    def cid_exists_in_block(self, cid: str):
-        for file_hash in list(self.files.keys()):
-            if file_hash==cid:
-                return True
-        return False
-    
+      
     def get_message_to_sign(self):
         return json.dumps({
             "id": self.id,

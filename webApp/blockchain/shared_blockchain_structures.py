@@ -1,5 +1,5 @@
 import json, uuid, base64
-from typing import List
+from typing import List, Dict 
 from datetime import datetime
 from ecdsa import VerifyingKey, SigningKey, SECP256k1
 
@@ -59,6 +59,27 @@ def txs_to_json_digestable_form(transactions: List[Transaction]):
     return l
 
 
+class BaseBlock:
+    def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, id=None):
+        self.prevHash=prevHash
+        self.transactions=transactions
+        self.id=id or str(uuid.uuid4())
+        self.ts=ts or int(datetime.now().timestamp() * 1000)
+        self.files: Dict[str: str] = {}
+    
+    def transaction_exists_in_block(self, transaction: Transaction):
+        for i in range(len(self.transactions)):
+            if self.transactions[i]==transaction:
+                return True
+        return False
+
+    def cid_exists_in_block(self, cid: str):
+        for file_hash in list(self.files.keys()):
+            if file_hash==cid:
+                return True
+        return False
+
+
 class Wallet:
     def __init__(self, private_key_pem: str = None):
         if not private_key_pem:
@@ -71,3 +92,4 @@ class Wallet:
         self.public_key = self.private_key.get_verifying_key()
 
         self.public_key_pem = self.public_key.to_pem().decode()
+

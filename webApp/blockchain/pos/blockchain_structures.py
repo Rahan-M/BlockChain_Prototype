@@ -2,7 +2,7 @@ import json, hashlib, uuid, base64
 from typing import List,Dict
 from datetime import datetime, timedelta
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
-from blockchain.global_blockchain_structures import Transaction, Wallet, txs_to_json_digestable_form
+from blockchain.shared_blockchain_structures import Transaction, BaseBlock, Wallet, txs_to_json_digestable_form
 
 GAS_PRICE = 0.001 # coin per gas unit
 MAX_OUTPUT=2**256
@@ -27,15 +27,12 @@ class Stake:
     def __str__(self):
         return json.dumps(self.to_dict())
     
-class Block:
+class Block(BaseBlock):
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, id=None):
-        self.prevHash=prevHash
-        self.transactions=transactions
-        self.ts=ts or datetime.now().timestamp()
-        self.id=id or str(uuid.uuid4())
+        super().__init__(prevHash, transactions, ts, id)
+
         self.creator: str=""
         self.staked_amt=0
-        self.files: Dict[str: str] = {}
         
         self.stakers:List[Stake]=[]  # needs to be replaced everywhere with stakes
         self.seed:str=""
@@ -99,18 +96,6 @@ class Block:
         block_str=json.dumps(self.to_dict())
         return hashlib.sha256(block_str.encode()).hexdigest()
     
-    def transaction_exists_in_block(self, transaction: Transaction):
-        for i in range(len(self.transactions)):
-            if self.transactions[i]==transaction:
-                return True
-        return False
-    
-    def cid_exists_in_block(self, cid: str):
-        for file_hash in list(self.files.keys()):
-            if file_hash==cid:
-                return True
-        return False
-    
 def valid_chain_length(i):
     valid_chain_len=i # because we use zero indexing4
 
@@ -163,7 +148,7 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[
     return bal
 
 class Chain:
-    instance =None #Class Variable
+    instance = None #Class Variable
 
     def __init__(self, publicKey:str=None, privatekey=None, blockList: List[Block]=None):
         """
@@ -332,7 +317,6 @@ class Chain:
                 return i
         return -1
 
-
 def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
     for i in range(idx-1):
         currBlock=blockList[i]
@@ -343,6 +327,7 @@ def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Trans
                 # meant to reuse a sign then id must be the same
                 # otherwise we'll get the invalid sign error
                 return False
+
 def isvalidChain(blockList:List[Block]):
     EPOCH_TIME = 60  # Add this constant or pass it as a parameter
     

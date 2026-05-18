@@ -2,20 +2,16 @@ import json, hashlib, uuid, base64
 from typing import List, Dict
 from datetime import datetime
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
-from blockchain.global_blockchain_structures import Transaction, txs_to_json_digestable_form, Wallet
+from blockchain.shared_blockchain_structures import Transaction, BaseBlock, Wallet, txs_to_json_digestable_form
 
-class Block:
+class Block(BaseBlock):
+    # pow block doesn't require sign for checking whether a block is valid
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, nonce=None, id=None):
-        self.prevHash=prevHash
-        self.transactions=transactions
-
-        self.ts=ts or int(datetime.now().timestamp() * 1000)
-        self.nonce=nonce or 0 #The _ are purely to make it easier on the eye
-
-        self.id=id or str(uuid.uuid4())
-        
+        super().__init__(prevHash, transactions, ts, id)
+        self.nonce=nonce or 0 
         self.miner: str=None
-        self.files: Dict[str: str] = {}
+
+        
 
     def to_dict(self):
         return {
@@ -35,17 +31,7 @@ class Block:
         block_str=json.dumps(self.to_dict())
         return hashlib.sha256(block_str.encode()).hexdigest()
     
-    def transaction_exists_in_block(self, transaction: Transaction):
-        for i in range(len(self.transactions)):
-            if self.transactions[i]==transaction:
-                return True
-        return False
 
-    def cid_exists_in_block(self, cid: str):
-        for file_hash in list(self.files.keys()):
-            if file_hash==cid:
-                return True
-        return False
 
 
 def valid_chain_length(i):

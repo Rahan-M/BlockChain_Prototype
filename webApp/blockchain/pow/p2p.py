@@ -3,11 +3,11 @@ import argparse, json, uuid, base64
 import socket, tempfile, ast, hashlib
 import os, subprocess
 from typing import Set, Dict, List, Tuple
-from blockchain.pow.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
-from blockchain.pow.ipfs import addToIpfs, download_ipfs_file_subprocess
-from blockchain.smart_contract.contracts_db import SmartContractDatabase
-from blockchain.smart_contract.secure_executor import SecureContractExecutor
-from blockchain.storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
+from webApp.blockchain.pow.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
+from webApp.blockchain.pow.ipfs import addToIpfs, download_ipfs_file_subprocess
+from webApp.blockchain.smart_contract.contracts_db import SmartContractDatabase
+from webApp.blockchain.smart_contract.secure_executor import SecureContractExecutor
+from webApp.blockchain.storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
 from ecdsa import VerifyingKey, BadSignatureError
 from pathlib import Path
 

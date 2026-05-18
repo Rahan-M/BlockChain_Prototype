@@ -135,7 +135,7 @@ class Wallet:
 
         self.public_key_pem = self.public_key.to_pem().decode()
 
-def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
+def transaction_exists_in_block_list(blockList, transaction_tc:Transaction, idx):
     for i in range(idx-1):
         currBlock=blockList[i]
         for transaction in currBlock.transactions:

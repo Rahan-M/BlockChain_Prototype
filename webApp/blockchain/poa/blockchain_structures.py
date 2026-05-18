@@ -3,7 +3,7 @@ from typing import List, Dict
 from datetime import datetime
 from ecdsa import SigningKey, SECP256k1, VerifyingKey
 import binascii
-from blockchain.shared_blockchain_structures import (
+from shared_blockchain_structures import (
     Transaction,
     BaseBlock,
     CommonChain,

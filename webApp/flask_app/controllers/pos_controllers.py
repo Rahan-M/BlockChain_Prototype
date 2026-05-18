@@ -3,8 +3,8 @@ import json, asyncio, websockets, base64
 from typing import List, Dict
 from datetime import datetime, timedelta
 from collections import OrderedDict
-from blockchain.pos import p2p, blockchain_structures
-from blockchain.pos.ipfs import download_ipfs_file_subprocess
+from webApp.blockchain.pos import p2p, blockchain_structures
+from webApp.blockchain.pos.ipfs import download_ipfs_file_subprocess
 from ecdsa import VerifyingKey, MalformedPointError, curves
 from ..app import set_consensus
 import sys, traceback, os

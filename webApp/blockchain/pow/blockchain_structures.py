@@ -2,7 +2,7 @@ import json, hashlib, uuid, base64
 from typing import List, Dict
 from datetime import datetime
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
-from blockchain.shared_blockchain_structures import (
+from shared_blockchain_structures import (
     Transaction,
     BaseBlock,
     CommonChain,

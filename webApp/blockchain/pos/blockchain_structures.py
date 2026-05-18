@@ -2,8 +2,15 @@ import json, hashlib, uuid, base64
 from typing import List,Dict
 from datetime import datetime, timedelta
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
-from blockchain.global_blockchain_structures import Transaction, Wallet, txs_to_json_digestable_form
-
+from shared_blockchain_structures import (
+    Transaction,
+    BaseBlock,
+    CommonChain,
+    Wallet,
+    txs_to_json_digestable_form,
+    valid_chain_length,
+    transaction_exists_in_block_list
+)
 GAS_PRICE = 0.001 # coin per gas unit
 MAX_OUTPUT=2**256
 
@@ -27,15 +34,12 @@ class Stake:
     def __str__(self):
         return json.dumps(self.to_dict())
     
-class Block:
+class Block(BaseBlock):
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, id=None):
-        self.prevHash=prevHash
-        self.transactions=transactions
-        self.ts=ts or datetime.now().timestamp()
-        self.id=id or str(uuid.uuid4())
+        super().__init__(prevHash, transactions, ts, id)
+
         self.creator: str=""
         self.staked_amt=0
-        self.files: Dict[str: str] = {}
         
         self.stakers:List[Stake]=[]  # needs to be replaced everywhere with stakes
         self.seed:str=""
@@ -98,31 +102,7 @@ class Block:
     def hash(self):
         block_str=json.dumps(self.to_dict())
         return hashlib.sha256(block_str.encode()).hexdigest()
-    
-    def transaction_exists_in_block(self, transaction: Transaction):
-        for i in range(len(self.transactions)):
-            if self.transactions[i]==transaction:
-                return True
-        return False
-    
-    def cid_exists_in_block(self, cid: str):
-        for file_hash in list(self.files.keys()):
-            if file_hash==cid:
-                return True
-        return False
-    
-def valid_chain_length(i):
-    valid_chain_len=i # because we use zero indexing4
 
-    if valid_chain_len>=50:
-        valid_chain_len-=10
-    elif valid_chain_len>=25:
-        valid_chain_len-=5
-    elif valid_chain_len>=10:
-        valid_chain_len-=3
-    elif valid_chain_len>=5:
-        valid_chain_len-=2
-    return valid_chain_len  
 
 def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[Transaction]=None, currStakes:List[Stake]=None):
     bal=0
@@ -162,8 +142,15 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[
     # transactions are added to the chain
     return bal
 
-class Chain:
-    instance =None #Class Variable
+def weight_of_chain(block_list:List[Block]):
+    total_weight=0
+    for block in block_list:
+        for stake in block.stakers:
+            total_weight+=stake.amt
+    return total_weight
+
+class Chain(CommonChain):
+    instance = None #Class Variable
 
     def __init__(self, publicKey:str=None, privatekey=None, blockList: List[Block]=None):
         """
@@ -171,27 +158,23 @@ class Chain:
             otherwise we receive blockList from the bootstrap node and
             we assign that to be the chain
         """
-        if not Chain.instance:
-            Chain.instance=self
-            """
-                If blocklist is given we simply make that the chain otherwise
-                we create a new chain
-            """
+        if Chain.instance is not None:
+            return
 
-            if publicKey and not blockList:
-                genesis_block=Block(None, [Transaction(50,"Genesis",publicKey)])
-                genesis_block.creator=publicKey
-                genesis_block.sign=privatekey.sign(str(genesis_block).encode())
-                self.chain=[genesis_block]
-
-                print("Initializing Chain...")
+        if publicKey and not blockList:
+            genesis_block=Block(None, [Transaction(50,"Genesis",publicKey)])
+            genesis_block.creator=publicKey
+            genesis_block.sign=privatekey.sign(str(genesis_block).encode())
+            super().__init__(genesis_block=genesis_block)
                 
-            elif blockList and not publicKey:
-                self.chain=blockList.copy() 
+        elif blockList and not publicKey:
+            super().__init__(block_list=blockList)
 
-    @property
-    def lastBlock(self):
-        return self.chain[-1]
+        else:
+            raise ValueError("Invalid arguments")
+
+        Chain.instance = self
+
 
     def to_block_dict_list(self):
         block_dict_list=[]
@@ -205,24 +188,10 @@ class Chain:
         return block_dict_list
     
     def rewrite(self, blockList :List[Block]):
-        if len(self.chain)>=len(blockList):
+        if weight_of_chain(self.chain)>=weight_of_chain(blockList):
             return
         
-        Chain.instance.chain=blockList.copy()
-
-    def transaction_exists_in_chain(self, transaction: Transaction):
-        for block in reversed(self.chain):
-            if block.transaction_exists_in_block(transaction):
-                return True
-        
-        return False
-
-    def cid_exists_in_chain(self, cid: str):
-        for block in reversed(self.chain):
-            if block.cid_exists_in_block(cid):
-                return True
-        
-        return False        
+        Chain.instance.chain=blockList.copy()    
     
     def isValidBlock(self, block: Block):
         if self.lastBlock.hash!=block.prevHash:
@@ -332,7 +301,6 @@ class Chain:
                 return i
         return -1
 
-
 def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
     for i in range(idx-1):
         currBlock=blockList[i]
@@ -343,6 +311,7 @@ def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Trans
                 # meant to reuse a sign then id must be the same
                 # otherwise we'll get the invalid sign error
                 return False
+
 def isvalidChain(blockList:List[Block]):
     EPOCH_TIME = 60  # Add this constant or pass it as a parameter
     
@@ -474,9 +443,3 @@ def isvalidChain(blockList:List[Block]):
 
     return True
 
-def weight_of_chain(block_list:List[Block]):
-    total_weight=0
-    for block in block_list:
-        for stake in block.stakers:
-            total_weight+=stake.amt
-    return total_weight

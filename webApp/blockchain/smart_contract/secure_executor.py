@@ -1,7 +1,7 @@
 import multiprocessing
 import time
 import psutil
-from blockchain.smart_contract.sandbox_runner import sandbox_contract_runner
+from webApp.blockchain.smart_contract.sandbox_runner import sandbox_contract_runner
 
 TIMEOUT = 20.0
 MEMORY_LIMIT_MB = 500

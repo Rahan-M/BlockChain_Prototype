@@ -79,6 +79,48 @@ class BaseBlock:
                 return True
         return False
 
+class CommonChain:
+
+    def __init__(self, genesis_block=None, block_list=None):
+
+        if genesis_block is not None:
+            self.chain = [genesis_block]
+            print("Initializing Chain...")
+
+        elif block_list is not None:
+            self.chain = block_list.copy()
+
+        else:
+            raise ValueError("Invalid initialization")    @property
+    def lastBlock(self):
+        return self.chain[-1]
+
+    
+    @property
+    def lastBlock(self):
+        return self.chain[-1]
+    
+    def to_block_dict_list(self):
+        block_dict_list=[]
+        for block in self.chain:
+            block_dict_list.append(block.to_dict())
+        
+        return block_dict_list
+
+    def transaction_exists_in_chain(self, transaction: Transaction):
+        for block in reversed(self.chain):
+            if block.transaction_exists_in_block(transaction):
+                return True
+        
+        return False
+
+    def cid_exists_in_chain(self, cid: str):
+        for block in reversed(self.chain):
+            if block.cid_exists_in_block(cid):
+                return True
+        
+        return False        
+
 
 class Wallet:
     def __init__(self, private_key_pem: str = None):
@@ -93,3 +135,24 @@ class Wallet:
 
         self.public_key_pem = self.public_key.to_pem().decode()
 
+def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
+    for i in range(idx-1):
+        currBlock=blockList[i]
+        for transaction in currBlock.transactions:
+            if(transaction.id==transaction_tc.id): 
+                # We sign the id of the transaction, 
+                # if it was truly a duplicate transaction
+                # meant to reuse a sign then id must be the same
+                # otherwise we'll get the invalid sign error
+                return False
+            
+def valid_chain_length(i):
+    valid_chain_len=i # because we use zero indexing
+    # We must be careful in how we choose which blocks are valid, since a block that was valid in before a new block is added shouldn't then become of undecided nature
+    # i.e for exapmple when length is 9 say the first 7 blocks are considered valid then when length becomes 10, it shouldn't become 5 or something like that
+    # For larger chains of length greater than 250 we assume blocks of depth greater than 50 is valid
+    if(valid_chain_len<250):
+        valid_chain_len=valid_chain_len-(valid_chain_len//5)
+    else:
+        valid_chain_len-=50
+    return valid_chain_len 

@@ -2,8 +2,15 @@ import json, hashlib, uuid, base64
 from typing import List, Dict
 from datetime import datetime
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
-from blockchain.shared_blockchain_structures import Transaction, BaseBlock, Wallet, txs_to_json_digestable_form
-
+from blockchain.shared_blockchain_structures import (
+    Transaction,
+    BaseBlock,
+    CommonChain,
+    Wallet,
+    txs_to_json_digestable_form,
+    valid_chain_length,
+    transaction_exists_in_block_list
+)
 class Block(BaseBlock):
     # pow block doesn't require sign for checking whether a block is valid
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, nonce=None, id=None):
@@ -30,22 +37,8 @@ class Block(BaseBlock):
     def hash(self):
         block_str=json.dumps(self.to_dict())
         return hashlib.sha256(block_str.encode()).hexdigest()
-    
 
-
-
-def valid_chain_length(i):
-    valid_chain_len=i # because we use zero indexing
-    # We must be careful in how we choose which blocks are valid, since a block that was valid in before a new block is added shouldn't then become of undecided nature
-    # i.e for exapmple when length is 9 say the first 7 blocks are considered valid then when length becomes 10, it shouldn't become 5 or something like that
-    # For larger chains of length greater than 250 we assume blocks of depth greater than 50 is valid
-    if(valid_chain_len<250):
-        valid_chain_len=valid_chain_len-(valid_chain_len//5)
-    else:
-        valid_chain_len-=50
-    return valid_chain_len 
-
-class Chain:
+class Chain(CommonChain):
     instance =None #Class Variable
 
     def __init__(self, publicKey:str=None, blockList: List[Block]=None):
@@ -54,24 +47,27 @@ class Chain:
             otherwise we receive blockList from the bootstrap node and
             we assign that to be the chain
         """
-        if not Chain.instance:
-            Chain.instance=self
-            """
-                If blocklist is given we simply make that the chain otherwise
-                we create a new chain
-            """
+        if Chain.instance is not None:
+            return
+        
+        Chain.instance=self
+        """
+            If blocklist is given we simply make that the chain otherwise
+            we create a new chain
+        """
 
-            if publicKey and not blockList:
-                self.chain=[Block(None, [Transaction(50,"Genesis",publicKey)])]
-                print("Initializing Chain...")
-                self.mine(self.chain[0])
-                
-            elif blockList and not publicKey:
-                self.chain=blockList.copy()
+        if publicKey and not blockList:
+            genesis_block = Block(None, [Transaction(50, "Genesis", publicKey)])
+            super().__init__(genesis_block=genesis_block)
+            self.mine(self.chain[0])
+            
+        elif blockList and not publicKey:
+            super().__init__(block_list=blockList)
 
-    @property
-    def lastBlock(self):
-        return self.chain[-1]
+        else:
+            raise ValueError("Invalid arguments")
+
+        Chain.instance = self
 
     def mine(self, block:Block):
         block.nonce=0
@@ -82,34 +78,13 @@ class Chain:
 
         print(f"Solution Found!!! nonce = {block.nonce} hash = {block.hash}") 
         return block.nonce
-
-    def to_block_dict_list(self):
-        block_dict_list=[]
-        for block in self.chain:
-            block_dict_list.append(block.to_dict())
-        
-        return block_dict_list
-    
+   
     def rewrite(self, blockList :List[Block]):
         if len(self.chain)>=len(blockList):
             return
         
         Chain.instance.chain=blockList.copy()
-
-    def transaction_exists_in_chain(self, transaction: Transaction):
-        for block in reversed(self.chain):
-            if block.transaction_exists_in_block(transaction):
-                return True
-        
-        return False
-
-    def cid_exists_in_chain(self, cid: str):
-        for block in reversed(self.chain):
-            if block.cid_exists_in_block(cid):
-                return True
-        
-        return False
-                
+              
     def isValidBlock(self, block: Block):
         #Verify Pow:
         if not block.hash.startswith("00000"):

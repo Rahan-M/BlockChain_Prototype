@@ -11,6 +11,7 @@ from shared_blockchain_structures import (
     valid_chain_length,
     transaction_exists_in_block_list
 )
+
 class Block(BaseBlock):
     # pow block doesn't require sign for checking whether a block is valid
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, nonce=None, id=None):

@@ -2,55 +2,20 @@ import json, hashlib, uuid, base64
 from typing import List,Dict
 from datetime import datetime, timedelta
 from ecdsa import SigningKey, SECP256k1, VerifyingKey, BadSignatureError
-
+from shared_blockchain_structures import (
+    Transaction,
+    BaseBlock,
+    CommonChain,
+    Wallet,
+    txs_to_json_digestable_form,
+    valid_chain_length,
+    transaction_exists_in_block_list
+)
 GAS_PRICE = 0.001 # coin per gas unit
 MAX_OUTPUT=2**256
 
-class Transaction:
-    def __init__(self, payload, sender: str, receiver: str, id=None, ts=None):
-        self.id=id or str(uuid.uuid4())
-        self.payload=payload # amount or [code, amount] or [contract id, function_name, arguments, state, amount]
-        self.sender: str=sender   # Public Key
-        self.receiver: str=receiver   # Public Key or "deploy" or "invoke"
-
-        self.sign: bytes=None
-        self.ts=ts or datetime.now().timestamp()
-
-    def to_dict(self):
-        dict={
-            "id":self.id,
-            "payload":self.payload,
-            "sender":self.sender,
-            "receiver":self.receiver,
-            "ts":self.ts
-        }
-        return dict
-    
-    def __eq__(self, other):
-        return(
-            self.id==other.id and
-            self.sender==other.sender and
-            self.receiver==other.receiver and
-            self.ts==other.ts
-        )
-    
-    def __hash__(self):
-        return hash(self.id)
-
-    def __str__(self):
-        return json.dumps(self.to_dict())
-    
-def txs_to_json_digestable_form(transactions: List[Transaction]):
-    l=[]
-    for i in range(len(transactions)):
-        tx_dict=transactions[i].to_dict()
-        if(transactions[i].sender!="Genesis"):
-            tx_dict["sign"]=base64.b64encode(transactions[i].sign).decode()
-        l.append(tx_dict)
-    return l
-
 class Stake:
-    def __init__(self, staker:str, amt:float, ts=None):
+    def __init__(self, staker:str, amt:int, ts=None):
         self.id=str(uuid.uuid4())
         self.staker=staker
         self.amt=amt
@@ -69,15 +34,12 @@ class Stake:
     def __str__(self):
         return json.dumps(self.to_dict())
     
-class Block:
+class Block(BaseBlock):
     def __init__(self, prevHash:str, transactions:List[Transaction], ts=None, id=None):
-        self.prevHash=prevHash
-        self.transactions=transactions
-        self.ts=ts or datetime.now().timestamp()
-        self.id=id or str(uuid.uuid4())
+        super().__init__(prevHash, transactions, ts, id)
+
         self.creator: str=""
         self.staked_amt=0
-        self.files: Dict[str: str] = {}
         
         self.stakers:List[Stake]=[]  # needs to be replaced everywhere with stakes
         self.seed:str=""
@@ -140,27 +102,7 @@ class Block:
     def hash(self):
         block_str=json.dumps(self.to_dict())
         return hashlib.sha256(block_str.encode()).hexdigest()
-    
-    def transaction_exists_in_block(self, transaction: Transaction):
-        for i in range(len(self.transactions)):
-            if self.transactions[i]==transaction:
-                return True
-        return False
-    
-    def cid_exists_in_block(self, cid: str):
-        for file_hash in list(self.files.keys()):
-            if file_hash==cid:
-                return True
-        return False
-    
-def valid_chain_length(i):
-    valid_chain_len=i # because we use zero indexing4
 
-    if(valid_chain_len<250):
-        valid_chain_len=valid_chain_len-(valid_chain_len//5)
-    else:
-        valid_chain_len-=50
-    return valid_chain_len  
 
 def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[Transaction]=None, currStakes:List[Stake]=None):
     bal=0
@@ -200,36 +142,39 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i, mem_pool:List[
     # transactions are added to the chain
     return bal
 
-class Chain:
-    instance =None #Class Variable
+def weight_of_chain(block_list:List[Block]):
+    total_weight=0
+    for block in block_list:
+        for stake in block.stakers:
+            total_weight+=stake.amt
+    return total_weight
+
+class Chain(CommonChain):
+    instance = None #Class Variable
 
     def __init__(self, publicKey:str=None, privatekey=None, blockList: List[Block]=None):
         """
-            If we are the first node, we mine the genesis block for ourself
+            If we are the first node, we mine the genesis block for ouself
             otherwise we receive blockList from the bootstrap node and
             we assign that to be the chain
         """
-        if not Chain.instance:
-            Chain.instance=self
-            """
-                If blocklist is given we simply make that the chain otherwise
-                we create a new chain
-            """
+        if Chain.instance is not None:
+            return
 
-            if publicKey and not blockList:
-                genesis_block=Block(None, [Transaction(50,"Genesis",publicKey)])
-                genesis_block.creator=publicKey
-                genesis_block.sign=privatekey.sign(str(genesis_block).encode())
-                self.chain=[genesis_block]
-
-                print("Initializing Chain...")
+        if publicKey and not blockList:
+            genesis_block=Block(None, [Transaction(50,"Genesis",publicKey)])
+            genesis_block.creator=publicKey
+            genesis_block.sign=privatekey.sign(str(genesis_block).encode())
+            super().__init__(genesis_block=genesis_block)
                 
-            elif blockList and not publicKey:
-                self.chain=blockList.copy() 
+        elif blockList and not publicKey:
+            super().__init__(block_list=blockList)
 
-    @property
-    def lastBlock(self):
-        return self.chain[-1]
+        else:
+            raise ValueError("Invalid arguments")
+
+        Chain.instance = self
+
 
     def to_block_dict_list(self):
         block_dict_list=[]
@@ -243,24 +188,10 @@ class Chain:
         return block_dict_list
     
     def rewrite(self, blockList :List[Block]):
-        if len(self.chain)>=len(blockList):
+        if weight_of_chain(self.chain)>=weight_of_chain(blockList):
             return
         
-        Chain.instance.chain=blockList.copy()
-
-    def transaction_exists_in_chain(self, transaction: Transaction):
-        for block in reversed(self.chain):
-            if block.transaction_exists_in_block(transaction):
-                return True
-        
-        return False
-
-    def cid_exists_in_chain(self, cid: str):
-        for block in reversed(self.chain):
-            if block.cid_exists_in_block(cid):
-                return True
-        
-        return False        
+        Chain.instance.chain=blockList.copy()    
     
     def isValidBlock(self, block: Block):
         if self.lastBlock.hash!=block.prevHash:
@@ -290,7 +221,6 @@ class Chain:
                 amount = transaction.payload
             if amount>Chain.instance.calc_balance(publicKey=transaction.sender,pending_transactions=mem_pool,current_stakes=block.stakers) or amount<=0: 
                 # we have to make sure the current transactions are included when checking for balance
-                print("\nInvalid amount on transaction\n")
                 return False
             mem_pool.append(transaction)
 
@@ -303,7 +233,6 @@ class Chain:
                 print("\nInvalid signature on stake\n")
                 return False
             if(stake.amt<=0 or stake.amt>Chain.instance.calc_balance(stake.staker, mem_pool, currStakes)):
-                print("\nInvalid amount on stake\n")
                 return False
             currStakes.append(stake)
         return True
@@ -372,19 +301,6 @@ class Chain:
                 return i
         return -1
 
-class Wallet:
-    def __init__(self, private_key_pem: str = None):
-        if not private_key_pem:
-            self.private_key = SigningKey.generate(curve=SECP256k1)
-        else:
-            self.private_key = SigningKey.from_pem(private_key_pem)
-            
-        self.private_key_pem = self.private_key.to_pem().decode()
-
-        self.public_key = self.private_key.get_verifying_key()
-
-        self.public_key_pem = self.public_key.to_pem().decode()
-
 def transaction_exists_in_block_list(blockList:List[Block], transaction_tc:Transaction, idx):
     for i in range(idx-1):
         currBlock=blockList[i]
@@ -414,7 +330,7 @@ def isvalidChain(blockList:List[Block]):
         try:
             # Convert Unix timestamp to datetime
             if isinstance(currBlock.ts, (int, float)):
-                block_time = datetime.fromtimestamp(currBlock.ts)
+                block_time = datetime.fromtimestamp(currBlock.ts/1000)
             elif isinstance(currBlock.ts, str):
                 block_time = datetime.fromisoformat(currBlock.ts)
             elif isinstance(currBlock.ts, datetime):
@@ -426,7 +342,7 @@ def isvalidChain(blockList:List[Block]):
             # Get previous block time
             prev_block_ts = blockList[i-1].ts
             if isinstance(prev_block_ts, (int, float)):
-                prev_block_time = datetime.fromtimestamp(prev_block_ts)
+                prev_block_time = datetime.fromtimestamp(prev_block_ts/1000)
             elif isinstance(prev_block_ts, str):
                 prev_block_time = datetime.fromisoformat(prev_block_ts)
             elif isinstance(prev_block_ts, datetime):
@@ -527,9 +443,3 @@ def isvalidChain(blockList:List[Block]):
 
     return True
 
-def weight_of_chain(block_list:List[Block]):
-    total_weight=0
-    for block in block_list:
-        for stake in block.stakers:
-            total_weight+=stake.amt
-    return total_weight

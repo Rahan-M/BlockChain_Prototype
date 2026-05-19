@@ -2,7 +2,6 @@ from flask import request, jsonify, Response
 import json, asyncio, websockets
 from collections import OrderedDict
 from blockchain.poa import p2p, blockchain_structures
-from blockchain.poa.ipfs import download_ipfs_file_subprocess
 from ecdsa import VerifyingKey, MalformedPointError, curves
 from ..app import set_consensus
 import sys, traceback, os, copy
@@ -59,9 +58,6 @@ async def start_new_blockchain():
             peer_instance.run_forever()
         )
 
-        peer_instance.init_repo()
-        peer_instance.configure_ports()
-
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
         return jsonify({"success":False, "error": "Request must be JSON"})
@@ -107,8 +103,6 @@ async def connect_to_blockchain():
         peer_instance.sampler_task = asyncio.create_task(peer_instance.gossip_peer_sampler())
         peer_instance.round_task = asyncio.create_task(peer_instance.round_calculator())
 
-        peer_instance.init_repo()
-        peer_instance.configure_ports()
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
 
     else:
@@ -452,5 +446,5 @@ def downloadFileIPFS():
     name=data.get('name')
     full_path=os.path.join(path, name)
     print(full_path)
-    download_ipfs_file_subprocess(cid, full_path)
+    peer_instance.ipfs.download_ipfs_file_subprocess(cid, full_path)
     return jsonify({"success":True, "message": "File Downloaded"})

@@ -57,7 +57,8 @@ class IPFSManager:
                 ['ipfs', 'add', file_path],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                env=self.env
             )
 
             output_lines = result.stdout.strip().split('\n')
@@ -132,7 +133,8 @@ class IPFSManager:
                 command,
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                env=self.env
             )
 
             print(f"Successfully downloaded CID {cid} to: {destination_path}")

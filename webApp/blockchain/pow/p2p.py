@@ -4,10 +4,10 @@ import socket, tempfile, ast, hashlib
 import os, subprocess
 from typing import Set, Dict, List, Tuple
 from webApp.blockchain.pow.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
-from webApp.blockchain.pow.ipfs import addToIpfs, download_ipfs_file_subprocess
+from webApp.blockchain.ipfs.ipfs_manager import IPFSManager
 from webApp.blockchain.smart_contract.contracts_db import SmartContractDatabase
 from webApp.blockchain.smart_contract.secure_executor import SecureContractExecutor
-from webApp.blockchain.storage.storage_manager import save_key, load_key, save_chain, load_chain, save_peers, load_peers
+from webApp.blockchain.storage.storage_manager import StorageManager
 from ecdsa import VerifyingKey, BadSignatureError
 from pathlib import Path
 
@@ -64,19 +64,12 @@ def get_contract_code_from_notepad():
 class Peer:
     def __init__(self, host, port, name, miner:bool, activate_disk_load='n', activate_disk_save='n'):
         self.host = host
+        self.port = port
         self.name = name
         self.miner=miner
 
-        self.activate_disk_save = activate_disk_save
-
-        self.port = port
-        self.ipfs_port = port + 50  # API port
-        self.gateway_port = port + 81  # Gateway port
-        self.swarm_tcp = port + 2
-        self.swarm_udp = port + 3
-        self.repo_path = Path.home() / f".ipfs_{port}"
-        self.env = os.environ.copy()
-        self.env["IPFS_PATH"] = str(self.repo_path)
+        self.storage = StorageManager("pow", activate_disk_load, activate_disk_save)
+        self.ipfs = IPFSManager(port)
 
         self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
         self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
@@ -87,7 +80,7 @@ class Peer:
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        if activate_disk_load == "y":
+        if self.storage.get_disk_load_status():
             self.load_known_peers_from_disk()
         else:
             self.known_peers = None
@@ -115,25 +108,21 @@ class Peer:
 
         self.mem_pool: List[Transaction]=list()
 
-        self.file_hashes: Dict[str, str]={}
-        self.file_hashes_lock= asyncio.Lock()
-        self.daemon_process=None
-
         self.name_to_public_key_dict: Dict[str, str]={}
         
         self.wallet=Wallet()
         self.chain: Chain=None
 
-        if activate_disk_load == "y":
+        if self.storage.get_disk_load_status():
             self.load_key_from_disk()
         else:
             self.wallet = None
         if not self.wallet:
             self.wallet=Wallet()
-            if self.activate_disk_save == "y":
+            if self.storage.get_disk_save_status():
                 self.save_key_to_disk()
         
-        if activate_disk_load == "y":
+        if self.storage.get_disk_load_status():
             self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
         else:
             self.chain = None
@@ -157,17 +146,17 @@ class Peer:
 
     def save_key_to_disk(self):
         key = self.wallet.private_key_pem
-        save_key(key, CONSENSUS)
+        self.storage.save_key(key)
 
     def load_key_from_disk(self):
-        key = load_key(CONSENSUS)
+        key = self.storage.load_key()
         if not key:
             self.wallet = None
             return
         self.wallet = Wallet(key)
 
     def load_chain_from_disk(self):
-        block_dict_list = load_chain(CONSENSUS)
+        block_dict_list = self.storage.load_chain()
         if not block_dict_list:
             self.chain = None
             return
@@ -181,16 +170,16 @@ class Peer:
 
     def save_chain_to_disk(self):
         chain = Chain.instance.to_block_dict_list()
-        save_chain(chain, CONSENSUS)
+        self.storage.save_chain(chain)
 
     def save_known_peers_to_disk(self):
         content = {}
         for key, value in self.known_peers.items():
             content[json.dumps(key)] = list(value)
-        save_peers(content, CONSENSUS)
+        self.storage.save_peers(content)
 
     def load_known_peers_from_disk(self):
-        content = load_peers(CONSENSUS)
+        content = self.storage.load_peers()
         if not content:
             self.known_peers = None
             return
@@ -344,7 +333,7 @@ class Peer:
             normalized_endpoint = normalize_endpoint((data['host'], data['port']))
             if normalized_endpoint not in self.known_peers and normalize_endpoint!=normalized_self :
                 self.known_peers[normalized_endpoint]=(data['name'], data['public_key'])
-                if self.activate_disk_save == "y":
+                if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data['name'].lower()]=data['public_key']
                 print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
@@ -367,7 +356,7 @@ class Peer:
                     await websocket.send(json.dumps(pkt))
                     data["name"] = proposed_name
                 self.known_peers[normalized_endpoint]=(data["name"], data["public_key"])
-                if self.activate_disk_save == "y":
+                if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
                 print(f"Registered peer {data["name"]} {data["host"]}:{data["port"]}")
@@ -408,8 +397,8 @@ class Peer:
         elif t=="file":
             cid=msg["cid"]
             desc=msg["desc"]
-            async with self.file_hashes_lock:
-                self.file_hashes[cid]=desc
+            async with self.ipfs.file_hashes_lock:
+                self.ipfs.file_hashes[cid]=desc
 
         elif t=="new_tx":
             tx_str=msg["transaction"]
@@ -497,15 +486,15 @@ class Peer:
                     if newBlock.transaction_exists_in_block(transaction):
                         self.mem_pool.remove(transaction)
 
-            async with self.file_hashes_lock:
-                for hash in list(self.file_hashes.keys()):
+            async with self.ipfs.file_hashes_lock:
+                for hash in list(self.ipfs.file_hashes.keys()):
                     if newBlock.cid_exists_in_block(hash):
-                        self.file_hashes.pop(hash, None)
+                        self.ipfs.file_hashes.pop(hash, None)
                         
             if self.miner:
                 self.mine_task=asyncio.create_task(self.mine_blocks())
             await self.broadcast_message(msg)
-            if self.activate_disk_save == "y":
+            if self.storage.get_disk_save_status():
                 self.save_chain_to_disk()
 
 
@@ -538,14 +527,14 @@ class Peer:
             #If chain doesn't already exist we assign this as the chain
             if not Chain.instance:
                 self.chain=Chain(blockList=block_list)
-                if self.activate_disk_save == "y":
+                if self.storage.get_disk_save_status():
                     self.save_chain_to_disk()
                 return                 
 
             elif(len(Chain.instance.chain)<len(block_list)):
                 Chain.instance.rewrite(block_list)
                 print("\nCurrent chain replaced by longer chain")
-                if self.activate_disk_save == "y":
+                if self.storage.get_disk_save_status():
                     self.save_chain_to_disk()
             else:
                 print("\nCurrent Chain Longer than received chain")
@@ -555,10 +544,10 @@ class Peer:
                     if Chain.instance.transaction_exists_in_chain(transaction):
                         self.mem_pool.remove(transaction)
 
-            async with self.file_hashes_lock:
-                for hash in list(self.file_hashes.keys()):
+            async with self.ipfs.file_hashes_lock:
+                for hash in list(self.ipfs.file_hashes.keys()):
                     if(Chain.instance.cid_exists_in_chain(hash)):
-                        self.file_hashes.pop(hash, None)
+                        self.ipfs.file_hashes.pop(hash, None)
 
     async def handle_connections(self, websocket):
         """
@@ -653,10 +642,10 @@ class Peer:
             print("\nFile doesn't exist\n")
             return
 
-        if not self.daemon_process: 
-            self.start_daemon()
+        if not self.ipfs.daemon_process:
+            self.ipfs.start_daemon()
         
-        cid, name = await asyncio.to_thread(addToIpfs, path)
+        cid, name = await asyncio.to_thread(self.ipfs.add_to_ipfs, path)
         if(not(cid and name)):
             return
         
@@ -669,35 +658,9 @@ class Peer:
         }
         
         self.seen_message_ids.add(pkt["id"])
-        async with self.file_hashes_lock:
-            self.file_hashes[cid]=desc
+        async with self.ipfs.file_hashes_lock:
+            self.ipfs.file_hashes[cid]=desc
         return pkt
-
-    def init_repo(self):
-        """
-            Creates a ipfs repo of name ending in ipfs_port_no eg ipfs_5000 
-        """
-        if not self.repo_path.exists():
-            subprocess.run(["ipfs", "init"], env=self.env, check=True)
-            print("\nIPFS repo created\n")
-
-    def configure_ports(self):
-        subprocess.run(["ipfs", "config", "Addresses.API", f"/ip4/127.0.0.1/tcp/{self.ipfs_port}"], env=self.env, check=True)
-        subprocess.run(["ipfs", "config", "Addresses.Gateway", f"/ip4/127.0.0.1/tcp/{self.gateway_port}"], env=self.env, check=True)
-        subprocess.run([
-            "ipfs", "config", "Addresses.Swarm", "--json",
-            f'["/ip4/127.0.0.1/tcp/{self.swarm_tcp}", "/ip4/127.0.0.1/udp/{self.swarm_udp}/quic"]'
-        ], env=self.env, check=True)
-        print("\nConfigured Ports\n")
-
-    def start_daemon(self):
-        self.daemon_process= subprocess.Popen(["ipfs", "daemon"], env=self.env)
-        print("\nIPFS Daemon Started\n")
-
-    def stop_daemon(self):
-        if self.daemon_process:
-            self.daemon_process.terminate()
-            self.daemon_process.wait()
 
     async def connect_to_peer(self, host, port):
         """
@@ -850,7 +813,7 @@ class Peer:
 
                     if(len(transaction_list)>0):
                         newBlock=Block(Chain.instance.lastBlock.hash, transaction_list)
-                        newBlock.files=self.file_hashes.copy()
+                        newBlock.files=self.ipfs.file_hashes.copy()
 
                         await asyncio.to_thread(Chain.instance.mine, newBlock)
                         newBlock.miner=self.wallet.public_key_pem
@@ -863,10 +826,10 @@ class Peer:
                                 if transaction.receiver == "deploy":
                                     self.deploy_contract(transaction)
                             
-                            async with self.file_hashes_lock:
-                                for hash in list(self.file_hashes.keys()):
+                            async with self.ipfs.file_hashes_lock:
+                                for hash in list(self.ipfs.file_hashes.keys()):
                                     if newBlock.cid_exists_in_block(hash):
-                                        self.file_hashes.pop(hash, None)
+                                        self.ipfs.file_hashes.pop(hash, None)
 
                             for transaction in self.mem_pool:
                                 if newBlock.transaction_exists_in_block(transaction):
@@ -880,7 +843,7 @@ class Peer:
                             }
                             self.seen_message_ids.add(pkt["id"])
                             await self.broadcast_message(pkt)
-                            if self.activate_disk_save == "y":
+                            if self.storage.get_disk_save_status():
                                 self.save_chain_to_disk()
                         else:
                             print("\n Invalid Block \n")
@@ -957,9 +920,6 @@ class Peer:
 
         if self.miner:
             self.mine_task=asyncio.create_task(self.mine_blocks())
-
-        self.init_repo()
-        self.configure_ports()
         
         await self.consensus_task
 
@@ -971,7 +931,6 @@ class Peer:
         if self.miner:
             self.mine_task = asyncio.create_task(self.mine_blocks())
 
-
     async def stop(self):
         if self.disc_task:
             self.disc_task.cancel()
@@ -980,8 +939,8 @@ class Peer:
         if self.consensus_task:
             self.consensus_task.cancel()
 
-        if self.daemon_process:
-            self.stop_daemon()
+        if self.ipfs.daemon_process:
+            self.ipfs.stop_daemon()
 
         if self.mine_task:
             self.mine_task.cancel()

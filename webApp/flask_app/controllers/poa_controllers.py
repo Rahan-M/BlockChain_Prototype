@@ -2,7 +2,6 @@ from flask import request, jsonify, Response
 import json, asyncio, websockets
 from collections import OrderedDict
 from webApp.blockchain.poa import p2p, blockchain_structures
-from webApp.blockchain.poa.ipfs import download_ipfs_file_subprocess
 from ecdsa import VerifyingKey, MalformedPointError, curves
 from ..app import set_consensus
 import sys, traceback, os, copy
@@ -45,11 +44,11 @@ async def start_new_blockchain():
             import traceback
             traceback.print_exc()
         
-        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key)
+        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key_pem)
 
         # Genesis block data updation
         peer_instance.chain.chain[0].miner_node_id = peer_instance.node_id
-        peer_instance.chain.chain[0].miner_public_key = peer_instance.wallet.public_key
+        peer_instance.chain.chain[0].miner_public_key = peer_instance.wallet.public_key_pem
         peer_instance.chain.chain[0].miners_list = [peer_instance.node_id]
         peer_instance.sign_block(peer_instance.chain.chain[0])
         peer_instance.admin_id = peer_instance.node_id
@@ -58,9 +57,6 @@ async def start_new_blockchain():
         peer_instance.keepalive_task = asyncio.get_event_loop().create_task(
             peer_instance.run_forever()
         )
-
-        peer_instance.init_repo()
-        peer_instance.configure_ports()
 
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
@@ -107,8 +103,6 @@ async def connect_to_blockchain():
         peer_instance.sampler_task = asyncio.create_task(peer_instance.gossip_peer_sampler())
         peer_instance.round_task = asyncio.create_task(peer_instance.round_calculator())
 
-        peer_instance.init_repo()
-        peer_instance.configure_ports()
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
 
     else:
@@ -188,7 +182,7 @@ async def add_transaction():
         if amount < 0:
             return jsonify({"success":False, "error": "Amount must be a positive value"})
 
-    bal=peer_instance.chain.calc_balance(peer_instance.wallet.public_key, peer_instance.mem_pool)
+    bal=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, peer_instance.mem_pool)
     if amount > bal:
         return jsonify({"success":False, "error": f"Insufficient Account Balance {amount}>{bal}"})
     
@@ -205,7 +199,7 @@ def account_balance():
     
     try:
         print()
-        amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key, list(peer_instance.mem_pool))
+        amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
         return jsonify({"success":True, "message":"succesful request", "account_balance": amt})
     except:
         return jsonify({"success":False, "error": "error while fetching account balance"}, 409)
@@ -236,7 +230,7 @@ def get_states():
 
 def get_status():
     global peer_instance
-    amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key, list(peer_instance.mem_pool))
+    amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
 
     return Response(
         json.dumps(OrderedDict([
@@ -245,7 +239,7 @@ def get_status():
             ("host", peer_instance.host),
             ("port", peer_instance.port),
             ("account_balance", amt),
-            ("public_key",peer_instance.wallet.public_key),
+            ("public_key",peer_instance.wallet.public_key_pem),
             ("private_key",peer_instance.wallet.private_key_pem),
             ("node_id", peer_instance.node_id),
             ("admin_id", peer_instance.admin_id),
@@ -310,7 +304,7 @@ def get_current_miners():
         name = peer_instance.node_id_to_name_dict[node_id]
         public_key = None
         if node_id == peer_instance.node_id:
-            public_key = peer_instance.wallet.public_key
+            public_key = peer_instance.wallet.public_key_pem
         else:
             public_key = peer_instance.name_to_public_key_dict[name]
         current_miners_list.append({
@@ -391,7 +385,7 @@ def get_latest_miners():
         name = peer_instance.node_id_to_name_dict[node_id]
         public_key = None
         if node_id == peer_instance.node_id:
-            public_key = peer_instance.wallet.public_key
+            public_key = peer_instance.wallet.public_key_pem
         else:
             public_key = peer_instance.name_to_public_key_dict[name]
         latest_miners_list.append({
@@ -417,7 +411,7 @@ def get_not_latest_miners():
             name = peer_instance.node_id_to_name_dict[node_id]
             public_key = None
             if node_id == peer_instance.node_id:
-                public_key = peer_instance.wallet.public_key
+                public_key = peer_instance.wallet.public_key_pem
             else:
                 public_key = peer_instance.name_to_public_key_dict[name]
             not_latest_miners_list.append({
@@ -452,5 +446,5 @@ def downloadFileIPFS():
     name=data.get('name')
     full_path=os.path.join(path, name)
     print(full_path)
-    download_ipfs_file_subprocess(cid, full_path)
+    peer_instance.ipfs.download_ipfs_file_subprocess(cid, full_path)
     return jsonify({"success":True, "message": "File Downloaded"})

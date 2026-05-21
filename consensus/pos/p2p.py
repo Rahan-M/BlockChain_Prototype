@@ -636,7 +636,7 @@ class Peer:
             try:
                 # Convert Unix timestamp to datetime
                 if isinstance(newBlock.ts, (int, float)):
-                    block_time = datetime.fromtimestamp(newBlock.ts)
+                    block_time = datetime.fromtimestamp((newBlock.ts)/1000)
                 elif isinstance(newBlock.ts, str):
                     block_time = datetime.fromisoformat(newBlock.ts)
                 elif isinstance(newBlock.ts, datetime):
@@ -662,7 +662,7 @@ class Peer:
                     last_block_ts = Chain.instance.lastBlock.ts
                     # Handle the same types for lastBlock timestamp
                     if isinstance(last_block_ts, (int, float)):
-                        last_block_time = datetime.fromtimestamp(last_block_ts)
+                        last_block_time = datetime.fromtimestamp(last_block_ts/1000)
                     elif isinstance(last_block_ts, str):
                         last_block_time = datetime.fromisoformat(last_block_ts)
                     elif isinstance(last_block_ts, datetime):

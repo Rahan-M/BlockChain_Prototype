@@ -3,8 +3,8 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
 # Import your app factory and the shutdown_all_peers function
-from flask_app.app import create_app, shutdown_peer
-from config import DevelopmentConfig  # Import the desired configuration
+from webApp.flask_app.app import create_app, shutdown_peer
+from webapp_config import DevelopmentConfig  # Import the desired configuration
 
 # Import WsgiToAsgi to make Flask compatible with ASGI servers like Hypercorn
 from asgiref.wsgi import WsgiToAsgi
@@ -72,7 +72,7 @@ async def main():
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # Path to the React build directory relative to Flask app.py
-REACT_BUILD_DIR = os.path.join(BASE_DIR, 'flask_app', 'frontend', 'dist')
+REACT_BUILD_DIR = os.path.join(BASE_DIR, 'webApp', 'flask_app', 'frontend', 'dist')
 
 if __name__ == "__main__":
     if not os.path.exists(REACT_BUILD_DIR):

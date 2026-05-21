@@ -39,7 +39,7 @@ def create_app(config_class=None):
         app.config.from_object(config_class)
     else:
         # Default to DevelopmentConfig if no config_class is provided
-        from config import DevelopmentConfig
+        from webapp_config import DevelopmentConfig
         app.config.from_object(DevelopmentConfig)
 
     @app.route('/', defaults={'path': ''})

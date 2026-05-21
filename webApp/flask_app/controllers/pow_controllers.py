@@ -1,7 +1,7 @@
 from flask import request, jsonify, Response
 import json, asyncio, websockets
 from collections import OrderedDict
-from blockchain.pow import p2p, blockchain_structures
+from webApp.blockchain.pow import p2p, blockchain_structures
 from ecdsa import VerifyingKey, MalformedPointError, curves
 from ..app import set_consensus
 import sys, traceback, os

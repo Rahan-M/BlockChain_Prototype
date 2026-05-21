@@ -3,11 +3,11 @@ import json, uuid, base64
 from typing import Set, Dict, List, Tuple
 import copy
 import socket
-from blockchain.poa.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
-from blockchain.ipfs.ipfs_manager import IPFSManager
-from blockchain.smart_contract.contracts_db import SmartContractDatabase
-from blockchain.smart_contract.secure_executor import SecureContractExecutor
-from blockchain.storage.storage_manager import StorageManager
+from webApp.blockchain.poa.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
+from webApp.blockchain.ipfs.ipfs_manager import IPFSManager
+from webApp.blockchain.smart_contract.contracts_db import SmartContractDatabase
+from webApp.blockchain.smart_contract.secure_executor import SecureContractExecutor
+from webApp.blockchain.storage.storage_manager import StorageManager
 from ecdsa import VerifyingKey
 import binascii
 import os

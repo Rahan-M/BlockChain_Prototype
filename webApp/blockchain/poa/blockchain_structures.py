@@ -110,35 +110,24 @@ def calc_balance_block_list(block_list:List[Block], publicKey, i, pending_transa
 class Chain(CommonChain):
     instance = None
 
-    def __init__(self, publicKey=None, blockList=None):
-        """
-            If we are the first node, we mine the genesis block for ouself
-            otherwise we receive blockList from the bootstrap node and
-            we assign that to be the chain
-        """
-        if Chain.instance is not None:
+    def __init__(self, block_list = None):
+        instance = self
+
+        if not block_list:
+            self.chain = []
             return
 
-        if publicKey and not blockList:
-            genesis_block = Block(None, [Transaction(50, "Genesis", publicKey)])
-            super().__init__(genesis_block=genesis_block)
+        self.chain = block_list.copy()
 
-        elif blockList and not publicKey:
-            super().__init__(block_list=blockList)
-
-        else:
-            raise ValueError("Invalid arguments")
-
-        Chain.instance = self
+    def add_genesis_block(self, public_key):
+            genesis_block = Block(None, [Transaction(50, "Genesis", public_key)])
+            self.chain = [genesis_block]
 
     def mine(self, block:Block): # point 1
         pass
     
     def rewrite(self, blockList :List[Block]):
-        if len(self.chain)>=len(blockList):
-            return
-        
-        Chain.instance.chain=blockList.copy()
+        self.chain=blockList.copy()
                 
     def isValidBlock(self, block: Block, reqd_miner_node_id, reqd_miner_public_key):
         if block.miner_node_id != reqd_miner_node_id:
@@ -187,7 +176,7 @@ class Chain(CommonChain):
         valid_chain_len=valid_chain_length(len(self.chain))
 
         for i in range(valid_chain_len):
-            for transaction in (Chain.instance.chain[i]).transactions:
+            for transaction in (self.chain[i]).transactions:
                 if transaction.sender==publicKey:
                     if transaction.receiver == "deploy" or transaction.receiver == "invoke":
                         bal-=transaction.payload[-1]
@@ -195,7 +184,7 @@ class Chain(CommonChain):
                         bal-=transaction.payload
                 elif transaction.receiver==publicKey:
                     bal+=transaction.payload
-            if Chain.instance.chain[i].miner_public_key==publicKey:
+            if self.chain[i].miner_public_key==publicKey:
                 bal+=6 #Miner reward
         
         # Since these transactions arevalid not part of the chain we don't add

@@ -34,19 +34,17 @@ async def start_new_blockchain():
         try:
             peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
             asyncio.create_task(peer_instance.server.wait_closed())
-        except: # Catches all BaseException descendants
+        except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             print(f"An unexpected error occurred!")
             print(f"Type: {exc_type.__name__}")
             print(f"Value: {exc_value}")
             print(f"Traceback object: {exc_traceback}")
-            # You can also use traceback.print_exc() for a more standard traceback output
             import traceback
             traceback.print_exc()
         
-        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key_pem)
+        peer_instance.chain.add_genesis_block(peer_instance.wallet.public_key_pem)
 
-        # Genesis block data updation
         peer_instance.chain.chain[0].miner_node_id = peer_instance.node_id
         peer_instance.chain.chain[0].miner_public_key = peer_instance.wallet.public_key_pem
         peer_instance.chain.chain[0].miners_list = [peer_instance.node_id]
@@ -86,21 +84,25 @@ async def connect_to_blockchain():
             peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
             asyncio.create_task(peer_instance.server.wait_closed())
             normalized_bootstrap_host, normalized_bootstrap_port = p2p.normalize_endpoint((bootstrap_host, bootstrap_port))
-            asyncio.create_task(peer_instance.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port))
-        except: # Catches all BaseException descendants
+            asyncio.create_task(
+                peer_instance.network.connect_to_peer(
+                    normalized_bootstrap_host,
+                    normalized_bootstrap_port
+                )
+            )
+        except:
             import sys
             exc_type, exc_value, exc_traceback = sys.exc_info()
             print(f"An unexpected error occurred!")
             print(f"Type: {exc_type.__name__}")
             print(f"Value: {exc_value}")
             print(f"Traceback object: {exc_traceback}")
-            # You can also use traceback.print_exc() for a more standard traceback output
             traceback.print_exc()
         
 
         peer_instance.consensus_task=asyncio.create_task(peer_instance.find_longest_chain())
-        peer_instance.disc_task=asyncio.create_task(peer_instance.discover_peers())
-        peer_instance.sampler_task = asyncio.create_task(peer_instance.gossip_peer_sampler())
+        peer_instance.disc_task=asyncio.create_task(peer_instance.network.discover_peers())
+        peer_instance.sampler_task = asyncio.create_task(peer_instance.network.gossip_peer_sampler())
         peer_instance.round_task = asyncio.create_task(peer_instance.round_calculator())
 
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
@@ -284,13 +286,13 @@ def get_known_peers():
     global peer_instance
 
     known_peers_list = []
-    for peer in peer_instance.known_peers.keys():
+    for peer in peer_instance.network.known_peers.keys():
         known_peers_list.append({
-            "name": peer_instance.known_peers[peer][0],
+            "name": peer_instance.network.known_peers[peer][0],
             "host": peer[0],
             "port": peer[1],
-            "public_key": peer_instance.known_peers[peer][1],
-            "node_id": peer_instance.known_peers[peer][2],
+            "public_key": peer_instance.network.known_peers[peer][1],
+            "node_id": peer_instance.network.known_peers[peer][2],
         })
 
     return jsonify({"success":True, "message":"succesful request", "known_peers": known_peers_list})
@@ -432,7 +434,6 @@ async def uploadFileIPFS():
     path=data.get('path')
     await peer_instance.uploadFile(desc, path)
 
-    #The output of the first method, os.path.join(), would be home/desktop/newFolder/my_story.txt on a Linux or macOS system. On a Windows system, it would automatically be home\desktop\newFolder\my_story.txt, correctly handling the different slash.
     return jsonify({"success":True, "message": "File Uploaded"})
 
 def downloadFileIPFS():

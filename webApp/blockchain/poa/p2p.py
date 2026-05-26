@@ -5,6 +5,7 @@ import copy
 import socket
 from webApp.blockchain.poa.blockchain_structures import Transaction, Block, Wallet, Chain, isvalidChain
 from webApp.blockchain.ipfs.ipfs_manager import IPFSManager
+from webApp.blockchain.network.network_manager import NetworkManager
 from webApp.blockchain.smart_contract.contracts_db import SmartContractDatabase
 from webApp.blockchain.smart_contract.secure_executor import SecureContractExecutor
 from webApp.blockchain.storage.storage_manager import StorageManager
@@ -21,13 +22,6 @@ GAS_PRICE = 0.001 # coin per gas unit
 BASE_DEPLOY_COST = 5
 CONSENSUS ="poa"
 
-def get_random_element(s):
-    """
-        Return a random element from a set
-    """
-    import random
-    return random.choice(list(s)) if s else None
-
 def normalize_endpoint(ep):
     """
         Return host resolved into ipv4 address and port converted into int datatype - maintains consistency in the code
@@ -41,8 +35,36 @@ class Peer:
         self.port = port
         self.name = name
 
+        node_id = None
+        if activate_disk_load:
+            node_id = self.load_node_id_from_disk()
+        self.node_id = node_id or str(uuid.uuid4())
+        if activate_disk_save:
+            self.save_node_id_to_disk()
+
         self.storage = StorageManager("poa", activate_disk_load, activate_disk_save)
         self.ipfs = IPFSManager(port)
+
+        chain = None
+        if activate_disk_load:
+            chain = self.load_chain_from_disk()
+        self.chain = Chain(chain)
+
+        key = None
+        if self.storage.get_disk_load_status():
+            key = self.load_key_from_disk()
+        self.wallet=Wallet(key)
+        if self.storage.get_disk_save_status():
+            self.save_key_to_disk()
+
+        self.name_to_public_key_dict: Dict[str, str]={}
+        self.node_id_to_name_dict: Dict[str, str]={}
+        self.name_to_node_id_dict: Dict[str, str]={}
+
+        known_peers = None
+        if self.storage.get_disk_load_status():
+            known_peers = self.load_known_peers_from_disk()
+        self.network = NetworkManager(self, known_peers)
 
         self.miner = False
         self.miner_task = None
@@ -51,72 +73,12 @@ class Peer:
 
         self.admin_id = None
 
-        if self.storage.get_disk_load_status():
-            self.load_node_id_from_disk()
-        else:
-            self.node_id = None
-        if not self.node_id:
-            self.node_id = str(uuid.uuid4())
-            if self.storage.get_disk_save_status():
-                self.save_node_id_to_disk()
-
         self.miners: List[list]= list() # List of [miners_list, activation_block]
-
-        self.server_connections :Set[websockets.WebSocketServerProtocol]=set() # For inbound peers ie websockets that connect to us and treat us as the server
-        self.client_connections :Set[websockets.WebSocketServerProtocol]=set() # For outbound peers ie websockets we initiated, we are the clients
-
-        self.outbound_peers: Set[tuple]=set()
-        # The peers to which we currently maintain a outbound connection
 
         self.seen_message_ids: Set[str]= set()
         # Used to remove duplicate messages, messages that return to us after a round of broadcasting
 
-        if self.storage.get_disk_load_status():
-            self.load_known_peers_from_disk()
-        else:
-            self.known_peers = None
-        if not self.known_peers:
-            self.known_peers: Dict[Tuple[str, int], Tuple[str, str, str]]={} # (host, port):(name, public key, node id)
-        """
-            We store all the peers we know here, we compare this with outbound peers in dicover_peers
-            to find to which nodes we have not yet made a connection
-        """
-        
-
-        self.got_pong: Dict[websockets.WebSocketServerProtocol, bool]={}
-        """
-            We set the value of each websocket in this dictionary false before sending ping
-            If we get a pong from a particular websocekt we assign it True.
-            We remove all websockets that don't send a pong in time. 
-        """
-
-        self.have_sent_peer_info: Dict[websockets.WebSocketServerProtocol, bool]={}
-        """
-            When we form an outbound connection, on receiving the first pong after our first ping
-            we send them our peer_info, but we don't want to keep making the elaborate handshake
-            so after the first time of getting pong we don't send them our peer info
-            I'll explain the handshake in README.md
-        """
-
         self.mem_pool: List[Transaction]=list()
-
-        self.name_to_public_key_dict: Dict[str, str]={}
-        self.node_id_to_name_dict: Dict[str, str]={}
-        self.name_to_node_id_dict: Dict[str, str]={}
-        
-        if self.storage.get_disk_load_status():
-            self.load_key_from_disk()
-        else:
-            self.wallet = None
-        if not self.wallet:
-            self.wallet=Wallet()
-            if self.storage.get_disk_save_status():
-                self.save_key_to_disk()
-
-        if self.storage.get_disk_load_status():
-            self.load_chain_from_disk() # If no chain data stored, self.chain will be assigned to None
-        else:
-            self.chain = None
 
         self.contractsDB = SmartContractDatabase()
 
@@ -142,35 +104,25 @@ class Peer:
         self.storage.save_node_id(node_id)
 
     def load_node_id_from_disk(self):
-        node_id = self.storage.load_node_id()
-        if not node_id:
-            self.node_id = None
-            return
-        self.node_id = node_id
+        return self.storage.load_node_id()
 
     def save_key_to_disk(self):
         key = self.wallet.private_key_pem
         self.storage.save_key(key)
 
     def load_key_from_disk(self):
-        key = self.storage.load_key()
-        if not key:
-            self.wallet = None
-            return
-        self.wallet = Wallet(key)
+        return self.storage.load_key()
 
     def load_chain_from_disk(self):
         block_dict_list = self.storage.load_chain()
         if not block_dict_list:
-            self.chain = None
-            return
+            return None
+        
         block_list: List[Block]=[]
-
         for block_dict in block_dict_list:
             block=self.block_dict_to_block(block_dict)
             block_list.append(block)
-
-        self.chain=Chain(blockList=block_list)
+        return block_list
 
     def save_chain_to_disk(self):
         chain = Chain.instance.to_block_dict_list()
@@ -178,22 +130,22 @@ class Peer:
 
     def save_known_peers_to_disk(self):
         content = {}
-        for key, value in self.known_peers.items():
+        for key, value in self.network.known_peers.items():
             content[json.dumps(key)] = list(value)
         self.storage.save_peers(content)
 
     def load_known_peers_from_disk(self):
         content = self.storage.load_peers()
         if not content:
-            self.known_peers = None
-            return
-        self.known_peers = {}
+            return None
+        known_peers = {}
         for key, value in content.items():
-            self.known_peers[tuple(ast.literal_eval(key))] = tuple(value)
-        for key, value in self.known_peers:
+            known_peers[tuple(ast.literal_eval(key))] = tuple(value)
+        for key, value in known_peers:
             self.name_to_public_key_dict[value[0].lower()] = value[1]
             self.node_id_to_name_dict[value[2]] = value[0].lower()
             self.name_to_node_id_dict[value[0].lower()] = value[2]
+        return known_peers
 
     def get_peer_info_message(self):
         """
@@ -221,7 +173,7 @@ class Peer:
             (information regarding all the peers we know)
         """
         peers=[{"host":h, "port":p, "name":n, "public_key":s, "node_id":i}
-               for (h, p), (n, s, i) in self.known_peers.items()]
+               for (h, p), (n, s, i) in self.network.known_peers.items()]
         peers.append({"host":self.host, "port":self.port, "name":self.name, "public_key":self.wallet.public_key_pem, "node_id":self.node_id})
         pkt={
             "type":"known_peers",
@@ -279,39 +231,29 @@ class Peer:
         return newBlock
 
     def get_public_key_by_node_id(self, target_node_id):
-        for (host, port), (name, public_key, node_id) in self.known_peers.items():
+        for (host, port), (name, public_key, node_id) in self.network.known_peers.items():
             if node_id == target_node_id:
                 return public_key
         return None
 
     def is_found_node_id(self, target_node_id):
-        for (host, port), (name, public_key, node_id) in self.known_peers.items():
+        for (host, port), (name, public_key, node_id) in self.network.known_peers.items():
             if node_id == target_node_id:
                 return True
         return False
 
     def get_current_miners_list(self):
         miners_list = None
-        if self.miners and len(Chain.instance.chain) == self.miners[0][1]:
+        if self.miners and len(self.chain.chain) == self.miners[0][1]:
             miners_list = self.miners[0][0]
             for i in range(1, len(self.miners)):
-                if self.miners[i][1] == len(Chain.instance.chain):
+                if self.miners[i][1] == len(self.chain.chain):
                     miners_list = self.miners[i][0]
                 else:
                     break
         else:
-            miners_list = Chain.instance.chain[-1].miners_list
+            miners_list = self.chain.chain[-1].miners_list
         return miners_list
-
-    def discard_server_connection_details(self, websocket):
-        self.server_connections.discard(websocket)
-
-    def discard_client_connection_details(self, websocket):
-        normalized_endpoint = normalize_endpoint((websocket.remote_address[0], websocket.remote_address[1]))
-        self.client_connections.discard(websocket)
-        self.outbound_peers.discard(normalized_endpoint)
-        self.got_pong.pop(websocket, None)
-        self.have_sent_peer_info.pop(websocket, None)
 
     async def update_role(self, is_miner_now): 
         if is_miner_now and not self.miner:
@@ -368,24 +310,6 @@ class Peer:
             return False
         return True
 
-    def get_unique_name(self, base_name):
-        existing_names = []
-        for key, value in self.known_peers.items():
-            existing_names.append(value[0].lower())
-
-        existing_names.append(self.name)
-        
-        base_name = base_name.lower()
-        if base_name not in existing_names:
-            return base_name
-        
-        counter = 1
-        while True:
-            new_name = f"{base_name}{counter}"
-            if new_name not in existing_names:
-                return new_name
-            counter += 1
-
     async def handle_messages(self, websocket, msg):
         """
             This is a function to handle messages as the name suggests
@@ -441,18 +365,18 @@ class Peer:
             await self.send_message(websocket, pkt, False)
 
         elif t=="pong":
-            self.got_pong[websocket]=True
-            if not self.have_sent_peer_info.get(websocket, True):
+            self.network.got_pong[websocket]=True
+            if not self.network.have_sent_peer_info.get(websocket, True):
                 message = self.get_peer_info_message()
                 await self.send_message(websocket, message, True)
-                self.have_sent_peer_info[websocket]=True
+                self.network.have_sent_peer_info[websocket]=True
 
         elif t =="peer_info":
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
-            if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
-                self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
+            if normalized_endpoint not in self.network.known_peers and normalized_endpoint!=normalized_self :
+                self.network.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
                 if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
@@ -467,8 +391,8 @@ class Peer:
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
             new_peer_msg_id = str(uuid.uuid4())
-            if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
-                proposed_name = self.get_unique_name(data["name"])
+            if normalized_endpoint not in self.network.known_peers and normalized_endpoint!=normalized_self :
+                proposed_name = self.network.get_unique_name(data["name"])
                 if proposed_name != data["name"]:
                     pkt={
                         "type":"change_name",
@@ -478,7 +402,7 @@ class Peer:
                     }
                     await self.send_message(websocket, pkt, False)
                     data["name"] = proposed_name
-                self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
+                self.network.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
                 if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
@@ -505,8 +429,8 @@ class Peer:
             data=msg["data"]
             normalized_self=normalize_endpoint((self.host, self.port))
             normalized_endpoint = normalize_endpoint((data["host"], data["port"]))
-            if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self :
-                self.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
+            if normalized_endpoint not in self.network.known_peers and normalized_endpoint!=normalized_self :
+                self.network.known_peers[normalized_endpoint]=(data["name"], data["public_key"], data["node_id"])
                 if self.storage.get_disk_save_status():
                     self.save_known_peers_to_disk()
                 self.name_to_public_key_dict[data["name"].lower()]=data["public_key"]
@@ -529,10 +453,10 @@ class Peer:
             for peer in peers:
                 normalized_self=normalize_endpoint((self.host, self.port))
                 normalized_endpoint = normalize_endpoint((peer["host"], peer["port"]))
-                if normalized_endpoint not in self.known_peers and normalized_endpoint!=normalized_self:
+                if normalized_endpoint not in self.network.known_peers and normalized_endpoint!=normalized_self:
                     print(f"Discovered peer {peer["name"]} at {peer["host"]}:{peer["port"]}")
                     new_peer_found = True
-                    self.known_peers[normalized_endpoint]=(peer["name"], peer["public_key"], peer["node_id"])
+                    self.network.known_peers[normalized_endpoint]=(peer["name"], peer["public_key"], peer["node_id"])
                     self.name_to_public_key_dict[peer["name"].lower()]=peer["public_key"]
                     self.node_id_to_name_dict[peer["node_id"]]=peer["name"].lower()
                     self.name_to_node_id_dict[peer["name"].lower()]=peer["node_id"]
@@ -575,7 +499,7 @@ class Peer:
             tx_str=msg["transaction"]
             tx=json.loads(tx_str)
             transaction: Transaction=Transaction(tx['payload'], tx['sender'], tx['receiver'], tx['id'], tx['ts'])
-            if Chain.instance.transaction_exists_in_chain(transaction):
+            if self.chain.transaction_exists_in_chain(transaction):
                 print(f"{self.name} Transaction already exists in chain")
                 return
             
@@ -595,7 +519,7 @@ class Peer:
             else:
                 amount = transaction.payload
             
-            if(amount>Chain.instance.calc_balance(transaction.sender, self.mem_pool)):
+            if(amount>self.chain.calc_balance(transaction.sender, self.mem_pool)):
                 print("\nAttempt to spend more than one has, Invalid transaction\n")
                 return
             
@@ -624,10 +548,10 @@ class Peer:
             new_block_dict=msg["block"]
             newBlock=self.block_dict_to_block(new_block_dict)
             miners_list = self.get_current_miners_list()
-            reqd_miner_node_id = miners_list[(len(Chain.instance.chain) + self.round) % len(miners_list)]
+            reqd_miner_node_id = miners_list[(len(self.chain.chain) + self.round) % len(miners_list)]
             reqd_miner_pulic_key = self.get_public_key_by_node_id(reqd_miner_node_id)
 
-            if not Chain.instance.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
+            if not self.chain.isValidBlock(newBlock, reqd_miner_node_id, reqd_miner_pulic_key):
                 print("\nInvalid Block\n")
                 return
             
@@ -639,7 +563,7 @@ class Peer:
                     if not self.valid_deploy_transaction(transaction.payload):
                         return
                     
-            Chain.instance.chain.append(newBlock)
+            self.chain.chain.append(newBlock)
             print("\n\n Block Appended \n\n")
 
             for transaction in newBlock.transactions:
@@ -698,13 +622,13 @@ class Peer:
                 print("\nInvalid Chain\n")
                 return
             #If chain doesn't already exist we assign this as the chain
-            if not self.chain:
-                self.chain=Chain(blockList=block_list)
+            if self.chain.chain == []:
+                self.chain.rewrite(block_list)
                 if self.storage.get_disk_save_status():
                     self.save_chain_to_disk()
 
-            elif(len(Chain.instance.chain)<len(block_list)):
-                Chain.instance.rewrite(block_list)
+            elif(len(self.chain.chain)<len(block_list)):
+                self.chain.rewrite(block_list)
                 print("\nCurrent chain replaced by longer chain")
                 if self.storage.get_disk_save_status():
                     self.save_chain_to_disk()
@@ -729,7 +653,7 @@ class Peer:
             handle_messages function
         """
         peer_addr=(websocket.remote_address[0], websocket.remote_address[1])
-        self.server_connections.add(websocket)
+        self.network.server_connections.add(websocket)
 
         print(f"Inbound Connection from {peer_addr[0]}:{peer_addr[1]}")
         
@@ -742,7 +666,7 @@ class Peer:
             print(f"Inbound Connection Closed: {peer_addr}")
 
         finally:
-            self.discard_server_connection_details(websocket)
+            self.network.discard_server_connection_details(websocket)
             await websocket.close()
             await websocket.wait_closed()
 
@@ -752,18 +676,18 @@ class Peer:
         except Exception as e:
             print(f"Unexpected error during WebSocket send: {e}")
             if client_connection:
-                self.discard_client_connection_details(websocket)
+                self.network.discard_client_connection_details(websocket)
             else:
-                self.discard_server_connection_details(websocket)
+                self.network.discard_server_connection_details(websocket)
             await websocket.close()
             await websocket.wait_closed()
 
     async def broadcast_message(self, pkt):
         # For broadcasting messages to all the connections we have
 
-        targets=self.server_connections | self.client_connections
+        targets=self.network.server_connections | self.network.client_connections
         for ws in targets:
-            if ws in self.server_connections:
+            if ws in self.network.server_connections:
                 await self.send_message(ws, pkt, False)
             else:
                 await self.send_message(ws, pkt, True)
@@ -806,118 +730,6 @@ class Peer:
                 if transaction.receiver == "invoke" and transaction.payload[0] == contract_id:
                     return transaction.payload[3]
         return {}
-
-    async def connect_to_peer(self, host, port):
-        """
-            Function to form an outbound connection to the given host:port
-            and handle messages that come form this connection
-            Also initiates the handshake
-        """
-
-        endpoint=(host, port)
-        if endpoint in self.outbound_peers or endpoint==(self.host, self.port):
-            return
-
-        uri=f"ws://{host}:{port}"
-        
-        websocket = None
-        try:
-            websocket=await websockets.connect(uri)
-            self.client_connections.add(websocket)
-            self.outbound_peers.add(endpoint)
-            self.have_sent_peer_info[websocket]=False
-
-            print(f"Outbound connection formed to {host}:{port}")
-            
-            pkt = None
-            # If connecting first time to the network, broadcasts node information to the entire network
-            if Chain.instance == None:
-                pkt={
-                    "type":"add_peer",
-                    "id":str(uuid.uuid4()),
-                    "data":{
-                        "host":self.host,
-                        "port":self.port,
-                        "name":self.name,
-                        "public_key":self.wallet.public_key_pem,
-                        "node_id":self.node_id
-                    }
-                }
-            else:
-                pkt={
-                    "type":"ping",
-                    "id":str(uuid.uuid4()),
-                } 
-
-            self.seen_message_ids.add(pkt["id"])
-            await self.send_message(websocket, pkt, True)
-
-            async for raw in websocket:
-                msg=json.loads(raw)
-                await self.handle_messages(websocket, msg)
-        except Exception as e:
-            print(f"Failed to connect to {host}:{port} ::: {e}")
-        finally:
-            if not websocket:
-                return
-            self.discard_client_connection_details(websocket)
-            await websocket.close()
-            await websocket.wait_closed()
-
-    async def discover_peers(self):
-        """
-            Maintains up to MAX_CONNECTIONS peers.
-            Connects only to fill the pool if under MAX_CONNECTIONS.
-        """
-
-        while True:
-            if len(self.outbound_peers) < MAX_CONNECTIONS:
-                potential_peers = {
-                    endpoint for endpoint in self.known_peers
-                    if endpoint not in self.outbound_peers and endpoint != (self.host, self.port)
-                }
-                while len(self.outbound_peers) < MAX_CONNECTIONS and potential_peers:
-                    new_peer = get_random_element(potential_peers)
-                    potential_peers.discard(new_peer)
-                    if new_peer:
-                        asyncio.create_task(self.connect_to_peer(*new_peer))
-                        await asyncio.sleep(1)
-            for _ in range(6):
-                    await asyncio.sleep(5)
-
-    async def gossip_peer_sampler(self):
-        """
-            Every 60s, drops one existing peer and connects to one new peer.
-        """
-        while True:
-            for _ in range(12):
-                    await asyncio.sleep(5)
-            if len(self.known_peers) <= len(self.outbound_peers) or len(self.outbound_peers) < MAX_CONNECTIONS:
-                continue  # Nothing to swap
-
-            # Disconnect one random client connection
-            to_drop = get_random_element(self.client_connections)
-            if to_drop:
-                print(f"Gossip Sampling: Disconnecting {to_drop.remote_address}")
-                self.client_connections.discard(to_drop)
-                normalized_endpoint = normalize_endpoint((to_drop.remote_address[0], to_drop.remote_address[1]))
-                self.outbound_peers.discard(normalized_endpoint)
-                self.got_pong.pop(to_drop, None)
-                self.have_sent_peer_info.pop(to_drop, None)
-                await to_drop.close()
-                await to_drop.wait_closed()
-
-            # Connect to a new peer (not already connected)
-            potential_peers = {
-                endpoint for endpoint in self.known_peers
-                if endpoint not in self.outbound_peers and endpoint != (self.host, self.port)
-            }
-
-            if potential_peers:
-                new_peer = get_random_element(potential_peers)
-                if new_peer:
-                    print(f"Gossip Sampling: Connecting to new peer {new_peer}")
-                    asyncio.create_task(self.connect_to_peer(*new_peer))
 
     async def uploadFile(self, desc: str, path:str):
         file_path=Path(path)
@@ -1076,8 +888,8 @@ class Peer:
     async def run_forever(self):
         # Start background tasks
         self.consensus_task = asyncio.create_task(self.find_longest_chain())
-        self.disc_task = asyncio.create_task(self.discover_peers())
-        self.sampler_task = asyncio.create_task(self.gossip_peer_sampler())
+        self.disc_task = asyncio.create_task(self.network.discover_peers())
+        self.sampler_task = asyncio.create_task(self.network.gossip_peer_sampler())
         self.round_task = asyncio.create_task(self.round_calculator())
 
     async def stop(self):

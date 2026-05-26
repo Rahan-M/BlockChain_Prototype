@@ -80,22 +80,6 @@ class BaseBlock:
         return False
 
 class CommonChain:
-
-    def __init__(self, genesis_block=None, block_list=None):
-
-        if genesis_block is not None:
-            self.chain = [genesis_block]
-            print("Initializing Chain...")
-
-        elif block_list is not None:
-            self.chain = block_list.copy()
-
-        else:
-            raise ValueError("Invalid initialization")    @property
-    def lastBlock(self):
-        return self.chain[-1]
-
-    
     @property
     def lastBlock(self):
         return self.chain[-1]

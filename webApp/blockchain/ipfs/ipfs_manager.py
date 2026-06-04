@@ -1,7 +1,10 @@
-import subprocess, re, os
+import subprocess
+import re
+import os
 import asyncio
-from typing import Dict
+
 from pathlib import Path
+from typing import Dict
 
 class IPFSManager:
 
@@ -41,11 +44,17 @@ class IPFSManager:
     def start_daemon(self):
         self.daemon_process= subprocess.Popen(["ipfs", "daemon"], env=self.env)
         print("\nIPFS Daemon Started\n")
+        import time
+        time.sleep(5)
 
     def stop_daemon(self):
         if self.daemon_process:
             self.daemon_process.terminate()
-            self.daemon_process.wait()
+
+            try:
+                self.daemon_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.daemon_process.kill()
 
     def add_to_ipfs(self, file_path):
         try:

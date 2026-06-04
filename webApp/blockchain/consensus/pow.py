@@ -1,0 +1,1 @@
+class PoW(Base):

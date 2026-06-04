@@ -29,32 +29,8 @@ async def start_new_blockchain():
         set_consensus('poa')
         
         peer_instance = p2p.Peer(host, port, name, persistent_load, persistent_save)
-        peer_instance.name_to_node_id_dict[peer_instance.name.lower()] = peer_instance.node_id
-        peer_instance.node_id_to_name_dict[peer_instance.node_id] = peer_instance.name.lower()
-        try:
-            peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
-            asyncio.create_task(peer_instance.server.wait_closed())
-        except:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            print(f"An unexpected error occurred!")
-            print(f"Type: {exc_type.__name__}")
-            print(f"Value: {exc_value}")
-            print(f"Traceback object: {exc_traceback}")
-            import traceback
-            traceback.print_exc()
-        
-        peer_instance.chain.add_genesis_block(peer_instance.wallet.public_key_pem)
 
-        peer_instance.chain.chain[0].miner_node_id = peer_instance.node_id
-        peer_instance.chain.chain[0].miner_public_key = peer_instance.wallet.public_key_pem
-        peer_instance.chain.chain[0].miners_list = [peer_instance.node_id]
-        peer_instance.sign_block(peer_instance.chain.chain[0])
-        peer_instance.admin_id = peer_instance.node_id
-        await peer_instance.update_role(True)
-
-        peer_instance.keepalive_task = asyncio.get_event_loop().create_task(
-            peer_instance.run_forever()
-        )
+        peer_instance.start_blockchain()
 
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
@@ -79,31 +55,9 @@ async def connect_to_blockchain():
             return jsonify({"error": "One peer is already running. Stop it to run another one"}, 409)
 
         peer_instance = p2p.Peer(host, port, name, persistent_load, persistent_save)
+        peer_instance.connect_to_blockchain(bootstrap_host, bootstrap_port)
         set_consensus('poa')
-        try:
-            peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
-            asyncio.create_task(peer_instance.server.wait_closed())
-            normalized_bootstrap_host, normalized_bootstrap_port = p2p.normalize_endpoint((bootstrap_host, bootstrap_port))
-            asyncio.create_task(
-                peer_instance.network.connect_to_peer(
-                    normalized_bootstrap_host,
-                    normalized_bootstrap_port
-                )
-            )
-        except:
-            import sys
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            print(f"An unexpected error occurred!")
-            print(f"Type: {exc_type.__name__}")
-            print(f"Value: {exc_value}")
-            print(f"Traceback object: {exc_traceback}")
-            traceback.print_exc()
         
-
-        peer_instance.consensus_task=asyncio.create_task(peer_instance.find_longest_chain())
-        peer_instance.disc_task=asyncio.create_task(peer_instance.network.discover_peers())
-        peer_instance.sampler_task = asyncio.create_task(peer_instance.network.gossip_peer_sampler())
-        peer_instance.round_task = asyncio.create_task(peer_instance.round_calculator())
 
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
 
@@ -131,65 +85,68 @@ def server_exists_check():
 
 async def add_transaction():
     global peer_instance
-    if(not request.is_json):
-        return jsonify({"success":False, "error": "Request must be JSON"})
 
-    data=request.get_json()
-    public_key=data.get('public_key')
-    payload=data.get('payload')
-    amount = None
+    if not request.is_json:
+        return jsonify({
+            "success": False,
+            "error": "Request must be JSON"
+        })
 
-    if(not (public_key and payload)):
-        return jsonify({"success":False, "error": "Public Key or Payload Not Found"})
-    
-    if public_key == "deploy":
-        contract_code = payload[0]
-        if not contract_code:
-            return jsonify({"success":False, "error": "Contract Code Not Found"})
-        
-        gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
-        amount = gas_used * GAS_PRICE
-        payload = [contract_code, amount]
+    data = request.get_json()
 
-    elif public_key == "invoke":
-        contract_id = payload[0]
-        func_name = payload[1]
-        args = payload[2]
+    public_key = data.get("public_key")
+    payload = data.get("payload")
 
-        if contract_id not in peer_instance.contractsDB.contracts:
-            return jsonify({"success":False, "error": "No such contract found"})
-        
-        response = peer_instance.run_contract(payload)
-        if(response["error"] != None):
-            return jsonify({"success":False, "error": response["error"]})
-        state = response["state"]
-        gas_used = response["gas_used"]
-        amount = gas_used * GAS_PRICE
-        payload = [contract_id, func_name, args, state, amount]
+    if public_key is None or payload is None:
+        return jsonify({
+            "success": False,
+            "error": "Public Key or Payload Not Found"
+        })
 
-    else:
-        curve=curves.SECP256k1
-        try:
-            vk=VerifyingKey.from_pem(public_key)
-            if(vk.curve!=curve):
-                return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
-        except (MalformedPointError, ValueError, Exception) as e:
-            return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
-        
-        try:
+    try:
+
+        # Contract Deployment
+        if public_key == "deploy":
+
+            contract_code = payload[0]
+
+            await peer_instance.deploy_contract(
+                contract_code
+            )
+
+        # Contract Invocation
+        elif public_key == "invoke":
+
+            contract_id = payload[0]
+            func_name = payload[1]
+            args = payload[2]
+
+            await peer_instance.invoke_contract(
+                contract_id,
+                func_name,
+                args
+            )
+
+        # Normal Transfer
+        else:
+
             amount = float(payload)
-        except ValueError:
-            return jsonify({"success":False, "error": "Amount must be a number"})
-        
-        if amount < 0:
-            return jsonify({"success":False, "error": "Amount must be a positive value"})
 
-    bal=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, peer_instance.mem_pool)
-    if amount > bal:
-        return jsonify({"success":False, "error": f"Insufficient Account Balance {amount}>{bal}"})
-    
-    await peer_instance.create_and_broadcast_tx(public_key, payload)
-    return jsonify({"success":True, "message": "Transaction Added"})
+            await peer_instance.send_money(
+                amount,
+                public_key
+            )
+
+        return jsonify({
+            "success": True,
+            "message": "Transaction Submitted"
+        })
+
+    except (IndexError, ValueError, TypeError):
+        return jsonify({
+            "success": False,
+            "error": "Invalid Payload"
+        })
 
 def account_balance():
     global peer_instance
@@ -201,7 +158,7 @@ def account_balance():
     
     try:
         print()
-        amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
+        amt=peer_instance.get_account_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
         return jsonify({"success":True, "message":"succesful request", "account_balance": amt})
     except:
         return jsonify({"success":False, "error": "error while fetching account balance"}, 409)
@@ -232,21 +189,13 @@ def get_states():
 
 def get_status():
     global peer_instance
-    amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
 
     return Response(
-        json.dumps(OrderedDict([
-            ("success", True),
-            ("name", peer_instance.name),
-            ("host", peer_instance.host),
-            ("port", peer_instance.port),
-            ("account_balance", amt),
-            ("public_key",peer_instance.wallet.public_key_pem),
-            ("private_key",peer_instance.wallet.private_key_pem),
-            ("node_id", peer_instance.node_id),
-            ("admin_id", peer_instance.admin_id),
-        ])),
-        mimetype='application/json'
+        json.dumps({
+            "success": True,
+            **peer_instance.get_my_info()
+        }),
+        mimetype="application/json"
     )
 
 def get_chain():
@@ -432,7 +381,7 @@ async def uploadFileIPFS():
     data=request.get_json()
     desc=data.get('desc')
     path=data.get('path')
-    await peer_instance.uploadFile(desc, path)
+    await peer_instance.upload_file(desc, path)
 
     return jsonify({"success":True, "message": "File Uploaded"})
 
@@ -447,5 +396,5 @@ def downloadFileIPFS():
     name=data.get('name')
     full_path=os.path.join(path, name)
     print(full_path)
-    peer_instance.ipfs.download_ipfs_file_subprocess(cid, full_path)
+    peer_instance.download_file(cid, full_path)
     return jsonify({"success":True, "message": "File Downloaded"})

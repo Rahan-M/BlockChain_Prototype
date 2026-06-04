@@ -1,23 +1,14 @@
-import asyncio, websockets, socket
-from typing import Set, Dict, Tuple
+import asyncio
 import json
 import uuid
+import websockets
+import socket
+
+from typing import Set, Dict, Tuple
+
+from webApp.blockchain.utils import normalize_endpoint, get_random_element
 
 MAX_CONNECTIONS = 8
-
-def get_random_element(s):
-    """
-        Return a random element from a set
-    """
-    import random
-    return random.choice(list(s)) if s else None
-
-def normalize_endpoint(ep):
-    """
-        Return host resolved into ipv4 address and port converted into int datatype - maintains consistency in the code
-    """
-    host, port = ep
-    return (socket.gethostbyname(host), int(port))
 
 class NetworkManager:
 
@@ -31,6 +22,30 @@ class NetworkManager:
 
         self.got_pong: Dict[websockets.WebSocketServerProtocol, bool]={}
         self.have_sent_peer_info: Dict[websockets.WebSocketServerProtocol, bool]={}
+
+    def register_peer(self, peer_data):
+
+        endpoint = normalize_endpoint((peer_data["host"], peer_data["port"]))
+
+        self.known_peers[endpoint] = (
+            peer_data["name"],
+            peer_data["public_key"],
+            peer_data["node_id"]
+        )
+
+        self.peer.save_known_peers_to_disk()
+
+        self.peer.name_to_public_key_dict[
+            peer_data["name"].lower()
+        ] = peer_data["public_key"]
+
+        self.peer.node_id_to_name_dict[
+            peer_data["node_id"]
+        ] = peer_data["name"].lower()
+
+        self.peer.name_to_node_id_dict[
+            peer_data["name"].lower()
+        ] = peer_data["node_id"]
 
     def get_unique_name(self, base_name):
         existing_names = []
@@ -50,6 +65,33 @@ class NetworkManager:
                 return new_name
             counter += 1
     
+    async def send_message(self, websocket, pkt):
+        try:
+            await websocket.send(json.dumps(pkt))
+        except Exception as e:
+            print(f"Unexpected error during WebSocket send: {e}")
+            self.discard_peer(websocket)
+            await websocket.close()
+            await websocket.wait_closed()
+
+    async def broadcast_message(self, pkt):
+
+        self.peer.seen_message_ids.add(pkt["id"])
+        
+        targets=self.server_connections | self.client_connections
+
+        for ws in targets:
+            await self.send_message(ws, pkt)
+
+    async def broadcast_transaction(self, transaction_str):
+        pkt={
+            "type":"new_tx",
+            "id":str(uuid.uuid4()),
+            "transaction":transaction_str
+        }
+
+        await self.broadcast_message(pkt)
+
     async def connect_to_peer(self, host, port):
 
         endpoint=(host, port)
@@ -87,21 +129,39 @@ class NetworkManager:
                     "id":str(uuid.uuid4()),
                 } 
 
-            self.peer.seen_message_ids.add(pkt["id"])
-            await self.peer.send_message(websocket, pkt, True)
+            await self.send_message(websocket, pkt)
 
             async for raw in websocket:
                 msg=json.loads(raw)
-                await self.peer.handle_messages(websocket, msg)
+                await self.peer.router.handle(websocket, msg)
         except Exception as e:
             print(f"Failed to connect to {host}:{port} ::: {e}")
         finally:
             if not websocket:
                 return
-            self.discard_client_connection_details(websocket)
+            self.discard_peer(websocket)
             await websocket.close()
             await websocket.wait_closed()
- 
+
+    async def handle_connections(self, websocket):
+        peer_addr=(websocket.remote_address[0], websocket.remote_address[1])
+        self.server_connections.add(websocket)
+
+        print(f"Inbound Connection from {peer_addr[0]}:{peer_addr[1]}")
+        
+        try:
+            async for raw in websocket:
+                msg=json.loads(raw)
+                await self.peer.router.handle(websocket, msg)
+
+        except websockets.exceptions.ConnectionClosed:
+            print(f"Inbound Connection Closed: {peer_addr}")
+
+        finally:
+            self.discard_peer(websocket)
+            await websocket.close()
+            await websocket.wait_closed()
+
     async def discover_peers(self):
         """
             Maintains up to MAX_CONNECTIONS peers.
@@ -156,6 +216,12 @@ class NetworkManager:
                 if new_peer:
                     print(f"Gossip Sampling: Connecting to new peer {new_peer}")
                     asyncio.create_task(self.connect_to_peer(*new_peer))
+
+    def discard_peer(self, websocket):
+        if websocket in self.server_connections:
+            self.discard_server_connection_details(websocket)
+        else:
+            self.discard_client_connection_details(websocket)
 
     def discard_server_connection_details(self, websocket):
         self.server_connections.discard(websocket)

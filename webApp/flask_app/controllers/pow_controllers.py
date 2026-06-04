@@ -33,23 +33,7 @@ async def start_new_blockchain():
         # thread.daemon=True
         # thread.start()
         peer_instance = p2p.Peer(host, port, name, miner_bool, persistent_load, persistent_save)
-        try:
-            peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
-            asyncio.create_task(peer_instance.server.wait_closed())
-        except: # Catches all BaseException descendants
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            print(f"An unexpected error occurred!")
-            print(f"Type: {exc_type.__name__}")
-            print(f"Value: {exc_value}")
-            print(f"Traceback object: {exc_traceback}")
-            # You can also use traceback.print_exc() for a more standard traceback output
-            import traceback
-            traceback.print_exc()
-        
-        peer_instance.chain=blockchain_structures.Chain(publicKey=peer_instance.wallet.public_key_pem)
-        peer_instance.keepalive_task = asyncio.get_event_loop().create_task(
-            peer_instance.run_forever()
-        )
+        peer_instance.start_blockchain()
 
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
     else:
@@ -77,28 +61,7 @@ async def connect_to_blockchain():
         miner_bool=p2p.strtobool(miner)
         peer_instance = p2p.Peer(host, port, name, miner_bool, persistent_load, persistent_save)
         set_consensus('pow')
-        try:
-            peer_instance.server=await websockets.serve(peer_instance.handle_connections, peer_instance.host, peer_instance.port)
-            asyncio.create_task(peer_instance.server.wait_closed())
-            normalized_bootstrap_host, normalized_bootstrap_port = p2p.normalize_endpoint((bootstrap_host, bootstrap_port))
-            asyncio.create_task(peer_instance.connect_to_peer(normalized_bootstrap_host, normalized_bootstrap_port))
-        except: # Catches all BaseException descendants
-            import sys
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            print(f"An unexpected error occurred!")
-            print(f"Type: {exc_type.__name__}")
-            print(f"Value: {exc_value}")
-            print(f"Traceback object: {exc_traceback}")
-            # You can also use traceback.print_exc() for a more standard traceback output
-            traceback.print_exc()
-        
-
-        peer_instance.consensus_task=asyncio.create_task(peer_instance.find_longest_chain())
-        peer_instance.disc_task=asyncio.create_task(peer_instance.discover_peers())
-        peer_instance.sampler_task = asyncio.create_task(peer_instance.gossip_peer_sampler())
-
-        if peer_instance.miner:
-            peer_instance.mine_task=asyncio.create_task(peer_instance.mine_blocks())
+        peer_instance.connect_to_blockchain(bootstrap_host, bootstrap_port)
 
         return jsonify({"success":True ,"message": f"Peer '{name}' is being started in the background on {host}:{port}"})
 
@@ -126,76 +89,68 @@ def server_exists_check():
 
 async def add_transaction():
     global peer_instance
-    if(not request.is_json):
-        return jsonify({"success":False, "error": "Request must be JSON"})
 
-    data=request.get_json()
-    public_key=data.get('public_key')
-    payload=data.get('payload')
-    amount = None
+    if not request.is_json:
+        return jsonify({
+            "success": False,
+            "error": "Request must be JSON"
+        })
 
-    if(not (public_key and payload)):
-        return jsonify({"success":False, "error": "Public Key or Payload Not Found"})
-    
-    if public_key == "deploy":
-        contract_code = payload[0]
-        if not contract_code:
-            return jsonify({"success":False, "error": "Contract Code Not Found"})
-        
-        gas_used = len(contract_code)//10 + BASE_DEPLOY_COST
-        amount = gas_used * GAS_PRICE
-        payload = [contract_code, amount]
+    data = request.get_json()
 
-    elif public_key == "invoke":
-        contract_id = payload[0]
-        func_name = payload[1]
-        args = payload[2]
+    public_key = data.get("public_key")
+    payload = data.get("payload")
 
-        if contract_id not in peer_instance.contractsDB.contracts:
-            return jsonify({"success":False, "error": "No such contract found"})
-        
-        response = peer_instance.run_contract(payload)
-        if(response["error"] != None):
-            return jsonify({"success":False, "error": response["error"]})
-        state = response["state"]
-        gas_used = response["gas_used"]
-        amount = gas_used * GAS_PRICE
-        payload = [contract_id, func_name, args, state, amount]
+    if public_key is None or payload is None:
+        return jsonify({
+            "success": False,
+            "error": "Public Key or Payload Not Found"
+        })
 
-    else:
-        print("\n\n\nHere is the public key")
-        print(repr(public_key))
-        curve=curves.SECP256k1
-        try:
-            vk=VerifyingKey.from_pem(public_key)
-            if(vk.curve!=curve):
-                return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
-        except (MalformedPointError, ValueError, Exception) as e:
-            # If parsing fails, try converting spaces to newlines (second format)
-            try:
-                public_key_normalized = public_key.replace(' ', '\n')
-                vk=VerifyingKey.from_pem(public_key_normalized)
-                if(vk.curve!=curve):
-                    return jsonify({"success":False, "error": "Invalid Public Key"}, 409)
-                public_key = public_key_normalized  # Use the normalized version
-            except (MalformedPointError, ValueError, Exception):
-                return jsonify({"success":False, "error": "Invalid Public Key Conversion failed"}, 409)
-        
-        try:
+    try:
+
+        # Contract Deployment
+        if public_key == "deploy":
+
+            contract_code = payload[0]
+
+            await peer_instance.deploy_contract(
+                contract_code
+            )
+
+        # Contract Invocation
+        elif public_key == "invoke":
+
+            contract_id = payload[0]
+            func_name = payload[1]
+            args = payload[2]
+
+            await peer_instance.invoke_contract(
+                contract_id,
+                func_name,
+                args
+            )
+
+        # Normal Transfer
+        else:
+
             amount = float(payload)
-        except ValueError:
-            return jsonify({"success":False, "error": "Amount must be a number"})
-        
-        if amount < 0:
-            return jsonify({"success":False, "error": "Amount must be a positive value"})
 
-    bal=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, peer_instance.mem_pool)
-    if amount > bal:
-        return jsonify({"success":False, "error": f"Insufficient Account Balance {amount}>{bal}"})
-    
-    await peer_instance.create_and_broadcast_tx(public_key, payload)
-    return jsonify({"success":True, "message": "Transaction Added"})
+            await peer_instance.send_money(
+                amount,
+                public_key
+            )
 
+        return jsonify({
+            "success": True,
+            "message": "Transaction Submitted"
+        })
+
+    except (IndexError, ValueError, TypeError):
+        return jsonify({
+            "success": False,
+            "error": "Invalid Payload"
+        })
 
 def account_balance():
     global peer_instance
@@ -207,7 +162,7 @@ def account_balance():
     
     try:
         print()
-        amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
+        amt = peer_instance.get_account_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
         return jsonify({"success":True, "message":"succesful request", "account_balance": amt})
     except:
         return jsonify({"success":False, "error": "error while fetching account balance"}, 409)
@@ -226,19 +181,13 @@ def get_contracts():
 
 def get_status():
     global peer_instance
-    amt=peer_instance.chain.calc_balance(peer_instance.wallet.public_key_pem, list(peer_instance.mem_pool))
 
     return Response(
-        json.dumps(OrderedDict([
-            ("success", True),
-            ("name", peer_instance.name),
-            ("host", peer_instance.host),
-            ("port", peer_instance.port),
-            ("account_balance", amt),
-            ("public_key",peer_instance.wallet.public_key_pem),
-            ("private_key",peer_instance.wallet.private_key_pem)
-        ])),
-        mimetype='application/json'
+        json.dumps({
+            "success": True,
+            **peer_instance.get_my_info()
+        }),
+        mimetype="application/json"
     )
 
 def get_chain():
@@ -295,7 +244,7 @@ async def uploadFileIPFS():
     data=request.get_json()
     desc=data.get('desc')
     path=data.get('path')
-    await peer_instance.uploadFile(desc, path)
+    await peer_instance.upload_file(desc, path)
 
     #The output of the first method, os.path.join(), would be home/desktop/newFolder/my_story.txt on a Linux or macOS system. On a Windows system, it would automatically be home\desktop\newFolder\my_story.txt, correctly handling the different slash.
     return jsonify({"success":True, "message": "File Uploaded"})
@@ -311,5 +260,5 @@ def downloadFileIPFS():
     name=data.get('name')
     full_path=os.path.join(path, name)
     print(full_path)
-    peer_instance.ipfs.download_ipfs_file_subprocess(cid, full_path)
+    peer_instance.download_file(cid, full_path)
     return jsonify({"success":True, "message": "File Downloaded"})

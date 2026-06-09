@@ -1,0 +1,7 @@
+id is added in seen msg if list when broadcasting as well as receiving a message (do only once)
+sign block thing in create blocks function in poa peer
+change all invoked wallet calc balance functions to chain calc balanace function
+modify chain class accordingly
+include deploy and invoke transaction verification as well in is valid block function
+setup calc balance function
+removal elements from ist while traversing

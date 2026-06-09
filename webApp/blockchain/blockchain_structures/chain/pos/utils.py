@@ -146,7 +146,7 @@ def isvalidChain(blockList:List[Block]):
         for stake in currBlock.stakers:
             vk=VerifyingKey.from_pem(stake.staker)
             try:
-                vk.verify(stake.sign, str(stake).encode())
+                vk.verify(stake.sign, stake.to_string(include_signature=False).encode())
             except BadSignatureError:
                 print("\nInvalid signature on stake\n")
                 return False
@@ -172,7 +172,7 @@ def isvalidChain(blockList:List[Block]):
             vk_tx=VerifyingKey.from_pem(transaction.sender)
 
             try:
-                vk_tx.verify(sign, str(transaction).encode())
+                vk_tx.verify(sign, transaction.to_string(include_signature=False).encode())
             except BadSignatureError:
                 print("\nInvalid signature on transaction\n")
                 return False

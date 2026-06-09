@@ -31,7 +31,7 @@ class BasePeer:
 
         self.host = host
         self.port = port
-        self.name = name
+        self.name = name.lower()
 
         # ---------------- PERSISTENT STORAGE ----------------
 
@@ -136,7 +136,15 @@ class BasePeer:
         return contracts
 
     def get_contracts_state(self):
-        pass
+
+        states = []
+        for contract_id in self.contract.contracts:
+            states.append({
+                "id": contract_id,
+                "state": self.contract.get_contract_state(contract_id),
+            })
+
+        return states
 
     # ---------------- PERSISTENT STORAGE ----------------
 
@@ -201,7 +209,7 @@ class BasePeer:
     async def add_transaction_to_mempool(self, transaction):
 
         async with self.mem_pool_condition:
-                self.mem_pool.append(transaction)
+            self.mem_pool.append(transaction)
 
     async def create_and_broadcast_transaction(self, payload, receiver_public_key):
 
@@ -209,7 +217,7 @@ class BasePeer:
         
         transaction.sign_transaction(self.wallet.private_key)
 
-        transaction_str = transaction.to_string()
+        transaction_str = transaction.to_string(include_signature=True)
 
         await self.add_transaction_to_mempool(transaction)
         

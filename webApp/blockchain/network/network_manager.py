@@ -52,7 +52,7 @@ class NetworkManager:
         for key, value in self.known_peers.items():
             existing_names.append(value[0].lower())
 
-        existing_names.append(self.peer.name)
+        existing_names.append(self.peer.name.lower())
         
         base_name = base_name.lower()
         if base_name not in existing_names:
@@ -127,7 +127,7 @@ class NetworkManager:
                 pkt={
                     "type":"ping",
                     "id":str(uuid.uuid4()),
-                } 
+                }
 
             await self.send_message(websocket, pkt)
 

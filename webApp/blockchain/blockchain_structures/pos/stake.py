@@ -67,7 +67,7 @@ class Stake:
         if not self.is_valid_signature():
             return False
 
-        if(self.amt > peer.wallet.calc_balance(self.staker)):
+        if(self.amt > peer.chain.calc_balance(self.staker, peer.mem_pool)):
             return False
 
         return True

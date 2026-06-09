@@ -8,7 +8,7 @@ class PoWBlockHandler(BaseHandler):
         new_block_dict=msg["block"]
         newBlock=self.peer.block_dict_to_block(new_block_dict)
 
-        if not self.peer.chain.is_valid_block(newBlock):
+        if not self.peer.chain.isValidBlock(newBlock):
             print("\nInvalid Block\n")
             return
         

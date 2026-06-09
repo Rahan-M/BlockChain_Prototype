@@ -6,6 +6,8 @@ class PingHandler(BaseHandler):
 
     async def handle(self, websocket, msg):
 
+        print("Ping Handler\n")
+
         pkt = {
             "type": "pong",
             "id": str(uuid.uuid4())

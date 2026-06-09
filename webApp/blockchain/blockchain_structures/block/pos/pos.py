@@ -40,9 +40,9 @@ class Block(BaseBlock):
         
         stakes_dict_list:List[Dict]=[]
         for stake in self.stakers:
-            stake_dict=stake.to_dict()
+            stake_dict=stake.to_dict(include_signature=False)
             if(stake.sign):
-                stake_dict["sign"]=base64.b64encode(stake.sign).decode()
+                stake_dict["sign_b64"]=base64.b64encode(stake.sign).decode()
             stakes_dict_list.append(stake_dict)
 
         block_dict["stakers"]=stakes_dict_list

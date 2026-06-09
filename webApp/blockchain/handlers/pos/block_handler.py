@@ -125,8 +125,8 @@ class PoSBlockHandler(BaseHandler):
             for stake in newBlock.stakers:
                 vk = VerifyingKey.from_pem(stake.staker)
                 try:
-                    print(f"\n{str(stake)}\n")
-                    vk.verify(stake.sign, str(stake).encode())
+                    print(f"\n{stake.to_string(include_signature=False)}\n")
+                    vk.verify(stake.sign, stake.to_string(include_signature=False).encode())
                 except BadSignatureError as e:
                     print(f"\nInvalid Block (Stake Signature Error) {e}\n")
                     return

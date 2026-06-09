@@ -44,7 +44,7 @@ class Block(BaseBlock):
             "id": self.id,
             "ts": self.ts,
             "prevHash": self.prevHash,
-            "transactions": [tx.to_dict() for tx in self.transactions],
+            "transactions": [tx.to_dict(include_signature=False) for tx in self.transactions],
             "miner_node_id": self.miner_node_id,
             "miner_public_key": self.miner_public_key,
             "miners_list": self.miners_list,

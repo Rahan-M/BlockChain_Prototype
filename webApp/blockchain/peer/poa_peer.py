@@ -348,7 +348,7 @@ class PoAPeer(BasePeer):
             traceback.print_exc()
         
         # add genesis block
-        self.chain.add_genesis_block(self.wallet.public_key_pem)
+        self.chain.create_genesis_block(self.wallet.public_key_pem)
 
         # set genesis block fields
         self.chain.chain[0].miner_node_id = self.node_id

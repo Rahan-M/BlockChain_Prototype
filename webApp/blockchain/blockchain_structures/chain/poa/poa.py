@@ -49,7 +49,7 @@ class Chain(CommonChain):
             sign_bytes=transaction.sign
             try:
                 public_key=VerifyingKey.from_pem(transaction.sender.encode())
-                public_key.verify(sign_bytes, str(transaction).encode())
+                public_key.verify(sign_bytes, transaction.to_string(include_signature=False).encode())
             except:
                 print("\nInvalid Signature On Transaction\n")
                 return False

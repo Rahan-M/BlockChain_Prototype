@@ -5,6 +5,8 @@ class NewPeerHandler(BaseHandler):
 
     async def handle(self, websocket, msg):
 
+        print("New Peer Handler\n")
+
         data=msg["data"]
 
         normalized_self = normalize_endpoint((self.peer.host, self.peer.port))

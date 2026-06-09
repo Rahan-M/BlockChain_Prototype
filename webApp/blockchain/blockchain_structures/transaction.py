@@ -119,11 +119,7 @@ class Transaction:
             print("\nInvalid Transaction Amount\n")
             return False
 
-        bal = 0
-        if peer.consensus == "pos":
-            bal = peer.chain.calc_balance(self.sender, peer.mem_pool, peer.stakers)
-        else:
-            bal = peer.chain.calc_balance(self.sender, peer.mem_pool)
+        bal = peer.chain.calc_balance(self.sender, peer.mem_pool)
         if(amount > bal):
             print("\nNot Enough Balance\n")
             return False

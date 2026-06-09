@@ -59,7 +59,7 @@ class Chain(CommonChain):
             
             vk_tx=VerifyingKey.from_pem(transaction.sender.encode())
             try:
-                vk_tx.verify(transaction.sign, str(transaction).encode())
+                vk_tx.verify(transaction.sign, transaction.to_string(include_signature=False).encode())
             except:
                 print("\nInvalid signature on transaction\n")
                 return False

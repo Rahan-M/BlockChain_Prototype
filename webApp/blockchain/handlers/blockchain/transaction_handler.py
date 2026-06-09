@@ -17,7 +17,7 @@ class TransactionHandler(BaseHandler):
             return
 
         try:
-            sign = base64.b64decode(msg["sign_b64"])
+            sign = base64.b64decode(tx["sign_b64"])
         except Exception:
             print("Invalid signature encoding")
             return
@@ -36,6 +36,6 @@ class TransactionHandler(BaseHandler):
         print(f"\n{msg['type']}: {msg['transaction']}")
         print("\n")
 
-        self.peer.add_transaction_to_mempool(transaction)
+        await self.peer.add_transaction_to_mempool(transaction)
 
         await self.peer.network.broadcast_message(msg)

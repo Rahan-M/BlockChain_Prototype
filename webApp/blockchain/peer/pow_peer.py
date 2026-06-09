@@ -159,7 +159,7 @@ class PoWPeer(BasePeer):
                                 "block":newBlock.to_dict(),
                                 "miner":self.wallet.public_key_pem
                             }
-                            await self.broadcast_message(pkt)
+                            await self.network.broadcast_message(pkt)
                             self.save_chain_to_disk()
                         else:
                             print("\n Invalid Block \n")

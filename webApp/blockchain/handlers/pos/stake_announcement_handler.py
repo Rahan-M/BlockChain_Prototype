@@ -1,4 +1,5 @@
 import base64
+import json
 
 from webApp.blockchain.handlers.base_handler import BaseHandler
 from webApp.blockchain.blockchain_structures.pos.stake import Stake
@@ -7,7 +8,13 @@ class StakeAnnouncementHandler(BaseHandler):
 
     async def handle(self, websocket, msg):
         
-        stake_dict = msg["stake"]
+        stake_str = msg["stake"]
+
+        try:
+            stake_dict = json.loads(stake_str)
+        except json.JSONDecodeError:
+            print("Invalid stake JSON")
+            return
 
         if not stake_dict:
             return

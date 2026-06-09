@@ -78,7 +78,7 @@ class PoSPeer(BasePeer):
         }
 
     def get_account_balance(self):
-        return self.chain.calc_balance(self.wallet.public_key_pem, self.mem_pool, self.current_stakers)
+        return self.chain.calc_balance(self.wallet.public_key_pem, self.mem_pool)
 
     def get_chain(self):
 
@@ -258,7 +258,7 @@ class PoSPeer(BasePeer):
         pkt={
             "id": str(uuid.uuid4()),
             "type": "stake_announcement",
-            "stake": new_stake.to_dict(include_signature)
+            "stake": new_stake.to_string(include_signature)
         }
 
         async with self.curr_stakers_condition:
@@ -310,7 +310,7 @@ class PoSPeer(BasePeer):
         
         print("\nRunning vrf\n")
         async with self.curr_stakers_condition:# So that no new stakes don't comes in
-            seed=self,chain.epoch_seed()
+            seed=self.chain.epoch_seed()
             vrf_proof=self.wallet.private_key.sign(seed.encode())
             vrf_output=hashlib.sha256(vrf_proof).hexdigest()
             vrf_output_int=int(vrf_output, 16)
@@ -387,7 +387,7 @@ class PoSPeer(BasePeer):
             print("Invalid Amount\n")
             return
 
-        if(amount > self.chain.calc_balance(self.wallet.public_key_pem, self.mem_pool, self.stakers)):
+        if(amount > self.chain.calc_balance(self.wallet.public_key_pem, self.mem_pool)):
             print("Not Enough Balance\n")
             return
 
@@ -401,7 +401,7 @@ class PoSPeer(BasePeer):
 
         payload = [contract_code, cost]
 
-        if(cost > self.chain.calc_balance(self.wallet.public_key_pem, self.mem_pool, self.stakers)):
+        if(cost > self.chain.calc_balance(self.wallet.public_key_pem, self.mem_pool)):
             print("Not Enough Balance\n")
             return
 
@@ -415,7 +415,7 @@ class PoSPeer(BasePeer):
 
         payload = [contract_id, func_name, args, new_state, cost]
 
-        if(cost > self.chain.calc_balance(self.wallet.public_key_pem, self.mem_pool, self.stakers)):
+        if(cost > self.chain.calc_balance(self.wallet.public_key_pem, self.mem_pool)):
             print("Not Enough Balance\n")
             return
 
@@ -452,7 +452,7 @@ class PoSPeer(BasePeer):
 
         self.last_epoch_end_ts=datetime.now()
 
-        self.chain.add_genesis_black(self.wallet.public_key_pem, self.wallet.private_key)
+        self.chain.create_genesis_block(self.wallet.public_key_pem, self.wallet.private_key)
         
         self.keepalive_task = asyncio.get_event_loop().create_task(
             self.run_forever()

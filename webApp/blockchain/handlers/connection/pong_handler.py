@@ -6,6 +6,8 @@ class PongHandler(BaseHandler):
 
     async def handle(self, websocket, msg):
 
+        print("Pong Handler\n")
+
         self.peer.network.got_pong[websocket] = True
         
         if not self.peer.network.have_sent_peer_info.get(websocket, True):

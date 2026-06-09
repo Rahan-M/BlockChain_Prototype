@@ -4,7 +4,7 @@ import hashlib
 from typing import List
 
 from webApp.blockchain.blockchain_structures.transaction import Transaction
-from webApp.blockchain.blockchain_structures.block.base_block import BaseBlock
+from webApp.blockchain.blockchain_structures.block.base import BaseBlock
 
 from webApp.blockchain.blockchain_structures.utils import txs_to_json_digestable_form
 

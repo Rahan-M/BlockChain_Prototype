@@ -61,7 +61,7 @@ class Chain(CommonChain):
             sign=transaction.sign
             vk=VerifyingKey.from_pem(transaction.sender)
             try:
-                vk.verify(sign, str(transaction).encode())
+                vk.verify(sign, transaction.to_string(include_signature=False).encode())
             except:
                 print("\nFake Transactions\n")
                 return False
@@ -80,7 +80,7 @@ class Chain(CommonChain):
         for stake in block.stakers:
             vk=VerifyingKey.from_pem(stake.staker)
             try:
-                vk.verify(stake.sign, str(stake).encode())
+                vk.verify(stake.sign, stake.to_string(include_signature=False).encode())
             except BadSignatureError:
                 print("\nInvalid signature on stake\n")
                 return False

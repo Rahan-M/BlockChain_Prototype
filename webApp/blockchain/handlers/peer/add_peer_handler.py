@@ -7,6 +7,8 @@ class AddPeerHandler(BaseHandler):
 
     async def handle(self, websocket, msg):
 
+        print("Add Peer Handler\n")
+
         data = msg["data"]
 
         # normalize
@@ -32,7 +34,6 @@ class AddPeerHandler(BaseHandler):
 
             # add peer
             self.peer.network.register_peer(data)
-            self.peer.save_known_peers_to_disk()
 
             print(f"Registered peer {data['name']} {data['host']}:{data['port']}")
             

@@ -1,3 +1,5 @@
+from webApp.blockchain.handlers.base_handler import BaseHandler
+
 class MinersListHandler(BaseHandler):
 
     async def handle(self, websocket, msg):

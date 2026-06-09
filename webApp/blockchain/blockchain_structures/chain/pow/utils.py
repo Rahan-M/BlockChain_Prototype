@@ -74,7 +74,7 @@ def isvalidChain(blockList:List[Block]):
                 print("Duplicate transaction(s)")
                 return False
             try:
-                vk_tx.verify(sign, str(transaction).encode())
+                vk_tx.verify(sign, transaction.to_string(include_signature=False).encode())
             except:
                 print("\nInvalid signature on transaction\n")
                 return False

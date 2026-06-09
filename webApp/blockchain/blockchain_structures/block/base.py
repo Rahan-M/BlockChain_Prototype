@@ -10,7 +10,7 @@ class BaseBlock:
         self.prevHash = prevHash
         self.transactions = transactions
         self.id = id or str(uuid.uuid4())
-        self.ts = ts or int(datetime.now().timestamp() * 1000)
+        self.ts = ts or datetime.now().timestamp()
         self.files: Dict[str, str] = {}
     
     def transaction_exists_in_block(self, transaction: Transaction):

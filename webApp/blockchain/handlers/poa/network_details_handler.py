@@ -6,6 +6,8 @@ class NetworkDetailsHandler(BaseHandler):
 
     async def handle(self, websocket, msg):
 
+        print("Network Details Handler\n")
+
         self.peer.admin_id = msg["admin"]
         self.peer.miners = msg["miners"]
 

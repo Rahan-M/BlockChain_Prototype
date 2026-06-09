@@ -10,7 +10,7 @@ def set_consensus(str):
 
 async def shutdown_peer():
     if(consensus=='pow'):
-        from flask_app.controllers.pow_controllers import peer_instance
+        from webApp.flask_app.controllers.pow_controllers import peer_instance
         if not peer_instance:
             return jsonify({"success":True, "msg":"No Peer Running"})
             

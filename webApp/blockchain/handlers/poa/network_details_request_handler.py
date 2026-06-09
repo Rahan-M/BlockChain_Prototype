@@ -6,6 +6,8 @@ class NetworkDetailsRequestHandler(BaseHandler):
 
     async def handle(self, websocket, msg):
 
+        print("Network Details Request Handler\n")
+
         pkt={
             "type": "network_details",
             "id": str(uuid.uuid4()),
